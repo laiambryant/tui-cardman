@@ -1,18 +1,13 @@
 package main
 
 import (
-	"log/slog"
 	"os"
 
-	"gihtub.com/laiambryant/tui-cardman/internal/config"
+	"gihtub.com/laiambryant/tui-cardman/cmd/command"
 )
 
 func main() {
-	config.LoadConfig()
-	log, err := os.Create("output.log")
-	if err != nil {
-		panic(err)
+	if err := command.Execute(); err != nil {
+		os.Exit(1)
 	}
-	defer log.Close()
-	slog.SetDefault(slog.New(slog.NewTextHandler(log, &slog.HandlerOptions{})))
 }
