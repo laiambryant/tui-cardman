@@ -11,8 +11,10 @@ import (
 type LogLevel string
 
 var Cfg struct {
-	LogLevel LogLevel `env:"LOG_LEVEL" default:"INFO"`
-	DBDSN    string   `env:"DB_DSN" default:"file:cardman.db?_fk=1"`
+	LogLevel   LogLevel `env:"LOG_LEVEL" default:"INFO"`
+	DBDSN      string   `env:"DB_DSN" default:"file:cardman.db?_fk=1"`
+	SSHPort    int      `env:"SSH_PORT" default:"2222"`
+	SSHHostKey string   `env:"SSH_HOST_KEY" default:"~/.ssh/cardman_host_key"`
 }
 
 func LoadConfig() {

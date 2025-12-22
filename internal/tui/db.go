@@ -1,4 +1,4 @@
-package db
+package tui
 
 import (
 	"database/sql"
@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"gihtub.com/laiambryant/tui-cardman/internal/auth"
-	_ "github.com/mattn/go-sqlite3"
 )
 
 const (
@@ -14,39 +13,25 @@ const (
 		INSERT INTO users (name, surname, email, password_hash, created_at, updated_at, active)
 		VALUES (?, ?, ?, ?, ?, ?, 1)
 	`
-
 	selectUserByEmailQuery = `
 		SELECT id, name, surname, email, password_hash, created_at, updated_at, last_login, active
 		FROM users
 		WHERE email = ?
 	`
-
 	updateLastLoginQuery = `UPDATE users SET last_login = ? WHERE id = ?`
 )
 
-func OpenDB(dsn string) (*sql.DB, error) {
-	db, err := sql.Open("sqlite3", dsn)
-	if err != nil {
-		return nil, err
-	}
-	db.SetMaxOpenConns(1)
-	return db, db.Ping()
-}
-
-// CreateUser inserts a new user into the database
-func CreateUser(db *sql.DB, req auth.RegisterRequest, passwordHash string) (*auth.User, error) {
+func createUser(db *sql.DB, req auth.RegisterRequest, passwordHash string) (*auth.User, error) {
 	query := insertUserQuery
 	now := time.Now()
 	result, err := db.Exec(query, req.Name, req.Surname, req.Email, passwordHash, now, now)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create user: %w", err)
 	}
-
 	id, err := result.LastInsertId()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user id: %w", err)
 	}
-
 	return &auth.User{
 		ID:           id,
 		Name:         req.Name,
@@ -59,12 +44,11 @@ func CreateUser(db *sql.DB, req auth.RegisterRequest, passwordHash string) (*aut
 	}, nil
 }
 
-// GetUserByEmail retrieves a user by email
-func GetUserByEmail(db *sql.DB, email string) (*auth.User, error) {
+// getUserByEmail retrieves a user by email
+func getUserByEmail(db *sql.DB, email string) (*auth.User, error) {
 	query := selectUserByEmailQuery
 	var user auth.User
 	var lastLogin sql.NullTime
-
 	err := db.QueryRow(query, email).Scan(
 		&user.ID,
 		&user.Name,
@@ -82,16 +66,14 @@ func GetUserByEmail(db *sql.DB, email string) (*auth.User, error) {
 		}
 		return nil, fmt.Errorf("failed to get user: %w", err)
 	}
-
 	if lastLogin.Valid {
 		user.LastLogin = &lastLogin.Time
 	}
-
 	return &user, nil
 }
 
-// UpdateLastLogin updates the last_login timestamp for a user
-func UpdateLastLogin(db *sql.DB, userID int64) error {
+// updateLastLogin updates the last_login timestamp for a user
+func updateLastLogin(db *sql.DB, userID int64) error {
 	_, err := db.Exec(updateLastLoginQuery, time.Now(), userID)
 	if err != nil {
 		return fmt.Errorf("failed to update last login: %w", err)

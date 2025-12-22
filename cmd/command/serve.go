@@ -32,7 +32,7 @@ var serveCmd = &cobra.Command{
 			return fmt.Errorf("open db: %w", err)
 		}
 		defer db.Close()
-		model, err := tui.NewModel()
+		model, err := tui.NewModel(db, false)
 		if err != nil {
 			return fmt.Errorf("create TUI model: %w", err)
 		}
