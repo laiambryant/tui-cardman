@@ -1,0 +1,115 @@
+package db
+
+import (
+	"database/sql"
+	"fmt"
+	"log/slog"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+	"time"
+)
+
+const (
+	createMigrationsTable = `CREATE TABLE IF NOT EXISTS schema_migrations (
+		version TEXT PRIMARY KEY,
+		applied_at DATETIME NOT NULL
+	)`
+	checkMigrationApplied = `SELECT COUNT(1) FROM schema_migrations WHERE version = ?`
+	recordMigration       = `INSERT INTO schema_migrations(version, applied_at) VALUES (?, ?)`
+)
+
+func ApplyMigrations(db *sql.DB, migrationsDir string) error {
+	slog.Debug("starting migration process", "dir", migrationsDir)
+	if err := ensureMigrationsTable(db); err != nil {
+		return err
+	}
+	migrations, err := loadPendingMigrations(db, migrationsDir)
+	if err != nil {
+		return err
+	}
+	slog.Debug("pending migrations loaded", "count", len(migrations))
+	for _, m := range migrations {
+		if err := applyMigration(db, m); err != nil {
+			return err
+		}
+	}
+	slog.Debug("all migrations applied successfully")
+	return nil
+}
+
+func ensureMigrationsTable(db *sql.DB) error {
+	slog.Debug("ensuring schema_migrations table exists")
+	_, err := db.Exec(createMigrationsTable)
+	return err
+}
+
+func loadPendingMigrations(db *sql.DB, dir string) ([]migration, error) {
+	files, err := filepath.Glob(filepath.Join(dir, "*.up.sql"))
+	if err != nil {
+		return nil, err
+	}
+	sort.Strings(files)
+	slog.Debug("found migration files", "count", len(files))
+	var pending []migration
+	for _, path := range files {
+		version := extractVersion(path)
+		if version == "" {
+			slog.Debug("skipping file with invalid version", "path", path)
+			continue
+		}
+		if applied, err := isApplied(db, version); err != nil {
+			return nil, err
+		} else if applied {
+			slog.Debug("migration already applied", "version", version)
+			continue
+		}
+		slog.Debug("migration pending", "version", version, "path", path)
+		pending = append(pending, migration{version: version, path: path})
+	}
+	return pending, nil
+}
+
+func extractVersion(path string) string {
+	parts := strings.SplitN(filepath.Base(path), "_", 2)
+	if len(parts) < 1 {
+		return ""
+	}
+	return parts[0]
+}
+
+func isApplied(db *sql.DB, version string) (bool, error) {
+	var count int
+	err := db.QueryRow(checkMigrationApplied, version).Scan(&count)
+	return count > 0, err
+}
+
+func applyMigration(db *sql.DB, m migration) error {
+	slog.Debug("applying migration", "version", m.version, "path", m.path)
+	content, err := os.ReadFile(m.path)
+	if err != nil {
+		return err
+	}
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(string(content)); err != nil {
+		return fmt.Errorf("apply %s: %w", m.path, err)
+	}
+	if _, err := tx.Exec(recordMigration, m.version, time.Now().UTC()); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	slog.Debug("migration applied successfully", "version", m.version)
+	return nil
+}
+
+type migration struct {
+	version string
+	path    string
+}
