@@ -29,7 +29,10 @@ go.work.sum
 
 # Editor/IDE
 # .idea/
-# .vscode/
+.vscode/
+
+#sqlite
+cardman.db
 
 #logfiles
 output.log
