@@ -13,6 +13,8 @@ type IUserService interface {
 	CreateUser(req auth.RegisterRequest, passwordHash string) (*auth.User, error)
 	GetUserByEmail(email string) (*auth.User, error)
 	UpdateLastLogin(userID int64) error
+	HasUsers() (bool, error)
+	GetFirstUser() (*auth.User, error)
 }
 
 // UserServiceImpl implements the IUserService interface
@@ -34,6 +36,12 @@ const (
 		SELECT id, name, surname, email, password_hash, created_at, updated_at, last_login, active
 		FROM users
 		WHERE email = ?
+	`
+	selectFirstUserQuery = `
+		SELECT id, name, surname, email, password_hash, created_at, updated_at, last_login, active
+		FROM users
+		ORDER BY created_at ASC
+		LIMIT 1
 	`
 	updateLastLoginQuery = `UPDATE users SET last_login = ? WHERE id = ?`
 )
@@ -100,4 +108,44 @@ func (s *UserServiceImpl) UpdateLastLogin(userID int64) error {
 		return fmt.Errorf("failed to update last login: %w", err)
 	}
 	return nil
+}
+
+// HasUsers checks if any users exist in the database
+func (s *UserServiceImpl) HasUsers() (bool, error) {
+	var count int
+	err := s.db.QueryRow("SELECT COUNT(*) FROM users").Scan(&count)
+	if err != nil {
+		return false, fmt.Errorf("failed to count users: %w", err)
+	}
+	return count > 0, nil
+}
+
+// GetFirstUser retrieves the first user (by creation date) from the database
+func (s *UserServiceImpl) GetFirstUser() (*auth.User, error) {
+	var user auth.User
+	var lastLogin sql.NullTime
+
+	err := s.db.QueryRow(selectFirstUserQuery).Scan(
+		&user.ID,
+		&user.Name,
+		&user.Surname,
+		&user.Email,
+		&user.PasswordHash,
+		&user.CreatedAt,
+		&user.UpdatedAt,
+		&lastLogin,
+		&user.Active,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("no users found")
+		}
+		return nil, fmt.Errorf("failed to get first user: %w", err)
+	}
+
+	if lastLogin.Valid {
+		user.LastLogin = &lastLogin.Time
+	}
+
+	return &user, nil
 }

@@ -9,6 +9,7 @@ import (
 type IUserCollectionService interface {
 	GetUserCollectionByUserID(userID int64) ([]UserCollection, error)
 	GetUserCollectionByGameID(userID, gameID int64) ([]UserCollection, error)
+	CreateSampleCollectionData(userID int64) error
 }
 
 // UserCollectionServiceImpl implements the IUserCollectionService interface
@@ -34,7 +35,7 @@ const (
 		WHERE uc.user_id = ?
 		ORDER BY uc.created_at DESC
 	`
-	
+
 	selectUserCollectionByGameIDQuery = `
 		SELECT uc.id, uc.user_id, uc.card_id, uc.quantity, uc.condition,
 		       uc.acquired_date, uc.notes, uc.created_at, uc.updated_at,
@@ -79,7 +80,7 @@ func (s *UserCollectionServiceImpl) scanUserCollections(rows *sql.Rows) ([]UserC
 		var card Card
 		var game CardGame
 		var acquiredDate, releaseDate, gameCreatedAt sql.NullTime
-		
+
 		err := rows.Scan(
 			&collection.ID, &collection.UserID, &collection.CardID, &collection.Quantity, &collection.Condition,
 			&acquiredDate, &collection.Notes, &collection.CreatedAt, &collection.UpdatedAt,
@@ -90,7 +91,7 @@ func (s *UserCollectionServiceImpl) scanUserCollections(rows *sql.Rows) ([]UserC
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan user collection: %w", err)
 		}
-		
+
 		// Handle nullable dates
 		if acquiredDate.Valid {
 			collection.AcquiredDate = acquiredDate.Time
@@ -101,11 +102,11 @@ func (s *UserCollectionServiceImpl) scanUserCollections(rows *sql.Rows) ([]UserC
 		if gameCreatedAt.Valid {
 			game.CreatedAt = gameCreatedAt.Time
 		}
-		
+
 		// Attach related data
 		card.CardGame = &game
 		collection.Card = &card
-		
+
 		collections = append(collections, collection)
 	}
 
@@ -114,4 +115,35 @@ func (s *UserCollectionServiceImpl) scanUserCollections(rows *sql.Rows) ([]UserC
 	}
 
 	return collections, nil
+}
+
+// CreateSampleCollectionData creates sample collection entries for a new local user
+func (s *UserCollectionServiceImpl) CreateSampleCollectionData(userID int64) error {
+	// Sample collection data - a few cards from each game
+	sampleData := []struct {
+		cardID    int64
+		quantity  int
+		condition string
+		notes     string
+	}{
+		{1, 3, "Near Mint", "Starter deck pulls"},     // Pikachu
+		{2, 1, "Mint", "Lucky booster pack"},          // Charizard
+		{6, 2, "Near Mint", "Trade acquisition"},      // Black Lotus
+		{7, 4, "Near Mint", "Commons from starter"},   // Lightning Bolt
+		{11, 1, "Mint", "Graded card purchase"},       // Blue-Eyes White Dragon
+		{12, 2, "Lightly Played", "Collection start"}, // Dark Magician
+	}
+
+	for _, data := range sampleData {
+		_, err := s.db.Exec(`
+			INSERT OR IGNORE INTO user_collections 
+			(user_id, card_id, quantity, condition, acquired_date, notes)
+			VALUES (?, ?, ?, ?, date('2024-01-15'), ?)
+		`, userID, data.cardID, data.quantity, data.condition, data.notes)
+		if err != nil {
+			return fmt.Errorf("failed to create sample collection data: %w", err)
+		}
+	}
+
+	return nil
 }

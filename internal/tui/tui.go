@@ -18,18 +18,19 @@ const (
 	ScreenRegister
 	ScreenMain
 	ScreenCardGameTabs
+	ScreenLocalUserSetup
 )
 
 // Model is the main application model
 type Model struct {
-	screen          Screen
-	authService     *auth.Service
-	userService     IUserService
-	cardGameService ICardGameService
-	cardService     ICardService
+	screen            Screen
+	authService       *auth.Service
+	userService       IUserService
+	cardGameService   ICardGameService
+	cardService       ICardService
 	collectionService IUserCollectionService
-	db              *sql.DB
-	user            *auth.User
+	db                *sql.DB
+	user              *auth.User
 
 	// Login/Register screen state
 	inputs     []textinput.Model
@@ -40,7 +41,7 @@ type Model struct {
 	// Main view state
 	cardGames []CardGame
 	cursor    int
-	
+
 	// Card game tabs state
 	cardGameTabs CardGameTabsModel
 }
@@ -48,7 +49,6 @@ type Model struct {
 var (
 	focusedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
 	blurredStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-	cursorStyle  = focusedStyle
 	noStyle      = lipgloss.NewStyle()
 	helpStyle    = blurredStyle
 	errorStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
@@ -85,7 +85,31 @@ func NewModel(db *sql.DB, isSSHMode bool) (*Model, error) {
 		m.screen = ScreenLogin
 		m.initLoginInputs()
 	} else {
-		m.screen = ScreenMain
+		// Local mode - check if users exist
+		hasUsers, err := userService.HasUsers()
+		if err != nil {
+			return nil, fmt.Errorf("failed to check for existing users: %w", err)
+		}
+
+		if !hasUsers {
+			// No users exist, show local user setup
+			m.screen = ScreenLocalUserSetup
+			m.initLocalUserSetupInputs()
+		} else {
+			// Users exist, automatically log in the first user for local mode
+			firstUser, err := userService.GetFirstUser()
+			if err != nil {
+				return nil, fmt.Errorf("failed to get first user for local mode: %w", err)
+			}
+			m.user = firstUser
+			// Update last login for the user
+			err = userService.UpdateLastLogin(firstUser.ID)
+			if err != nil {
+				// Don't fail initialization if we can't update last login
+				fmt.Printf("Warning: failed to update last login: %v\n", err)
+			}
+			m.screen = ScreenMain
+		}
 	}
 	return m, nil
 }
@@ -101,7 +125,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+c", "esc":
 			return m, tea.Quit
 		case "tab", "shift+tab", "up", "down":
-			if m.screen == ScreenLogin || m.screen == ScreenRegister {
+			switch m.screen {
+			case ScreenLogin, ScreenRegister, ScreenLocalUserSetup:
 				s := msg.String()
 				if s == "up" || s == "shift+tab" {
 					m.focusIndex--
@@ -126,14 +151,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				}
 				return m, tea.Batch(cmds...)
-			} else if m.screen == ScreenMain {
+			case ScreenMain:
 				// Handle navigation in main view
 				s := msg.String()
-				if s == "up" || s == "shift+tab" {
+				switch s {
+				case "up", "shift+tab":
 					if m.cursor > 0 {
 						m.cursor--
 					}
-				} else if s == "down" || s == "tab" {
+				case "down", "tab":
 					if m.cursor < len(m.cardGames)-1 {
 						m.cursor++
 					}
@@ -163,6 +189,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				// Attempt registration
 				return m.handleRegister()
+			case ScreenLocalUserSetup:
+				if m.focusIndex == len(m.inputs) {
+					// Submit local user setup
+					return m.handleLocalUserSetup()
+				}
 			case ScreenMain:
 				// Select card game and go to tabs view
 				if len(m.cardGames) > 0 && m.cursor < len(m.cardGames) {
@@ -182,7 +213,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Handle screen-specific updates
 	switch m.screen {
-	case ScreenLogin, ScreenRegister:
+	case ScreenLogin, ScreenRegister, ScreenLocalUserSetup:
 		cmd := m.updateInputs(msg)
 		return m, cmd
 	case ScreenCardGameTabs:
@@ -214,6 +245,8 @@ func (m Model) View() string {
 		return m.loginView()
 	case ScreenRegister:
 		return m.registerView()
+	case ScreenLocalUserSetup:
+		return m.localUserSetupView()
 	case ScreenMain:
 		return m.mainView()
 	case ScreenCardGameTabs:
@@ -242,7 +275,7 @@ func (a *dbAdapter) UpdateLastLogin(userID int64) error {
 // createCardGameTabsModel creates a card game tabs model with loaded data
 func (m *Model) createCardGameTabsModel(selectedGame *CardGame) (CardGameTabsModel, error) {
 	cardGameTabs := NewCardGameTabsModel(selectedGame)
-	
+
 	// Load cards for this game
 	cards, err := m.cardService.GetCardsByGameID(selectedGame.ID)
 	if err != nil {
@@ -250,7 +283,7 @@ func (m *Model) createCardGameTabsModel(selectedGame *CardGame) (CardGameTabsMod
 	}
 	cardGameTabs.cards = cards
 	cardGameTabs.filteredCards = cards
-	
+
 	// Load user collection if user is logged in
 	if m.user != nil {
 		collections, err := m.collectionService.GetUserCollectionByGameID(m.user.ID, selectedGame.ID)
@@ -260,6 +293,6 @@ func (m *Model) createCardGameTabsModel(selectedGame *CardGame) (CardGameTabsMod
 		cardGameTabs.userCollections = collections
 		cardGameTabs.filteredCollection = collections
 	}
-	
+
 	return cardGameTabs, nil
 }
