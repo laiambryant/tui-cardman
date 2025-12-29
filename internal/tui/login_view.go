@@ -52,7 +52,7 @@ func (m *Model) handleLogin() (tea.Model, tea.Cmd) {
 
 func (m Model) loginView() string {
 	var b strings.Builder
-	b.WriteString(titleStyle.Render("🃏 CardMan - Login") + "\n\n")
+	b.WriteString(titleStyle.Render("CardMan - Login") + "\n\n")
 	b.WriteString(focusedStyle.Render("Email:") + "\n")
 	b.WriteString(m.inputs[0].View() + "\n\n")
 	b.WriteString(blurredStyle.Render("Password:") + "\n")

@@ -8,3 +8,35 @@ type CardGame struct {
 	Name      string
 	CreatedAt time.Time
 }
+
+// Card represents a card in the database
+type Card struct {
+	ID            int64     `json:"id"`
+	CardGameID    int64     `json:"card_game_id"`
+	Name          string    `json:"name"`
+	Expansion     string    `json:"expansion"`
+	Rarity        string    `json:"rarity"`
+	CardNumber    string    `json:"card_number"`
+	ReleaseDate   time.Time `json:"release_date"`
+	IsPlaceholder bool      `json:"is_placeholder"`
+	CreatedAt     time.Time `json:"created_at"`
+
+	// Related data
+	CardGame *CardGame `json:"card_game,omitempty"`
+}
+
+// UserCollection represents a user's card collection entry
+type UserCollection struct {
+	ID           int64     `json:"id"`
+	UserID       int64     `json:"user_id"`
+	CardID       int64     `json:"card_id"`
+	Quantity     int       `json:"quantity"`
+	Condition    string    `json:"condition"`
+	AcquiredDate time.Time `json:"acquired_date"`
+	Notes        string    `json:"notes"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+
+	// Related data
+	Card *Card `json:"card,omitempty"`
+}

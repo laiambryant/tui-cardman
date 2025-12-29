@@ -12,9 +12,9 @@ func (m Model) mainView() string {
 
 	// Title
 	if m.user != nil {
-		b.WriteString(titleStyle.Render(fmt.Sprintf("🃏 CardMan - Welcome, %s %s!", m.user.Name, m.user.Surname)) + "\n\n")
+		b.WriteString(titleStyle.Render(fmt.Sprintf("CardMan - Welcome, %s %s!", m.user.Name, m.user.Surname)) + "\n\n")
 	} else {
-		b.WriteString(titleStyle.Render("🃏 CardMan - Card Games") + "\n\n")
+		b.WriteString(titleStyle.Render("CardMan - Card Management TUI") + "\n\n")
 	}
 
 	// Card games boxes

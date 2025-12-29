@@ -17,6 +17,7 @@ const (
 	ScreenLogin Screen = iota
 	ScreenRegister
 	ScreenMain
+	ScreenCardGameTabs
 )
 
 // Model is the main application model
@@ -25,6 +26,8 @@ type Model struct {
 	authService     *auth.Service
 	userService     IUserService
 	cardGameService ICardGameService
+	cardService     ICardService
+	collectionService IUserCollectionService
 	db              *sql.DB
 	user            *auth.User
 
@@ -37,6 +40,9 @@ type Model struct {
 	// Main view state
 	cardGames []CardGame
 	cursor    int
+	
+	// Card game tabs state
+	cardGameTabs CardGameTabsModel
 }
 
 var (
@@ -53,6 +59,8 @@ func NewModel(db *sql.DB, isSSHMode bool) (*Model, error) {
 	// Initialize services
 	userService := NewUserService(db)
 	cardGameService := NewCardGameService(db)
+	cardService := NewCardService(db)
+	collectionService := NewUserCollectionService(db)
 	authSvc := auth.NewService(&dbAdapter{userService: userService})
 
 	// Load card games from database
@@ -62,14 +70,16 @@ func NewModel(db *sql.DB, isSSHMode bool) (*Model, error) {
 	}
 
 	m := &Model{
-		authService:     authSvc,
-		userService:     userService,
-		cardGameService: cardGameService,
-		db:              db,
-		isSSHMode:       isSSHMode,
-		inputs:          make([]textinput.Model, 2),
-		cardGames:       cardGames,
-		cursor:          0,
+		authService:       authSvc,
+		userService:       userService,
+		cardGameService:   cardGameService,
+		cardService:       cardService,
+		collectionService: collectionService,
+		db:                db,
+		isSSHMode:         isSSHMode,
+		inputs:            make([]textinput.Model, 2),
+		cardGames:         cardGames,
+		cursor:            0,
 	}
 	if isSSHMode {
 		m.screen = ScreenLogin
@@ -153,13 +163,40 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				// Attempt registration
 				return m.handleRegister()
+			case ScreenMain:
+				// Select card game and go to tabs view
+				if len(m.cardGames) > 0 && m.cursor < len(m.cardGames) {
+					selectedGame := &m.cardGames[m.cursor]
+					cardGameTabs, err := m.createCardGameTabsModel(selectedGame)
+					if err != nil {
+						// Could add error handling here, for now just ignore
+						return m, nil
+					}
+					m.cardGameTabs = cardGameTabs
+					m.screen = ScreenCardGameTabs
+					return m, m.cardGameTabs.Init()
+				}
 			}
 		}
 	}
-	if m.screen == ScreenLogin || m.screen == ScreenRegister {
+
+	// Handle screen-specific updates
+	switch m.screen {
+	case ScreenLogin, ScreenRegister:
 		cmd := m.updateInputs(msg)
 		return m, cmd
+	case ScreenCardGameTabs:
+		var cmd tea.Cmd
+		m.cardGameTabs, cmd = m.cardGameTabs.Update(msg)
+		// Handle quit from card game tabs - check for specific keys to return to main
+		if keyMsg, ok := msg.(tea.KeyMsg); ok && (keyMsg.String() == "q" || keyMsg.String() == "esc") {
+			// Return to main screen
+			m.screen = ScreenMain
+			return m, nil
+		}
+		return m, cmd
 	}
+
 	return m, nil
 }
 
@@ -179,6 +216,8 @@ func (m Model) View() string {
 		return m.registerView()
 	case ScreenMain:
 		return m.mainView()
+	case ScreenCardGameTabs:
+		return m.cardGameTabs.View()
 	default:
 		return ""
 	}
@@ -198,4 +237,29 @@ func (a *dbAdapter) GetUserByEmail(email string) (*auth.User, error) {
 
 func (a *dbAdapter) UpdateLastLogin(userID int64) error {
 	return a.userService.UpdateLastLogin(userID)
+}
+
+// createCardGameTabsModel creates a card game tabs model with loaded data
+func (m *Model) createCardGameTabsModel(selectedGame *CardGame) (CardGameTabsModel, error) {
+	cardGameTabs := NewCardGameTabsModel(selectedGame)
+	
+	// Load cards for this game
+	cards, err := m.cardService.GetCardsByGameID(selectedGame.ID)
+	if err != nil {
+		return cardGameTabs, fmt.Errorf("failed to load cards: %w", err)
+	}
+	cardGameTabs.cards = cards
+	cardGameTabs.filteredCards = cards
+	
+	// Load user collection if user is logged in
+	if m.user != nil {
+		collections, err := m.collectionService.GetUserCollectionByGameID(m.user.ID, selectedGame.ID)
+		if err != nil {
+			return cardGameTabs, fmt.Errorf("failed to load user collection: %w", err)
+		}
+		cardGameTabs.userCollections = collections
+		cardGameTabs.filteredCollection = collections
+	}
+	
+	return cardGameTabs, nil
 }

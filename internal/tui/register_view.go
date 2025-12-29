@@ -72,7 +72,7 @@ func (m *Model) handleRegister() (tea.Model, tea.Cmd) {
 
 func (m Model) registerView() string {
 	var b strings.Builder
-	b.WriteString(titleStyle.Render("🃏 CardMan - Register") + "\n\n")
+	b.WriteString(titleStyle.Render("CardMan - Register") + "\n\n")
 	b.WriteString(focusedStyle.Render("First Name:") + "\n")
 	b.WriteString(m.inputs[0].View() + "\n\n")
 	b.WriteString(blurredStyle.Render("Last Name:") + "\n")

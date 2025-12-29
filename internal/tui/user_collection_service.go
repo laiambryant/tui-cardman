@@ -1,0 +1,117 @@
+package tui
+
+import (
+	"database/sql"
+	"fmt"
+)
+
+// IUserCollectionService defines the interface for user collection operations
+type IUserCollectionService interface {
+	GetUserCollectionByUserID(userID int64) ([]UserCollection, error)
+	GetUserCollectionByGameID(userID, gameID int64) ([]UserCollection, error)
+}
+
+// UserCollectionServiceImpl implements the IUserCollectionService interface
+type UserCollectionServiceImpl struct {
+	db *sql.DB
+}
+
+// NewUserCollectionService creates a new instance of UserCollectionServiceImpl
+func NewUserCollectionService(db *sql.DB) IUserCollectionService {
+	return &UserCollectionServiceImpl{db: db}
+}
+
+const (
+	selectUserCollectionByUserIDQuery = `
+		SELECT uc.id, uc.user_id, uc.card_id, uc.quantity, uc.condition,
+		       uc.acquired_date, uc.notes, uc.created_at, uc.updated_at,
+		       c.id, c.card_game_id, c.name, c.expansion, c.rarity, 
+		       c.card_number, c.release_date, c.is_placeholder, c.created_at,
+		       cg.id, cg.name, cg.created_at
+		FROM user_collections uc
+		JOIN cards c ON uc.card_id = c.id
+		JOIN card_games cg ON c.card_game_id = cg.id
+		WHERE uc.user_id = ?
+		ORDER BY uc.created_at DESC
+	`
+	
+	selectUserCollectionByGameIDQuery = `
+		SELECT uc.id, uc.user_id, uc.card_id, uc.quantity, uc.condition,
+		       uc.acquired_date, uc.notes, uc.created_at, uc.updated_at,
+		       c.id, c.card_game_id, c.name, c.expansion, c.rarity, 
+		       c.card_number, c.release_date, c.is_placeholder, c.created_at,
+		       cg.id, cg.name, cg.created_at
+		FROM user_collections uc
+		JOIN cards c ON uc.card_id = c.id
+		JOIN card_games cg ON c.card_game_id = cg.id
+		WHERE uc.user_id = ? AND c.card_game_id = ?
+		ORDER BY uc.created_at DESC
+	`
+)
+
+// GetUserCollectionByUserID retrieves all collection entries for a specific user
+func (s *UserCollectionServiceImpl) GetUserCollectionByUserID(userID int64) ([]UserCollection, error) {
+	rows, err := s.db.Query(selectUserCollectionByUserIDQuery, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query user collection: %w", err)
+	}
+	defer rows.Close()
+
+	return s.scanUserCollections(rows)
+}
+
+// GetUserCollectionByGameID retrieves collection entries for a specific user and card game
+func (s *UserCollectionServiceImpl) GetUserCollectionByGameID(userID, gameID int64) ([]UserCollection, error) {
+	rows, err := s.db.Query(selectUserCollectionByGameIDQuery, userID, gameID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query user collection by game: %w", err)
+	}
+	defer rows.Close()
+
+	return s.scanUserCollections(rows)
+}
+
+// scanUserCollections is a helper function to scan user collection rows
+func (s *UserCollectionServiceImpl) scanUserCollections(rows *sql.Rows) ([]UserCollection, error) {
+	var collections []UserCollection
+	for rows.Next() {
+		var collection UserCollection
+		var card Card
+		var game CardGame
+		var acquiredDate, releaseDate, gameCreatedAt sql.NullTime
+		
+		err := rows.Scan(
+			&collection.ID, &collection.UserID, &collection.CardID, &collection.Quantity, &collection.Condition,
+			&acquiredDate, &collection.Notes, &collection.CreatedAt, &collection.UpdatedAt,
+			&card.ID, &card.CardGameID, &card.Name, &card.Expansion, &card.Rarity,
+			&card.CardNumber, &releaseDate, &card.IsPlaceholder, &card.CreatedAt,
+			&game.ID, &game.Name, &gameCreatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan user collection: %w", err)
+		}
+		
+		// Handle nullable dates
+		if acquiredDate.Valid {
+			collection.AcquiredDate = acquiredDate.Time
+		}
+		if releaseDate.Valid {
+			card.ReleaseDate = releaseDate.Time
+		}
+		if gameCreatedAt.Valid {
+			game.CreatedAt = gameCreatedAt.Time
+		}
+		
+		// Attach related data
+		card.CardGame = &game
+		collection.Card = &card
+		
+		collections = append(collections, collection)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating user collections: %w", err)
+	}
+
+	return collections, nil
+}
