@@ -225,34 +225,7 @@ func (m CardGameTabsModel) renderCardSearchTab() string {
 		}
 	} else {
 		b.WriteString(focusedStyle.Render("Found cards:") + "\n")
-
-		// Show up to 15 cards
-		maxShow := 15
-		if len(m.filteredCards) < maxShow {
-			maxShow = len(m.filteredCards)
-		}
-
-		for i := 0; i < maxShow; i++ {
-			card := m.filteredCards[i]
-
-			style := blurredStyle
-			if i == m.cursor {
-				style = focusedStyle
-			}
-
-			line := style.Render(card.Name)
-			if card.Expansion != "" {
-				line += blurredStyle.Render(" - " + card.Expansion)
-			}
-			if card.Rarity != "" {
-				line += blurredStyle.Render(" [" + card.Rarity + "]")
-			}
-			b.WriteString(line + "\n")
-		}
-
-		if len(m.filteredCards) > maxShow {
-			b.WriteString(blurredStyle.Render(fmt.Sprintf("... and %d more", len(m.filteredCards)-maxShow)) + "\n")
-		}
+		b.WriteString(m.renderCardTable())
 	}
 
 	return b.String()
@@ -342,4 +315,105 @@ func (m CardGameTabsModel) filterUserCollection(query string) []UserCollection {
 	}
 
 	return filtered
+}
+
+// renderCardTable renders the filtered cards in a table format
+func (m CardGameTabsModel) renderCardTable() string {
+	if len(m.filteredCards) == 0 {
+		return ""
+	}
+
+	var b strings.Builder
+
+	// Table headers
+	nameHeader := "Name"
+	expansionHeader := "Expansion"
+	rarityHeader := "Rarity"
+	cardNumHeader := "Card #"
+
+	// Calculate column widths
+	nameWidth := len(nameHeader)
+	expansionWidth := len(expansionHeader)
+	rarityWidth := len(rarityHeader)
+	cardNumWidth := len(cardNumHeader)
+
+	// Find max width for each column
+	for _, card := range m.filteredCards {
+		if len(card.Name) > nameWidth {
+			nameWidth = len(card.Name)
+		}
+		if len(card.Expansion) > expansionWidth {
+			expansionWidth = len(card.Expansion)
+		}
+		if len(card.Rarity) > rarityWidth {
+			rarityWidth = len(card.Rarity)
+		}
+		if len(card.CardNumber) > cardNumWidth {
+			cardNumWidth = len(card.CardNumber)
+		}
+	}
+
+	// Limit column widths for better display
+	if nameWidth > 25 {
+		nameWidth = 25
+	}
+	if expansionWidth > 15 {
+		expansionWidth = 15
+	}
+	if rarityWidth > 12 {
+		rarityWidth = 12
+	}
+	if cardNumWidth > 8 {
+		cardNumWidth = 8
+	}
+
+	// Format header
+	headerFormat := fmt.Sprintf("%%-%ds | %%-%ds | %%-%ds | %%-%ds", nameWidth, expansionWidth, rarityWidth, cardNumWidth)
+	header := fmt.Sprintf(headerFormat, nameHeader, expansionHeader, rarityHeader, cardNumHeader)
+
+	b.WriteString(focusedStyle.Render(header) + "\n")
+
+	// Header separator
+	separator := strings.Repeat("-", nameWidth) + "-+-" +
+		strings.Repeat("-", expansionWidth) + "-+-" +
+		strings.Repeat("-", rarityWidth) + "-+-" +
+		strings.Repeat("-", cardNumWidth)
+	b.WriteString(blurredStyle.Render(separator) + "\n")
+
+	// Table rows
+	rowFormat := fmt.Sprintf("%%-%ds | %%-%ds | %%-%ds | %%-%ds", nameWidth, expansionWidth, rarityWidth, cardNumWidth)
+
+	for i, card := range m.filteredCards {
+		// Truncate long text
+		name := card.Name
+		if len(name) > nameWidth {
+			name = name[:nameWidth-3] + "..."
+		}
+
+		expansion := card.Expansion
+		if len(expansion) > expansionWidth {
+			expansion = expansion[:expansionWidth-3] + "..."
+		}
+
+		rarity := card.Rarity
+		if len(rarity) > rarityWidth {
+			rarity = rarity[:rarityWidth-3] + "..."
+		}
+
+		cardNum := card.CardNumber
+		if len(cardNum) > cardNumWidth {
+			cardNum = cardNum[:cardNumWidth-3] + "..."
+		}
+
+		row := fmt.Sprintf(rowFormat, name, expansion, rarity, cardNum)
+
+		// Highlight selected row
+		if i == m.cursor {
+			b.WriteString(focusedStyle.Render(row) + "\n")
+		} else {
+			b.WriteString(noStyle.Render(row) + "\n")
+		}
+	}
+
+	return b.String()
 }
