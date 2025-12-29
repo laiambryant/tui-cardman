@@ -3,6 +3,8 @@ package tui
 import (
 	"fmt"
 	"strings"
+
+	"github.com/charmbracelet/lipgloss"
 )
 
 func (m Model) mainView() string {
@@ -15,20 +17,37 @@ func (m Model) mainView() string {
 		b.WriteString(titleStyle.Render("🃏 CardMan - Card Games") + "\n\n")
 	}
 
-	// Card games list
+	// Card games boxes
 	b.WriteString(focusedStyle.Render("Select a card game:") + "\n\n")
 
 	if len(m.cardGames) == 0 {
 		b.WriteString(errorStyle.Render("No card games found. Please run migrations.") + "\n")
 	} else {
+		// Define box styles
+		selectedBoxStyle := lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("205")).
+			Padding(1, 2).
+			Width(40).
+			Align(lipgloss.Center).
+			Bold(true)
+
+		unselectedBoxStyle := lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("240")).
+			Padding(1, 2).
+			Width(40).
+			Align(lipgloss.Center)
+
+		// Display boxes in a single centered column
 		for i, game := range m.cardGames {
-			cursor := " "
+			var box string
 			if m.cursor == i {
-				cursor = focusedStyle.Render(">")
-				b.WriteString(fmt.Sprintf("%s %s\n", cursor, focusedStyle.Render(game.Name)))
+				box = selectedBoxStyle.Render("🎴 " + game.Name)
 			} else {
-				b.WriteString(fmt.Sprintf("  %s\n", game.Name))
+				box = unselectedBoxStyle.Render("🎴 " + game.Name)
 			}
+			b.WriteString(box + "\n")
 		}
 	}
 
