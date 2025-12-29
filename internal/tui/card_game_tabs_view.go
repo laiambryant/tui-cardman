@@ -107,9 +107,10 @@ func (m CardGameTabsModel) Update(msg tea.Msg) (CardGameTabsModel, tea.Cmd) {
 		m.searchInput, cmd = m.searchInput.Update(msg)
 
 		// Filter results based on search
-		if m.currentTab == TabCardSearch {
+		switch m.currentTab {
+		case TabCardSearch:
 			m.filteredCards = m.filterCards(m.searchInput.Value())
-		} else if m.currentTab == TabUserSearch {
+		case TabUserSearch:
 			m.filteredCollection = m.filterUserCollection(m.searchInput.Value())
 		}
 
@@ -126,11 +127,11 @@ func (m CardGameTabsModel) View() string {
 
 	// Header with game name
 	if m.selectedGame != nil {
-		b.WriteString(titleStyle.Render("📦 "+m.selectedGame.Name+" Collection Manager") + "\n\n")
+		b.WriteString(titleStyle.Render(m.selectedGame.Name+" Collection Manager") + "\n\n")
 	}
 
 	// Tab navigation
-	tabs := []string{"Collection", "Card Search", "User Search"}
+	tabs := []string{"Collection", "Card Search", "My Collection"}
 	var tabStyles []string
 
 	for i, tab := range tabs {
