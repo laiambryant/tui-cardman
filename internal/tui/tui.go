@@ -22,16 +22,22 @@ const (
 
 // Model is the main application model
 type Model struct {
-	screen      Screen
-	authService *auth.Service
-	db          *sql.DB
-	user        *auth.User
+	screen          Screen
+	authService     *auth.Service
+	userService     IUserService
+	cardGameService ICardGameService
+	db              *sql.DB
+	user            *auth.User
 
 	// Login/Register screen state
 	inputs     []textinput.Model
 	focusIndex int
 	errorMsg   string
 	isSSHMode  bool
+
+	// Main view state
+	cardGames []CardGame
+	cursor    int
 }
 
 var (
@@ -45,12 +51,26 @@ var (
 )
 
 func NewModel(db *sql.DB, isSSHMode bool) (*Model, error) {
-	authSvc := auth.NewService(&dbAdapter{db: db})
+	// Initialize services
+	userService := NewUserService(db)
+	cardGameService := NewCardGameService(db)
+	authSvc := auth.NewService(&dbAdapter{userService: userService})
+
+	// Load card games from database
+	cardGames, err := cardGameService.GetAllCardGames()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load card games: %w", err)
+	}
+
 	m := &Model{
-		authService: authSvc,
-		db:          db,
-		isSSHMode:   isSSHMode,
-		inputs:      make([]textinput.Model, 2),
+		authService:     authSvc,
+		userService:     userService,
+		cardGameService: cardGameService,
+		db:              db,
+		isSSHMode:       isSSHMode,
+		inputs:          make([]textinput.Model, 2),
+		cardGames:       cardGames,
+		cursor:          0,
 	}
 	if isSSHMode {
 		m.screen = ScreenLogin
@@ -163,6 +183,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				}
 				return m, tea.Batch(cmds...)
+			} else if m.screen == ScreenMain {
+				// Handle navigation in main view
+				s := msg.String()
+				if s == "up" || s == "shift+tab" {
+					if m.cursor > 0 {
+						m.cursor--
+					}
+				} else if s == "down" || s == "tab" {
+					if m.cursor < len(m.cardGames)-1 {
+						m.cursor++
+					}
+				}
+				return m, nil
 			}
 
 		case "enter":
@@ -305,24 +338,50 @@ func (m Model) registerView() string {
 }
 
 func (m Model) mainView() string {
+	var b strings.Builder
+
+	// Title
 	if m.user != nil {
-		return fmt.Sprintf("Welcome, %s %s!\n\nYour card collection will be here.\n\nPress Ctrl+C to quit.", m.user.Name, m.user.Surname)
+		b.WriteString(titleStyle.Render(fmt.Sprintf("🃏 CardMan - Welcome, %s %s!", m.user.Name, m.user.Surname)) + "\n\n")
+	} else {
+		b.WriteString(titleStyle.Render("🃏 CardMan - Card Games") + "\n\n")
 	}
-	return "Welcome to CardMan!\n\nYour card collection will be here.\n\nPress Ctrl+C to quit."
+
+	// Card games list
+	b.WriteString(focusedStyle.Render("Select a card game:") + "\n\n")
+
+	if len(m.cardGames) == 0 {
+		b.WriteString(errorStyle.Render("No card games found. Please run migrations.") + "\n")
+	} else {
+		for i, game := range m.cardGames {
+			cursor := " "
+			if m.cursor == i {
+				cursor = focusedStyle.Render(">")
+				b.WriteString(fmt.Sprintf("%s %s\n", cursor, focusedStyle.Render(game.Name)))
+			} else {
+				b.WriteString(fmt.Sprintf("  %s\n", game.Name))
+			}
+		}
+	}
+
+	b.WriteString("\n")
+	b.WriteString(helpStyle.Render("↑/↓: Navigate • Enter: Select • Ctrl+C: Quit") + "\n")
+
+	return b.String()
 }
 
 type dbAdapter struct {
-	db *sql.DB
+	userService IUserService
 }
 
 func (a *dbAdapter) CreateUser(req auth.RegisterRequest, passwordHash string) (*auth.User, error) {
-	return createUser(a.db, req, passwordHash)
+	return a.userService.CreateUser(req, passwordHash)
 }
 
 func (a *dbAdapter) GetUserByEmail(email string) (*auth.User, error) {
-	return getUserByEmail(a.db, email)
+	return a.userService.GetUserByEmail(email)
 }
 
 func (a *dbAdapter) UpdateLastLogin(userID int64) error {
-	return updateLastLogin(a.db, userID)
+	return a.userService.UpdateLastLogin(userID)
 }
