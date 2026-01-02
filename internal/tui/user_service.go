@@ -106,7 +106,7 @@ func (s *UserServiceImpl) GetUserByEmail(email string) (*auth.User, error) {
 
 // UpdateLastLogin updates the last_login timestamp for a user
 func (s *UserServiceImpl) UpdateLastLogin(userID int64) error {
-	args := []interface{}{time.Now(), userID}
+	args := []any{time.Now(), userID}
 	slog.Debug("exec", "query", updateLastLoginQuery, "args", args)
 	_, err := s.db.Exec(updateLastLoginQuery, time.Now(), userID)
 	if err != nil {
