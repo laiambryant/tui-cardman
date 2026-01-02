@@ -161,23 +161,23 @@ func (m SettingsModel) Update(msg tea.Msg) (SettingsModel, tea.Cmd) {
 func (m SettingsModel) View() string {
 	var b strings.Builder
 
-	b.WriteString(titleStyle.Render("⚙️  Settings") + "\n\n")
+	b.WriteString(settingsTitleStyle.Render("⚙️  Settings") + "\n\n")
 
 	// Section tabs
 	tabs := []string{"Keybindings", "UI"}
 	var renderedTabs []string
 	for i, tab := range tabs {
 		if settingsSection(i) == m.section {
-			renderedTabs = append(renderedTabs, focusedStyle.Render("[ "+tab+" ]"))
+			renderedTabs = append(renderedTabs, settingsFocusStyle.Render("[ "+tab+" ]"))
 		} else {
-			renderedTabs = append(renderedTabs, blurredStyle.Render("  "+tab+"  "))
+			renderedTabs = append(renderedTabs, settingsBlurStyle.Render("  "+tab+"  "))
 		}
 	}
 	b.WriteString(strings.Join(renderedTabs, " ") + "\n\n")
 
 	// Show error if any
 	if m.errorMsg != "" {
-		b.WriteString(errorStyle.Render("⚠ "+m.errorMsg) + "\n\n")
+		b.WriteString(settingsErrorStyle.Render("⚠ "+m.errorMsg) + "\n\n")
 	}
 
 	// Section content
@@ -241,15 +241,15 @@ func (m SettingsModel) renderKeybindingsSection() string {
 	var b strings.Builder
 
 	if m.editing {
-		b.WriteString(focusedStyle.Render(fmt.Sprintf("Editing: %s", m.editingAction)) + "\n")
-		b.WriteString(blurredStyle.Render("Press the key you want to bind...") + "\n")
+		b.WriteString(settingsFocusStyle.Render(fmt.Sprintf("Editing: %s", m.editingAction)) + "\n")
+		b.WriteString(settingsBlurStyle.Render("Press the key you want to bind...") + "\n")
 		return b.String()
 	}
 
 	cfg := m.configManager.Get()
 
 	// Display keybindings in a nice table
-	b.WriteString(focusedStyle.Render("Action") + strings.Repeat(" ", 25) + focusedStyle.Render("Key") + "\n")
+	b.WriteString(settingsFocusStyle.Render("Action") + strings.Repeat(" ", 25) + settingsFocusStyle.Render("Key") + "\n")
 	b.WriteString(strings.Repeat("─", 50) + "\n")
 
 	visibleStart := 0
@@ -288,9 +288,9 @@ func (m SettingsModel) renderKeybindingsSection() string {
 		}
 
 		if i == m.cursor {
-			b.WriteString(focusedStyle.Render("> "+actionDisplay) + " " + focusedStyle.Render(keyDisplay) + "\n")
+			b.WriteString(settingsFocusStyle.Render("> "+actionDisplay) + " " + settingsFocusStyle.Render(keyDisplay) + "\n")
 		} else {
-			b.WriteString(blurredStyle.Render("  "+actionDisplay) + " " + noStyle.Render(keyDisplay) + "\n")
+			b.WriteString(settingsBlurStyle.Render("  "+actionDisplay) + " " + noStyle.Render(keyDisplay) + "\n")
 		}
 	}
 
@@ -306,11 +306,11 @@ func (m SettingsModel) renderUISection() string {
 
 	cfg := m.configManager.Get()
 
-	b.WriteString(focusedStyle.Render("UI Settings") + "\n\n")
+	b.WriteString(settingsFocusStyle.Render("UI Settings") + "\n\n")
 	b.WriteString(fmt.Sprintf("Compact Lists: %v\n", cfg.UI.CompactLists))
 	b.WriteString(fmt.Sprintf("Color Scheme: %s\n", cfg.UI.ColorScheme))
 	b.WriteString("\n")
-	b.WriteString(blurredStyle.Render("(UI settings editing coming soon)") + "\n")
+	b.WriteString(settingsBlurStyle.Render("(UI settings editing coming soon)") + "\n")
 
 	return b.String()
 }
