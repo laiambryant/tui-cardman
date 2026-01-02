@@ -52,7 +52,30 @@ func (m Model) mainView() string {
 	}
 
 	b.WriteString("\n")
-	b.WriteString(helpStyle.Render("↑/↓: Navigate • Enter: Select • Ctrl+C: Quit") + "\n")
+	settingsKey := "F1"
+	navUp := "↑"
+	navDown := "↓"
+	selectKey := "Enter"
+	quitKey := "Ctrl+C"
+	if m.configManager != nil {
+		if k := m.configManager.KeyForAction("settings"); k != "" {
+			settingsKey = k
+		}
+		if k := m.configManager.KeyForAction("nav_up"); k != "" {
+			navUp = k
+		}
+		if k := m.configManager.KeyForAction("nav_down"); k != "" {
+			navDown = k
+		}
+		if k := m.configManager.KeyForAction("select"); k != "" {
+			selectKey = k
+		}
+		if k := m.configManager.KeyForAction("quit"); k != "" {
+			quitKey = k
+		}
+	}
+	help := fmt.Sprintf("%s: Settings • %s/%s: Navigate • %s: Select • %s: Quit", settingsKey, navUp, navDown, selectKey, quitKey)
+	b.WriteString(helpStyle.Render(help) + "\n")
 
 	return b.String()
 }

@@ -64,7 +64,30 @@ func (m Model) localUserSetupView() string {
 	}
 	b.WriteString(submitButton + "\n\n")
 
-	b.WriteString(helpStyle.Render("↑/↓: Navigate • Enter: Submit • Ctrl+C: Quit") + "\n")
+	settingsKey := "F1"
+	navUp := "↑"
+	navDown := "↓"
+	submitKey := "Enter"
+	quitKey := "Ctrl+C"
+	if m.configManager != nil {
+		if k := m.configManager.KeyForAction("settings"); k != "" {
+			settingsKey = k
+		}
+		if k := m.configManager.KeyForAction("nav_up"); k != "" {
+			navUp = k
+		}
+		if k := m.configManager.KeyForAction("nav_down"); k != "" {
+			navDown = k
+		}
+		if k := m.configManager.KeyForAction("select"); k != "" {
+			submitKey = k
+		}
+		if k := m.configManager.KeyForAction("quit"); k != "" {
+			quitKey = k
+		}
+	}
+	help := fmt.Sprintf("%s: Settings • %s/%s: Navigate • %s: Submit • %s: Quit", settingsKey, navUp, navDown, submitKey, quitKey)
+	b.WriteString(helpStyle.Render(help) + "\n")
 
 	return b.String()
 }
@@ -119,7 +142,7 @@ func (m *Model) handleLocalUserSetup() (tea.Model, tea.Cmd) {
 	err = m.collectionService.CreateSampleCollectionData(user.ID)
 	if err != nil {
 		// Don't fail user creation if sample data fails, just log it
-		m.errorMsg = fmt.Sprintf("Profile created but failed to add sampleCreateSampleCollectionData cards: %v", err)
+		m.errorMsg = fmt.Sprintf("Profile created but failed to add sample collection cards: %v", err)
 		// Still proceed to main screen after a brief delay
 		m.screen = ScreenMain
 		return m, nil

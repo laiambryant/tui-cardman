@@ -1,0 +1,26 @@
+{
+  "keybindings": {
+    "back": "q",
+    "nav_down": "s",
+    "nav_left": "a",
+    "nav_next_tab": "tab",
+    "nav_prev_tab": "shift+tab",
+    "nav_right": "d",
+    "nav_up": "w",
+    "quit": "ctrl+c",
+    "quit_alt": "esc",
+    "search_clear": "ctrl+u",
+    "search_focus": "/",
+    "select": "enter",
+    "settings": "f1",
+    "switch_tab_left": "h",
+    "switch_tab_right": "l",
+    "tab_all_cards": "1",
+    "tab_collection": "2",
+    "tab_search": "3"
+  },
+  "ui": {
+    "compact_lists": false,
+    "color_scheme": "default"
+  }
+}

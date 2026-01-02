@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 
 	"gihtub.com/laiambryant/tui-cardman/internal/auth"
@@ -65,7 +66,31 @@ func (m Model) loginView() string {
 		button = focusedStyle.Render("[ Login ]")
 	}
 	b.WriteString(button + "\n\n")
-	b.WriteString(helpStyle.Render("Tab/Shift+Tab: Navigate • Enter: Submit • Ctrl+C: Quit") + "\n")
+	// Build dynamic help string from config
+	settingsKey := "F1"
+	navNext := "Tab"
+	navPrev := "Shift+Tab"
+	submitKey := "Enter"
+	quitKey := "Ctrl+C"
+	if m.configManager != nil {
+		if k := m.configManager.KeyForAction("settings"); k != "" {
+			settingsKey = k
+		}
+		if k := m.configManager.KeyForAction("nav_next_tab"); k != "" {
+			navNext = k
+		}
+		if k := m.configManager.KeyForAction("nav_prev_tab"); k != "" {
+			navPrev = k
+		}
+		if k := m.configManager.KeyForAction("select"); k != "" {
+			submitKey = k
+		}
+		if k := m.configManager.KeyForAction("quit"); k != "" {
+			quitKey = k
+		}
+	}
+	help := fmt.Sprintf("%s: Settings • %s/%s: Navigate • %s: Submit • %s: Quit", settingsKey, navPrev, navNext, submitKey, quitKey)
+	b.WriteString(helpStyle.Render(help) + "\n")
 	b.WriteString(helpStyle.Render("Don't have an account? Press Enter on the button below") + "\n")
 	registerBtn := "[ Register ]"
 	b.WriteString(registerBtn + "\n")

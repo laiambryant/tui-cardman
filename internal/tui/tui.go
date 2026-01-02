@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"gihtub.com/laiambryant/tui-cardman/internal/auth"
+	"gihtub.com/laiambryant/tui-cardman/internal/runtimecfg"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -19,6 +20,7 @@ const (
 	ScreenMain
 	ScreenCardGameTabs
 	ScreenLocalUserSetup
+	ScreenSettings
 )
 
 // Model is the main application model
@@ -31,6 +33,7 @@ type Model struct {
 	collectionService IUserCollectionService
 	db                *sql.DB
 	user              *auth.User
+	configManager     *runtimecfg.Manager
 
 	// Login/Register screen state
 	inputs     []textinput.Model
@@ -44,6 +47,9 @@ type Model struct {
 
 	// Card game tabs state
 	cardGameTabs CardGameTabsModel
+
+	// Settings state
+	settingsModel *SettingsModel
 }
 
 var (
@@ -56,6 +62,13 @@ var (
 )
 
 func NewModel(db *sql.DB, isSSHMode bool) (*Model, error) {
+	// Initialize config manager
+	configPath := runtimecfg.GetConfigPath()
+	configManager, err := runtimecfg.NewManager(configPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize config manager: %w", err)
+	}
+
 	// Initialize services
 	userService := NewUserService(db)
 	cardGameService := NewCardGameService(db)
@@ -77,6 +90,7 @@ func NewModel(db *sql.DB, isSSHMode bool) (*Model, error) {
 		collectionService: collectionService,
 		db:                db,
 		isSSHMode:         isSSHMode,
+		configManager:     configManager,
 		inputs:            make([]textinput.Model, 2),
 		cardGames:         cardGames,
 		cursor:            0,
@@ -121,14 +135,35 @@ func (m Model) Init() tea.Cmd {
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		switch msg.String() {
-		case "ctrl+c", "esc":
+		// Interpret key via config manager (fall back to raw string checks where useful)
+		s := msg.String()
+		action := ""
+		if m.configManager != nil {
+			action = m.configManager.MatchAction(s)
+		}
+
+		// Open settings if requested
+		if action == "settings" && m.screen != ScreenSettings {
+			m.settingsModel = NewSettingsModel(m.configManager)
+			m.screen = ScreenSettings
+			return m, m.settingsModel.Init()
+		}
+
+		// Quit handling
+		if action == "quit" || action == "quit_alt" || s == "ctrl+c" {
+			if m.screen == ScreenSettings {
+				m.screen = ScreenMain
+				return m, nil
+			}
 			return m, tea.Quit
-		case "tab", "shift+tab", "up", "down":
+		}
+
+		// Navigation and focus handling
+		if action == "nav_prev_tab" || action == "nav_next_tab" || action == "nav_up" || action == "nav_down" || s == "tab" || s == "shift+tab" || s == "up" || s == "down" {
 			switch m.screen {
 			case ScreenLogin, ScreenRegister, ScreenLocalUserSetup:
-				s := msg.String()
-				if s == "up" || s == "shift+tab" {
+				// focus navigation
+				if action == "nav_up" || s == "up" || s == "shift+tab" {
 					m.focusIndex--
 				} else {
 					m.focusIndex++
@@ -152,55 +187,48 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				return m, tea.Batch(cmds...)
 			case ScreenMain:
-				// Handle navigation in main view
-				s := msg.String()
-				switch s {
-				case "up", "shift+tab":
+				// list navigation
+				if action == "nav_up" || s == "up" || s == "shift+tab" {
 					if m.cursor > 0 {
 						m.cursor--
 					}
-				case "down", "tab":
+				} else if action == "nav_down" || s == "down" || s == "tab" {
 					if m.cursor < len(m.cardGames)-1 {
 						m.cursor++
 					}
 				}
 				return m, nil
 			}
+		}
 
-		case "enter":
+		// Select / Enter
+		if action == "select" || s == "enter" {
 			switch m.screen {
 			case ScreenLogin:
 				if m.focusIndex == len(m.inputs) {
-					// Switch to register
 					m.screen = ScreenRegister
 					m.initRegisterInputs()
 					m.errorMsg = ""
 					return m, nil
 				}
-				// Attempt login
 				return m.handleLogin()
 			case ScreenRegister:
 				if m.focusIndex == len(m.inputs) {
-					// Switch to login
 					m.screen = ScreenLogin
 					m.initLoginInputs()
 					m.errorMsg = ""
 					return m, nil
 				}
-				// Attempt registration
 				return m.handleRegister()
 			case ScreenLocalUserSetup:
 				if m.focusIndex == len(m.inputs) {
-					// Submit local user setup
 					return m.handleLocalUserSetup()
 				}
 			case ScreenMain:
-				// Select card game and go to tabs view
 				if len(m.cardGames) > 0 && m.cursor < len(m.cardGames) {
 					selectedGame := &m.cardGames[m.cursor]
 					cardGameTabs, err := m.createCardGameTabsModel(selectedGame)
 					if err != nil {
-						// Could add error handling here, for now just ignore
 						return m, nil
 					}
 					m.cardGameTabs = cardGameTabs
@@ -216,14 +244,28 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case ScreenLogin, ScreenRegister, ScreenLocalUserSetup:
 		cmd := m.updateInputs(msg)
 		return m, cmd
+	case ScreenSettings:
+		var cmd tea.Cmd
+		*m.settingsModel, cmd = m.settingsModel.Update(msg)
+		// Check if settings wants to close
+		if m.settingsModel.shouldClose {
+			m.screen = ScreenMain
+		}
+		return m, cmd
 	case ScreenCardGameTabs:
 		var cmd tea.Cmd
 		m.cardGameTabs, cmd = m.cardGameTabs.Update(msg)
-		// Handle quit from card game tabs - check for specific keys to return to main
-		if keyMsg, ok := msg.(tea.KeyMsg); ok && (keyMsg.String() == "q" || keyMsg.String() == "esc") {
-			// Return to main screen
-			m.screen = ScreenMain
-			return m, nil
+		// Handle back/quit from card game tabs - check configured keys
+		if keyMsg, ok := msg.(tea.KeyMsg); ok {
+			action := ""
+			if m.configManager != nil {
+				action = m.configManager.MatchAction(keyMsg.String())
+			}
+			if action == "back" || action == "quit_alt" || keyMsg.String() == "q" || keyMsg.String() == "esc" {
+				// Return to main screen
+				m.screen = ScreenMain
+				return m, nil
+			}
 		}
 		return m, cmd
 	}
@@ -249,6 +291,8 @@ func (m Model) View() string {
 		return m.localUserSetupView()
 	case ScreenMain:
 		return m.mainView()
+	case ScreenSettings:
+		return m.settingsModel.View()
 	case ScreenCardGameTabs:
 		return m.cardGameTabs.View()
 	default:
@@ -274,7 +318,7 @@ func (a *dbAdapter) UpdateLastLogin(userID int64) error {
 
 // createCardGameTabsModel creates a card game tabs model with loaded data
 func (m *Model) createCardGameTabsModel(selectedGame *CardGame) (CardGameTabsModel, error) {
-	cardGameTabs := NewCardGameTabsModel(selectedGame)
+	cardGameTabs := NewCardGameTabsModel(selectedGame, m.configManager)
 
 	// Load cards for this game
 	cards, err := m.cardService.GetCardsByGameID(selectedGame.ID)

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"gihtub.com/laiambryant/tui-cardman/internal/runtimecfg"
 	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -30,10 +31,11 @@ type CardGameTabsModel struct {
 	filteredCollection []UserCollection
 	cursor             int
 	cardTable          table.Model
+	configManager      *runtimecfg.Manager
 }
 
 // NewCardGameTabsModel creates a new card game tabs model
-func NewCardGameTabsModel(selectedGame *CardGame) CardGameTabsModel {
+func NewCardGameTabsModel(selectedGame *CardGame, cfg *runtimecfg.Manager) CardGameTabsModel {
 	searchInput := textinput.New()
 	searchInput.Placeholder = "Search cards..."
 	searchInput.Width = 30
@@ -66,11 +68,12 @@ func NewCardGameTabsModel(selectedGame *CardGame) CardGameTabsModel {
 	cardTable.SetStyles(s)
 
 	return CardGameTabsModel{
-		selectedGame: selectedGame,
-		currentTab:   TabCollection,
-		searchInput:  searchInput,
-		cursor:       0,
-		cardTable:    cardTable,
+		selectedGame:  selectedGame,
+		currentTab:    TabCollection,
+		searchInput:   searchInput,
+		cursor:        0,
+		cardTable:     cardTable,
+		configManager: cfg,
 	}
 }
 
@@ -81,15 +84,24 @@ func (m CardGameTabsModel) Init() tea.Cmd {
 func (m CardGameTabsModel) Update(msg tea.Msg) (CardGameTabsModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		switch msg.String() {
-		case "ctrl+c":
-			// Full quit
+		s := msg.String()
+		action := ""
+		if m.configManager != nil {
+			action = m.configManager.MatchAction(s)
+		}
+
+		// Quit handling
+		if action == "quit" || s == "ctrl+c" {
 			return m, tea.Quit
-		case "q", "esc":
-			// Return to main screen - parent will handle this
+		}
+
+		// Back / close (use configured bindings)
+		if action == "back" || action == "quit_alt" {
 			return m, nil
-		case "tab":
-			// Move to next tab
+		}
+
+		// Tab navigation
+		if action == "nav_next_tab" {
 			m.currentTab = (m.currentTab + 1) % 3
 			if m.currentTab == TabCardSearch || m.currentTab == TabUserSearch {
 				m.searchInput.Focus()
@@ -97,8 +109,9 @@ func (m CardGameTabsModel) Update(msg tea.Msg) (CardGameTabsModel, tea.Cmd) {
 				m.searchInput.Blur()
 			}
 			return m, nil
-		case "shift+tab":
-			// Move to previous tab
+		}
+
+		if action == "nav_prev_tab" {
 			if m.currentTab == 0 {
 				m.currentTab = 2
 			} else {
@@ -110,33 +123,36 @@ func (m CardGameTabsModel) Update(msg tea.Msg) (CardGameTabsModel, tea.Cmd) {
 				m.searchInput.Blur()
 			}
 			return m, nil
-		case "up", "k":
+		}
+
+		// Up / down navigation (keep vim keys as fallbacks)
+		if action == "nav_up" || s == "k" {
 			if m.currentTab == TabCardSearch {
 				m.cardTable, _ = m.cardTable.Update(msg)
 				return m, nil
-			} else {
-				if m.cursor > 0 {
-					m.cursor--
-				}
-				return m, nil
 			}
-		case "down", "j":
+			if m.cursor > 0 {
+				m.cursor--
+			}
+			return m, nil
+		}
+
+		if action == "nav_down" || s == "j" {
 			if m.currentTab == TabCardSearch {
 				m.cardTable, _ = m.cardTable.Update(msg)
 				return m, nil
-			} else {
-				maxItems := 0
-				switch m.currentTab {
-				case TabCollection:
-					maxItems = len(m.filteredCollection)
-				case TabUserSearch:
-					maxItems = len(m.filteredCollection)
-				}
-				if m.cursor < maxItems-1 {
-					m.cursor++
-				}
-				return m, nil
 			}
+			maxItems := 0
+			switch m.currentTab {
+			case TabCollection:
+				maxItems = len(m.filteredCollection)
+			case TabUserSearch:
+				maxItems = len(m.filteredCollection)
+			}
+			if m.cursor < maxItems-1 {
+				m.cursor++
+			}
+			return m, nil
 		}
 	}
 
@@ -196,7 +212,39 @@ func (m CardGameTabsModel) View() string {
 
 	// Help text
 	b.WriteString("\n")
-	b.WriteString(helpStyle.Render("Tab/Shift+Tab: Switch tabs • ↑/↓: Navigate • Q/Esc: Back • Ctrl+C: Quit") + "\n")
+	// Build dynamic help text from config if available
+	settingsKey := "F1"
+	nextTab := "Tab"
+	prevTab := "Shift+Tab"
+	navUp := "↑"
+	navDown := "↓"
+	backKey := "Q"
+	quitKey := "Ctrl+C"
+	if m.configManager != nil {
+		if k := m.configManager.KeyForAction("settings"); k != "" {
+			settingsKey = k
+		}
+		if k := m.configManager.KeyForAction("nav_next_tab"); k != "" {
+			nextTab = k
+		}
+		if k := m.configManager.KeyForAction("nav_prev_tab"); k != "" {
+			prevTab = k
+		}
+		if k := m.configManager.KeyForAction("nav_up"); k != "" {
+			navUp = k
+		}
+		if k := m.configManager.KeyForAction("nav_down"); k != "" {
+			navDown = k
+		}
+		if k := m.configManager.KeyForAction("back"); k != "" {
+			backKey = k
+		}
+		if k := m.configManager.KeyForAction("quit"); k != "" {
+			quitKey = k
+		}
+	}
+	help := fmt.Sprintf("%s: Settings • %s/%s: Switch tabs • %s/%s: Navigate • %s: Back • %s: Quit", settingsKey, prevTab, nextTab, navUp, navDown, backKey, quitKey)
+	b.WriteString(helpStyle.Render(help) + "\n")
 
 	return b.String()
 }
