@@ -9,7 +9,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/laiambryant/tui-cardman/internal/auth"
 	"github.com/laiambryant/tui-cardman/internal/runtimecfg"
-	"github.com/laiambryant/tui-cardman/internal/tui/data"
+	"github.com/laiambryant/tui-cardman/internal/tui/model"
 	"github.com/laiambryant/tui-cardman/internal/tui/services"
 )
 
@@ -44,7 +44,7 @@ type Model struct {
 	isSSHMode  bool
 
 	// Main view state
-	cardGames []data.CardGame
+	cardGames []model.CardGame
 	cursor    int
 
 	// Card game tabs state
@@ -322,7 +322,7 @@ func (a *dbAdapter) UpdateLastLogin(userID int64) error {
 }
 
 // createCardGameTabsModel creates a card game tabs model with loaded data
-func (m *Model) createCardGameTabsModel(selectedGame *data.CardGame) (CardGameTabsModel, error) {
+func (m *Model) createCardGameTabsModel(selectedGame *model.CardGame) (CardGameTabsModel, error) {
 	cardGameTabs := NewCardGameTabsModel(selectedGame, m.configManager)
 
 	// Load cards for this game

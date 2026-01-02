@@ -6,13 +6,13 @@ import (
 	"log/slog"
 
 	"github.com/laiambryant/tui-cardman/internal/logging"
-	"github.com/laiambryant/tui-cardman/internal/tui/data"
+	"github.com/laiambryant/tui-cardman/internal/tui/model"
 )
 
 // ICardService defines the interface for card-related operations
 type ICardService interface {
-	GetCardsByGameID(gameID int64) ([]data.Card, error)
-	GetAllCards() ([]data.Card, error)
+	GetCardsByGameID(gameID int64) ([]model.Card, error)
+	GetAllCards() ([]model.Card, error)
 }
 
 // CardServiceImpl implements the ICardService interface
@@ -47,7 +47,7 @@ const (
 )
 
 // GetCardsByGameID retrieves all cards for a specific card game
-func (s *CardServiceImpl) GetCardsByGameID(gameID int64) ([]data.Card, error) {
+func (s *CardServiceImpl) GetCardsByGameID(gameID int64) ([]model.Card, error) {
 	slog.Debug("query", "query", logging.SanitizeQuery(selectCardsByGameIDQuery), "args", []any{gameID})
 	rows, err := s.db.Query(selectCardsByGameIDQuery, gameID)
 	if err != nil {
@@ -58,7 +58,7 @@ func (s *CardServiceImpl) GetCardsByGameID(gameID int64) ([]data.Card, error) {
 }
 
 // GetAllCards retrieves all cards from the database
-func (s *CardServiceImpl) GetAllCards() ([]data.Card, error) {
+func (s *CardServiceImpl) GetAllCards() ([]model.Card, error) {
 	slog.Debug("query", "query", logging.SanitizeQuery(selectAllCardsQuery))
 	rows, err := s.db.Query(selectAllCardsQuery)
 	if err != nil {
@@ -70,11 +70,11 @@ func (s *CardServiceImpl) GetAllCards() ([]data.Card, error) {
 }
 
 // scanCards is a helper function to scan card rows
-func (s *CardServiceImpl) scanCards(rows *sql.Rows) ([]data.Card, error) {
-	var cards []data.Card
+func (s *CardServiceImpl) scanCards(rows *sql.Rows) ([]model.Card, error) {
+	var cards []model.Card
 	for rows.Next() {
-		var card data.Card
-		var game data.CardGame
+		var card model.Card
+		var game model.CardGame
 		var releaseDate, gameCreatedAt sql.NullTime
 		err := rows.Scan(
 			&card.ID, &card.CardGameID, &card.Name, &card.Expansion, &card.Rarity,

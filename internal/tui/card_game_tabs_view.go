@@ -9,7 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/laiambryant/tui-cardman/internal/runtimecfg"
-	"github.com/laiambryant/tui-cardman/internal/tui/data"
+	"github.com/laiambryant/tui-cardman/internal/tui/model"
 )
 
 // Tab represents different tabs in the card game view
@@ -23,20 +23,20 @@ const (
 
 // CardGameTabsModel represents the state for the card game tabs view
 type CardGameTabsModel struct {
-	selectedGame       *data.CardGame
+	selectedGame       *model.CardGame
 	currentTab         Tab
 	searchInput        textinput.Model
-	cards              []data.Card
-	userCollections    []data.UserCollection
-	filteredCards      []data.Card
-	filteredCollection []data.UserCollection
+	cards              []model.Card
+	userCollections    []model.UserCollection
+	filteredCards      []model.Card
+	filteredCollection []model.UserCollection
 	cursor             int
 	cardTable          table.Model
 	configManager      *runtimecfg.Manager
 }
 
 // NewCardGameTabsModel creates a new card game tabs model
-func NewCardGameTabsModel(selectedGame *data.CardGame, cfg *runtimecfg.Manager) CardGameTabsModel {
+func NewCardGameTabsModel(selectedGame *model.CardGame, cfg *runtimecfg.Manager) CardGameTabsModel {
 	searchInput := textinput.New()
 	searchInput.Placeholder = "Search cards..."
 	searchInput.Width = 30
@@ -367,11 +367,11 @@ func (m CardGameTabsModel) renderUserSearchTab() string {
 }
 
 // filterCards filters cards based on search query using fuzzy matching
-func (m CardGameTabsModel) filterCards(query string) []Card {
+func (m CardGameTabsModel) filterCards(query string) []model.Card {
 	if query == "" {
 		return m.cards
 	}
-	var filtered []Card
+	var filtered []model.Card
 	query = strings.ToLower(query)
 	for _, card := range m.cards {
 		if strings.Contains(strings.ToLower(card.Name), query) ||
@@ -385,11 +385,11 @@ func (m CardGameTabsModel) filterCards(query string) []Card {
 }
 
 // filterUserCollection filters user collection based on search query
-func (m CardGameTabsModel) filterUserCollection(query string) []UserCollection {
+func (m CardGameTabsModel) filterUserCollection(query string) []model.UserCollection {
 	if query == "" {
 		return m.userCollections
 	}
-	var filtered []UserCollection
+	var filtered []model.UserCollection
 	query = strings.ToLower(query)
 	for _, collection := range m.userCollections {
 		if collection.Card != nil {

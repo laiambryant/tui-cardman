@@ -6,13 +6,13 @@ import (
 	"log/slog"
 
 	"github.com/laiambryant/tui-cardman/internal/logging"
-	"github.com/laiambryant/tui-cardman/internal/tui/data"
+	"github.com/laiambryant/tui-cardman/internal/tui/model"
 )
 
 // IUserCollectionService defines the interface for user collection operations
 type IUserCollectionService interface {
-	GetUserCollectionByUserID(userID int64) ([]data.UserCollection, error)
-	GetUserCollectionByGameID(userID, gameID int64) ([]data.UserCollection, error)
+	GetUserCollectionByUserID(userID int64) ([]model.UserCollection, error)
+	GetUserCollectionByGameID(userID, gameID int64) ([]model.UserCollection, error)
 	CreateSampleCollectionData(userID int64) error
 }
 
@@ -55,7 +55,7 @@ const (
 )
 
 // GetUserCollectionByUserID retrieves all collection entries for a specific user
-func (s *UserCollectionServiceImpl) GetUserCollectionByUserID(userID int64) ([]data.UserCollection, error) {
+func (s *UserCollectionServiceImpl) GetUserCollectionByUserID(userID int64) ([]model.UserCollection, error) {
 	slog.Debug("query", "query", logging.SanitizeQuery(selectUserCollectionByUserIDQuery), "args", []any{userID})
 	rows, err := s.db.Query(selectUserCollectionByUserIDQuery, userID)
 	if err != nil {
@@ -67,7 +67,7 @@ func (s *UserCollectionServiceImpl) GetUserCollectionByUserID(userID int64) ([]d
 }
 
 // GetUserCollectionByGameID retrieves collection entries for a specific user and card game
-func (s *UserCollectionServiceImpl) GetUserCollectionByGameID(userID, gameID int64) ([]data.UserCollection, error) {
+func (s *UserCollectionServiceImpl) GetUserCollectionByGameID(userID, gameID int64) ([]model.UserCollection, error) {
 	slog.Debug("query", "query", logging.SanitizeQuery(selectUserCollectionByGameIDQuery), "args", []any{userID, gameID})
 	rows, err := s.db.Query(selectUserCollectionByGameIDQuery, userID, gameID)
 	if err != nil {
@@ -79,12 +79,12 @@ func (s *UserCollectionServiceImpl) GetUserCollectionByGameID(userID, gameID int
 }
 
 // scanUserCollections is a helper function to scan user collection rows
-func (s *UserCollectionServiceImpl) scanUserCollections(rows *sql.Rows) ([]data.UserCollection, error) {
-	var collections []data.UserCollection
+func (s *UserCollectionServiceImpl) scanUserCollections(rows *sql.Rows) ([]model.UserCollection, error) {
+	var collections []model.UserCollection
 	for rows.Next() {
-		var collection data.UserCollection
-		var card data.Card
-		var game data.CardGame
+		var collection model.UserCollection
+		var card model.Card
+		var game model.CardGame
 		var acquiredDate, releaseDate, gameCreatedAt sql.NullTime
 
 		err := rows.Scan(
