@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	"gihtub.com/laiambryant/tui-cardman/internal/logging"
+	"github.com/laiambryant/tui-cardman/internal/logging"
 )
 
 // ICardService defines the interface for card-related operations

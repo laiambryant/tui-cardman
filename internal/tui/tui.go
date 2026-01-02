@@ -4,11 +4,11 @@ import (
 	"database/sql"
 	"fmt"
 
-	"gihtub.com/laiambryant/tui-cardman/internal/auth"
-	"gihtub.com/laiambryant/tui-cardman/internal/runtimecfg"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/laiambryant/tui-cardman/internal/auth"
+	"github.com/laiambryant/tui-cardman/internal/runtimecfg"
 )
 
 // Screen represents different views in the application

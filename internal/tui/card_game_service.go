@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	"gihtub.com/laiambryant/tui-cardman/internal/logging"
+	"github.com/laiambryant/tui-cardman/internal/logging"
 )
 
 // ICardGameService defines the interface for card game-related operations

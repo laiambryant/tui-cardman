@@ -8,9 +8,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
 
-	"gihtub.com/laiambryant/tui-cardman/internal/config"
-	dbpkg "gihtub.com/laiambryant/tui-cardman/internal/db"
-	"gihtub.com/laiambryant/tui-cardman/internal/tui"
+	"github.com/laiambryant/tui-cardman/internal/config"
+	dbpkg "github.com/laiambryant/tui-cardman/internal/db"
+	"github.com/laiambryant/tui-cardman/internal/tui"
 )
 
 const LOG_FILE_NAME = "output.log"

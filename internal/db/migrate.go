@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"gihtub.com/laiambryant/tui-cardman/internal/logging"
+	"github.com/laiambryant/tui-cardman/internal/logging"
 )
 
 const (

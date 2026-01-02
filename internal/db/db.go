@@ -6,8 +6,8 @@ import (
 	"log/slog"
 	"time"
 
-	"gihtub.com/laiambryant/tui-cardman/internal/auth"
-	"gihtub.com/laiambryant/tui-cardman/internal/logging"
+	"github.com/laiambryant/tui-cardman/internal/auth"
+	"github.com/laiambryant/tui-cardman/internal/logging"
 	_ "github.com/mattn/go-sqlite3"
 )
 

@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"gihtub.com/laiambryant/tui-cardman/cmd/command"
+	"github.com/laiambryant/tui-cardman/cmd/command"
 )
 
 func main() {

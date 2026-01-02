@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"strings"
 
-	"gihtub.com/laiambryant/tui-cardman/internal/runtimecfg"
 	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/laiambryant/tui-cardman/internal/runtimecfg"
 )
 
 // Tab represents different tabs in the card game view

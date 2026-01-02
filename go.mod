@@ -1,4 +1,4 @@
-module gihtub.com/laiambryant/tui-cardman
+module github.com/laiambryant/tui-cardman
 
 go 1.25.0
 

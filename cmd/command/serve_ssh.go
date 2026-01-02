@@ -18,9 +18,9 @@ import (
 	"github.com/charmbracelet/wish/logging"
 	"github.com/spf13/cobra"
 
-	"gihtub.com/laiambryant/tui-cardman/internal/config"
-	dbpkg "gihtub.com/laiambryant/tui-cardman/internal/db"
-	"gihtub.com/laiambryant/tui-cardman/internal/tui"
+	"github.com/laiambryant/tui-cardman/internal/config"
+	dbpkg "github.com/laiambryant/tui-cardman/internal/db"
+	"github.com/laiambryant/tui-cardman/internal/tui"
 )
 
 var serveSSHCmd = &cobra.Command{

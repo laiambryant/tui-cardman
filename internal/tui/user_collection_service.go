@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	"gihtub.com/laiambryant/tui-cardman/internal/logging"
+	"github.com/laiambryant/tui-cardman/internal/logging"
 )
 
 // IUserCollectionService defines the interface for user collection operations

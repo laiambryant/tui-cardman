@@ -9,8 +9,8 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/spf13/cobra"
 
-	"gihtub.com/laiambryant/tui-cardman/internal/config"
-	dbpkg "gihtub.com/laiambryant/tui-cardman/internal/db"
+	"github.com/laiambryant/tui-cardman/internal/config"
+	dbpkg "github.com/laiambryant/tui-cardman/internal/db"
 )
 
 var (
