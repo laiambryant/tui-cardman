@@ -9,6 +9,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"gihtub.com/laiambryant/tui-cardman/internal/logging"
 )
 
 const (
@@ -109,7 +111,7 @@ func applyMigration(db *sql.DB, m migration) error {
 	}
 
 	// Record migration
-	slog.Debug("tx exec", "query", recordMigration, "args", []any{m.version, time.Now().UTC()})
+	slog.Debug("tx exec", "query", logging.SanitizeQuery(recordMigration), "args", []any{m.version, time.Now().UTC()})
 	if _, err := tx.Exec(recordMigration, m.version, time.Now().UTC()); err != nil {
 		slog.Debug("record migration failed", "version", m.version, "err", err)
 		return err

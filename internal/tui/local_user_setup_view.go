@@ -119,7 +119,7 @@ func (m *Model) handleLocalUserSetup() (tea.Model, tea.Cmd) {
 	err = m.collectionService.CreateSampleCollectionData(user.ID)
 	if err != nil {
 		// Don't fail user creation if sample data fails, just log it
-		m.errorMsg = fmt.Sprintf("Profile created but failed to add sample cards: %v", err)
+		m.errorMsg = fmt.Sprintf("Profile created but failed to add sampleCreateSampleCollectionData cards: %v", err)
 		// Still proceed to main screen after a brief delay
 		m.screen = ScreenMain
 		return m, nil

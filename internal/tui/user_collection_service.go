@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
+
+	"gihtub.com/laiambryant/tui-cardman/internal/logging"
 )
 
 // IUserCollectionService defines the interface for user collection operations
@@ -53,7 +55,7 @@ const (
 
 // GetUserCollectionByUserID retrieves all collection entries for a specific user
 func (s *UserCollectionServiceImpl) GetUserCollectionByUserID(userID int64) ([]UserCollection, error) {
-	slog.Debug("query", "query", selectUserCollectionByUserIDQuery, "args", []any{userID})
+	slog.Debug("query", "query", logging.SanitizeQuery(selectUserCollectionByUserIDQuery), "args", []any{userID})
 	rows, err := s.db.Query(selectUserCollectionByUserIDQuery, userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query user collection: %w", err)
@@ -65,7 +67,7 @@ func (s *UserCollectionServiceImpl) GetUserCollectionByUserID(userID int64) ([]U
 
 // GetUserCollectionByGameID retrieves collection entries for a specific user and card game
 func (s *UserCollectionServiceImpl) GetUserCollectionByGameID(userID, gameID int64) ([]UserCollection, error) {
-	slog.Debug("query", "query", selectUserCollectionByGameIDQuery, "args", []any{userID, gameID})
+	slog.Debug("query", "query", logging.SanitizeQuery(selectUserCollectionByGameIDQuery), "args", []any{userID, gameID})
 	rows, err := s.db.Query(selectUserCollectionByGameIDQuery, userID, gameID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query user collection by game: %w", err)

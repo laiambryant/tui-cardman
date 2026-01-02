@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
+
+	"gihtub.com/laiambryant/tui-cardman/internal/logging"
 )
 
 // ICardService defines the interface for card-related operations
@@ -45,7 +47,7 @@ const (
 
 // GetCardsByGameID retrieves all cards for a specific card game
 func (s *CardServiceImpl) GetCardsByGameID(gameID int64) ([]Card, error) {
-	slog.Debug("query", "query", selectCardsByGameIDQuery, "args", []any{gameID})
+	slog.Debug("query", "query", logging.SanitizeQuery(selectCardsByGameIDQuery), "args", []any{gameID})
 	rows, err := s.db.Query(selectCardsByGameIDQuery, gameID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query cards by game ID: %w", err)
@@ -56,7 +58,7 @@ func (s *CardServiceImpl) GetCardsByGameID(gameID int64) ([]Card, error) {
 
 // GetAllCards retrieves all cards from the database
 func (s *CardServiceImpl) GetAllCards() ([]Card, error) {
-	slog.Debug("query", "query", selectAllCardsQuery)
+	slog.Debug("query", "query", logging.SanitizeQuery(selectAllCardsQuery))
 	rows, err := s.db.Query(selectAllCardsQuery)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query all cards: %w", err)

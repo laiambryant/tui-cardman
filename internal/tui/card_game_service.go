@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
+
+	"gihtub.com/laiambryant/tui-cardman/internal/logging"
 )
 
 // ICardGameService defines the interface for card game-related operations
@@ -31,7 +33,7 @@ const (
 
 // GetAllCardGames retrieves all card games from the database
 func (s *CardGameServiceImpl) GetAllCardGames() ([]CardGame, error) {
-	slog.Debug("query", "query", selectAllCardGamesQuery)
+	slog.Debug("query", "query", logging.SanitizeQuery(selectAllCardGamesQuery))
 	rows, err := s.db.Query(selectAllCardGamesQuery)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query card games: %w", err)

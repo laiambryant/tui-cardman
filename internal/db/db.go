@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"gihtub.com/laiambryant/tui-cardman/internal/auth"
+	"gihtub.com/laiambryant/tui-cardman/internal/logging"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -38,7 +39,7 @@ func OpenDB(dsn string) (*sql.DB, error) {
 func CreateUser(db *sql.DB, req auth.RegisterRequest, passwordHash string) (*auth.User, error) {
 	query := insertUserQuery
 	now := time.Now()
-	slog.Debug("exec query", "query", query, "args", []any{req.Name, req.Surname, req.Email, passwordHash, now, now})
+	slog.Debug("exec query", "query", logging.SanitizeQuery(query), "args", []any{req.Name, req.Surname, req.Email, passwordHash, now, now})
 	result, err := db.Exec(query, req.Name, req.Surname, req.Email, passwordHash, now, now)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create user: %w", err)
@@ -67,7 +68,7 @@ func GetUserByEmail(db *sql.DB, email string) (*auth.User, error) {
 	var user auth.User
 	var lastLogin sql.NullTime
 
-	slog.Debug("query row", "query", query, "args", []any{email})
+	slog.Debug("query row", "query", logging.SanitizeQuery(query), "args", []any{email})
 	err := db.QueryRow(query, email).Scan(
 		&user.ID,
 		&user.Name,
@@ -96,7 +97,7 @@ func GetUserByEmail(db *sql.DB, email string) (*auth.User, error) {
 // UpdateLastLogin updates the last_login timestamp for a user
 func UpdateLastLogin(db *sql.DB, userID int64) error {
 	args := []any{time.Now(), userID}
-	slog.Debug("exec query", "query", updateLastLoginQuery, "args", args)
+	slog.Debug("exec query", "query", logging.SanitizeQuery(updateLastLoginQuery), "args", args)
 	_, err := db.Exec(updateLastLoginQuery, time.Now(), userID)
 	if err != nil {
 		return fmt.Errorf("failed to update last login: %w", err)
