@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/joho/godotenv"
 	"go-simpler.org/env"
@@ -26,7 +27,7 @@ func LoadConfig() {
 }
 
 func GetLogLevel() slog.Level {
-	switch Cfg.LogLevel {
+	switch strings.ToUpper(string(Cfg.LogLevel)) {
 	case "DEBUG":
 		return slog.LevelDebug
 	case "INFO":
