@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 // Tab represents different tabs in the card game view
@@ -27,6 +29,7 @@ type CardGameTabsModel struct {
 	filteredCards      []Card
 	filteredCollection []UserCollection
 	cursor             int
+	cardTable          table.Model
 }
 
 // NewCardGameTabsModel creates a new card game tabs model
@@ -35,11 +38,39 @@ func NewCardGameTabsModel(selectedGame *CardGame) CardGameTabsModel {
 	searchInput.Placeholder = "Search cards..."
 	searchInput.Width = 30
 
+	// Initialize table
+	columns := []table.Column{
+		{Title: "Name", Width: 25},
+		{Title: "Expansion", Width: 15},
+		{Title: "Rarity", Width: 12},
+		{Title: "Card #", Width: 8},
+	}
+
+	cardTable := table.New(
+		table.WithColumns(columns),
+		table.WithHeight(10),
+		table.WithFocused(true),
+	)
+
+	// Style the table
+	s := table.DefaultStyles()
+	s.Header = s.Header.
+		BorderStyle(lipgloss.NormalBorder()).
+		BorderForeground(lipgloss.Color("240")).
+		BorderBottom(true).
+		Bold(false)
+	s.Selected = s.Selected.
+		Foreground(lipgloss.Color("229")).
+		Background(lipgloss.Color("57")).
+		Bold(false)
+	cardTable.SetStyles(s)
+
 	return CardGameTabsModel{
 		selectedGame: selectedGame,
 		currentTab:   TabCollection,
 		searchInput:  searchInput,
 		cursor:       0,
+		cardTable:    cardTable,
 	}
 }
 
@@ -80,24 +111,32 @@ func (m CardGameTabsModel) Update(msg tea.Msg) (CardGameTabsModel, tea.Cmd) {
 			}
 			return m, nil
 		case "up", "k":
-			if m.cursor > 0 {
-				m.cursor--
+			if m.currentTab == TabCardSearch {
+				m.cardTable, _ = m.cardTable.Update(msg)
+				return m, nil
+			} else {
+				if m.cursor > 0 {
+					m.cursor--
+				}
+				return m, nil
 			}
-			return m, nil
 		case "down", "j":
-			maxItems := 0
-			switch m.currentTab {
-			case TabCollection:
-				maxItems = len(m.filteredCollection)
-			case TabCardSearch:
-				maxItems = len(m.filteredCards)
-			case TabUserSearch:
-				maxItems = len(m.filteredCollection)
+			if m.currentTab == TabCardSearch {
+				m.cardTable, _ = m.cardTable.Update(msg)
+				return m, nil
+			} else {
+				maxItems := 0
+				switch m.currentTab {
+				case TabCollection:
+					maxItems = len(m.filteredCollection)
+				case TabUserSearch:
+					maxItems = len(m.filteredCollection)
+				}
+				if m.cursor < maxItems-1 {
+					m.cursor++
+				}
+				return m, nil
 			}
-			if m.cursor < maxItems-1 {
-				m.cursor++
-			}
-			return m, nil
 		}
 	}
 
@@ -110,6 +149,7 @@ func (m CardGameTabsModel) Update(msg tea.Msg) (CardGameTabsModel, tea.Cmd) {
 		switch m.currentTab {
 		case TabCardSearch:
 			m.filteredCards = m.filterCards(m.searchInput.Value())
+			m.updateCardTable()
 		case TabUserSearch:
 			m.filteredCollection = m.filterUserCollection(m.searchInput.Value())
 		}
@@ -317,103 +357,48 @@ func (m CardGameTabsModel) filterUserCollection(query string) []UserCollection {
 	return filtered
 }
 
-// renderCardTable renders the filtered cards in a table format
+// renderCardTable renders the filtered cards in a table format using bubbles table
 func (m CardGameTabsModel) renderCardTable() string {
 	if len(m.filteredCards) == 0 {
 		return ""
 	}
 
-	var b strings.Builder
+	return m.cardTable.View()
+}
 
-	// Table headers
-	nameHeader := "Name"
-	expansionHeader := "Expansion"
-	rarityHeader := "Rarity"
-	cardNumHeader := "Card #"
+// updateCardTable updates the table with current filtered cards
+func (m *CardGameTabsModel) updateCardTable() {
+	var rows []table.Row
 
-	// Calculate column widths
-	nameWidth := len(nameHeader)
-	expansionWidth := len(expansionHeader)
-	rarityWidth := len(rarityHeader)
-	cardNumWidth := len(cardNumHeader)
-
-	// Find max width for each column
 	for _, card := range m.filteredCards {
-		if len(card.Name) > nameWidth {
-			nameWidth = len(card.Name)
-		}
-		if len(card.Expansion) > expansionWidth {
-			expansionWidth = len(card.Expansion)
-		}
-		if len(card.Rarity) > rarityWidth {
-			rarityWidth = len(card.Rarity)
-		}
-		if len(card.CardNumber) > cardNumWidth {
-			cardNumWidth = len(card.CardNumber)
-		}
-	}
-
-	// Limit column widths for better display
-	if nameWidth > 25 {
-		nameWidth = 25
-	}
-	if expansionWidth > 15 {
-		expansionWidth = 15
-	}
-	if rarityWidth > 12 {
-		rarityWidth = 12
-	}
-	if cardNumWidth > 8 {
-		cardNumWidth = 8
-	}
-
-	// Format header
-	headerFormat := fmt.Sprintf("%%-%ds | %%-%ds | %%-%ds | %%-%ds", nameWidth, expansionWidth, rarityWidth, cardNumWidth)
-	header := fmt.Sprintf(headerFormat, nameHeader, expansionHeader, rarityHeader, cardNumHeader)
-
-	b.WriteString(focusedStyle.Render(header) + "\n")
-
-	// Header separator
-	separator := strings.Repeat("-", nameWidth) + "-+-" +
-		strings.Repeat("-", expansionWidth) + "-+-" +
-		strings.Repeat("-", rarityWidth) + "-+-" +
-		strings.Repeat("-", cardNumWidth)
-	b.WriteString(blurredStyle.Render(separator) + "\n")
-
-	// Table rows
-	rowFormat := fmt.Sprintf("%%-%ds | %%-%ds | %%-%ds | %%-%ds", nameWidth, expansionWidth, rarityWidth, cardNumWidth)
-
-	for i, card := range m.filteredCards {
-		// Truncate long text
+		// Truncate long text to fit columns
 		name := card.Name
-		if len(name) > nameWidth {
-			name = name[:nameWidth-3] + "..."
+		if len(name) > 25 {
+			name = name[:22] + "..."
 		}
 
 		expansion := card.Expansion
-		if len(expansion) > expansionWidth {
-			expansion = expansion[:expansionWidth-3] + "..."
+		if len(expansion) > 15 {
+			expansion = expansion[:12] + "..."
 		}
 
 		rarity := card.Rarity
-		if len(rarity) > rarityWidth {
-			rarity = rarity[:rarityWidth-3] + "..."
+		if len(rarity) > 12 {
+			rarity = rarity[:9] + "..."
 		}
 
 		cardNum := card.CardNumber
-		if len(cardNum) > cardNumWidth {
-			cardNum = cardNum[:cardNumWidth-3] + "..."
+		if len(cardNum) > 8 {
+			cardNum = cardNum[:5] + "..."
 		}
 
-		row := fmt.Sprintf(rowFormat, name, expansion, rarity, cardNum)
-
-		// Highlight selected row
-		if i == m.cursor {
-			b.WriteString(focusedStyle.Render(row) + "\n")
-		} else {
-			b.WriteString(noStyle.Render(row) + "\n")
-		}
+		rows = append(rows, table.Row{
+			name,
+			expansion,
+			rarity,
+			cardNum,
+		})
 	}
 
-	return b.String()
+	m.cardTable.SetRows(rows)
 }
