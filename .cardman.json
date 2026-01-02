@@ -1,12 +1,12 @@
 {
   "keybindings": {
     "back": "q",
-    "nav_down": "s",
-    "nav_left": "a",
+    "nav_down": "down",
+    "nav_left": "left",
     "nav_next_tab": "tab",
     "nav_prev_tab": "shift+tab",
-    "nav_right": "d",
-    "nav_up": "w",
+    "nav_right": "right",
+    "nav_up": "up",
     "quit": "ctrl+c",
     "quit_alt": "esc",
     "search_clear": "ctrl+u",
