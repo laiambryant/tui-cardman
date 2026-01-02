@@ -321,12 +321,8 @@ func (m CardGameTabsModel) renderCardSearchTab() string {
 
 func (m CardGameTabsModel) renderUserSearchTab() string {
 	var b strings.Builder
-
 	b.WriteString(focusedStyle.Render("Search Your Collection") + "\n\n")
-
-	// Search input
 	b.WriteString(blurredStyle.Render("Search: ") + m.searchInput.View() + "\n\n")
-
 	if len(m.filteredCollection) == 0 {
 		if m.searchInput.Value() == "" {
 			b.WriteString(blurredStyle.Render("Type to search your collection...") + "\n")
@@ -335,29 +331,37 @@ func (m CardGameTabsModel) renderUserSearchTab() string {
 		}
 	} else {
 		b.WriteString(focusedStyle.Render("Your matching cards:") + "\n")
-
-		for i, collection := range m.filteredCollection {
-			style := blurredStyle
-			if i == m.cursor {
-				style = focusedStyle
-			}
-
-			cardName := "Unknown Card"
+		var rows []table.Row
+		for _, collection := range m.filteredCollection {
+			name := "Unknown Card"
+			expansion := ""
+			rarity := ""
+			cardNum := ""
 			if collection.Card != nil {
-				cardName = collection.Card.Name
+				name = collection.Card.Name
+				expansion = collection.Card.Expansion
+				rarity = collection.Card.Rarity
+				cardNum = collection.Card.CardNumber
+			}
+			nameWithQty := fmt.Sprintf("%s x%d", name, collection.Quantity)
+			if len(nameWithQty) > 25 {
+				nameWithQty = nameWithQty[:22] + "..."
+			}
+			if len(expansion) > 15 {
+				expansion = expansion[:12] + "..."
+			}
+			if len(rarity) > 12 {
+				rarity = rarity[:9] + "..."
+			}
+			if len(cardNum) > 8 {
+				cardNum = cardNum[:5] + "..."
 			}
 
-			line := style.Render(cardName + " x" + fmt.Sprintf("%d", collection.Quantity))
-			if collection.Condition != "" {
-				line += blurredStyle.Render(" (" + collection.Condition + ")")
-			}
-			if collection.Notes != "" {
-				line += blurredStyle.Render(" - " + collection.Notes)
-			}
-			b.WriteString(line + "\n")
+			rows = append(rows, table.Row{nameWithQty, expansion, rarity, cardNum})
 		}
+		m.cardTable.SetRows(rows)
+		b.WriteString(m.cardTable.View())
 	}
-
 	return b.String()
 }
 
@@ -366,10 +370,8 @@ func (m CardGameTabsModel) filterCards(query string) []Card {
 	if query == "" {
 		return m.cards
 	}
-
 	var filtered []Card
 	query = strings.ToLower(query)
-
 	for _, card := range m.cards {
 		if strings.Contains(strings.ToLower(card.Name), query) ||
 			strings.Contains(strings.ToLower(card.Expansion), query) ||
@@ -386,10 +388,8 @@ func (m CardGameTabsModel) filterUserCollection(query string) []UserCollection {
 	if query == "" {
 		return m.userCollections
 	}
-
 	var filtered []UserCollection
 	query = strings.ToLower(query)
-
 	for _, collection := range m.userCollections {
 		if collection.Card != nil {
 			if strings.Contains(strings.ToLower(collection.Card.Name), query) ||
@@ -401,7 +401,6 @@ func (m CardGameTabsModel) filterUserCollection(query string) []UserCollection {
 			}
 		}
 	}
-
 	return filtered
 }
 
@@ -410,36 +409,30 @@ func (m CardGameTabsModel) renderCardTable() string {
 	if len(m.filteredCards) == 0 {
 		return ""
 	}
-
 	return m.cardTable.View()
 }
 
 // updateCardTable updates the table with current filtered cards
 func (m *CardGameTabsModel) updateCardTable() {
 	var rows []table.Row
-
 	for _, card := range m.filteredCards {
 		// Truncate long text to fit columns
 		name := card.Name
 		if len(name) > 25 {
 			name = name[:22] + "..."
 		}
-
 		expansion := card.Expansion
 		if len(expansion) > 15 {
 			expansion = expansion[:12] + "..."
 		}
-
 		rarity := card.Rarity
 		if len(rarity) > 12 {
 			rarity = rarity[:9] + "..."
 		}
-
 		cardNum := card.CardNumber
 		if len(cardNum) > 8 {
 			cardNum = cardNum[:5] + "..."
 		}
-
 		rows = append(rows, table.Row{
 			name,
 			expansion,
@@ -447,6 +440,5 @@ func (m *CardGameTabsModel) updateCardTable() {
 			cardNum,
 		})
 	}
-
 	m.cardTable.SetRows(rows)
 }
