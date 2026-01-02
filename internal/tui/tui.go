@@ -168,10 +168,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				} else {
 					m.focusIndex++
 				}
-				if m.focusIndex > len(m.inputs) {
+				maxIndex := len(m.inputs) + 1
+				if m.focusIndex > maxIndex {
 					m.focusIndex = 0
 				} else if m.focusIndex < 0 {
-					m.focusIndex = len(m.inputs)
+					m.focusIndex = maxIndex
 				}
 				cmds := make([]tea.Cmd, len(m.inputs))
 				for i := 0; i <= len(m.inputs)-1; i++ {
@@ -206,20 +207,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch m.screen {
 			case ScreenLogin:
 				if m.focusIndex == len(m.inputs) {
+					return m.handleLogin()
+				} else if m.focusIndex == len(m.inputs)+1 {
 					m.screen = ScreenRegister
 					m.initRegisterInputs()
 					m.errorMsg = ""
 					return m, nil
 				}
-				return m.handleLogin()
 			case ScreenRegister:
 				if m.focusIndex == len(m.inputs) {
+					return m.handleRegister()
+				} else if m.focusIndex == len(m.inputs)+1 {
 					m.screen = ScreenLogin
 					m.initLoginInputs()
 					m.errorMsg = ""
 					return m, nil
 				}
-				return m.handleRegister()
 			case ScreenLocalUserSetup:
 				if m.focusIndex == len(m.inputs) {
 					return m.handleLocalUserSetup()

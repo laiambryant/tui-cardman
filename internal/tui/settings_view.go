@@ -248,7 +248,6 @@ func (m SettingsModel) renderKeybindingsSection() string {
 
 	cfg := m.configManager.Get()
 
-	// Display keybindings in a nice table
 	b.WriteString(settingsFocusStyle.Render("Action") + strings.Repeat(" ", 25) + settingsFocusStyle.Render("Key") + "\n")
 	b.WriteString(strings.Repeat("─", 50) + "\n")
 
@@ -257,17 +256,11 @@ func (m SettingsModel) renderKeybindingsSection() string {
 	maxVisible := 15
 
 	if len(m.actions) > maxVisible {
-		visibleStart = m.cursor - maxVisible/2
-		if visibleStart < 0 {
-			visibleStart = 0
-		}
+		visibleStart = max(m.cursor-maxVisible/2, 0)
 		visibleEnd = visibleStart + maxVisible
 		if visibleEnd > len(m.actions) {
 			visibleEnd = len(m.actions)
-			visibleStart = visibleEnd - maxVisible
-			if visibleStart < 0 {
-				visibleStart = 0
-			}
+			visibleStart = max(visibleEnd-maxVisible, 0)
 		}
 	}
 

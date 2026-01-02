@@ -93,6 +93,9 @@ func (m Model) loginView() string {
 	b.WriteString(helpStyle.Render(help) + "\n")
 	b.WriteString(helpStyle.Render("Don't have an account? Press Enter on the button below") + "\n")
 	registerBtn := "[ Register ]"
+	if m.focusIndex == len(m.inputs)+1 {
+		registerBtn = focusedStyle.Render("[ Register ]")
+	}
 	b.WriteString(registerBtn + "\n")
 	return b.String()
 }
