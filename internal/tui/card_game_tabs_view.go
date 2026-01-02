@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/laiambryant/tui-cardman/internal/runtimecfg"
+	"github.com/laiambryant/tui-cardman/internal/tui/data"
 )
 
 // Tab represents different tabs in the card game view
@@ -22,20 +23,20 @@ const (
 
 // CardGameTabsModel represents the state for the card game tabs view
 type CardGameTabsModel struct {
-	selectedGame       *CardGame
+	selectedGame       *data.CardGame
 	currentTab         Tab
 	searchInput        textinput.Model
-	cards              []Card
-	userCollections    []UserCollection
-	filteredCards      []Card
-	filteredCollection []UserCollection
+	cards              []data.Card
+	userCollections    []data.UserCollection
+	filteredCards      []data.Card
+	filteredCollection []data.UserCollection
 	cursor             int
 	cardTable          table.Model
 	configManager      *runtimecfg.Manager
 }
 
 // NewCardGameTabsModel creates a new card game tabs model
-func NewCardGameTabsModel(selectedGame *CardGame, cfg *runtimecfg.Manager) CardGameTabsModel {
+func NewCardGameTabsModel(selectedGame *data.CardGame, cfg *runtimecfg.Manager) CardGameTabsModel {
 	searchInput := textinput.New()
 	searchInput.Placeholder = "Search cards..."
 	searchInput.Width = 30

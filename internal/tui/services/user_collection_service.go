@@ -1,4 +1,4 @@
-package tui
+package services
 
 import (
 	"database/sql"
@@ -6,12 +6,13 @@ import (
 	"log/slog"
 
 	"github.com/laiambryant/tui-cardman/internal/logging"
+	"github.com/laiambryant/tui-cardman/internal/tui/data"
 )
 
 // IUserCollectionService defines the interface for user collection operations
 type IUserCollectionService interface {
-	GetUserCollectionByUserID(userID int64) ([]UserCollection, error)
-	GetUserCollectionByGameID(userID, gameID int64) ([]UserCollection, error)
+	GetUserCollectionByUserID(userID int64) ([]data.UserCollection, error)
+	GetUserCollectionByGameID(userID, gameID int64) ([]data.UserCollection, error)
 	CreateSampleCollectionData(userID int64) error
 }
 
@@ -54,7 +55,7 @@ const (
 )
 
 // GetUserCollectionByUserID retrieves all collection entries for a specific user
-func (s *UserCollectionServiceImpl) GetUserCollectionByUserID(userID int64) ([]UserCollection, error) {
+func (s *UserCollectionServiceImpl) GetUserCollectionByUserID(userID int64) ([]data.UserCollection, error) {
 	slog.Debug("query", "query", logging.SanitizeQuery(selectUserCollectionByUserIDQuery), "args", []any{userID})
 	rows, err := s.db.Query(selectUserCollectionByUserIDQuery, userID)
 	if err != nil {
@@ -66,7 +67,7 @@ func (s *UserCollectionServiceImpl) GetUserCollectionByUserID(userID int64) ([]U
 }
 
 // GetUserCollectionByGameID retrieves collection entries for a specific user and card game
-func (s *UserCollectionServiceImpl) GetUserCollectionByGameID(userID, gameID int64) ([]UserCollection, error) {
+func (s *UserCollectionServiceImpl) GetUserCollectionByGameID(userID, gameID int64) ([]data.UserCollection, error) {
 	slog.Debug("query", "query", logging.SanitizeQuery(selectUserCollectionByGameIDQuery), "args", []any{userID, gameID})
 	rows, err := s.db.Query(selectUserCollectionByGameIDQuery, userID, gameID)
 	if err != nil {
@@ -78,12 +79,12 @@ func (s *UserCollectionServiceImpl) GetUserCollectionByGameID(userID, gameID int
 }
 
 // scanUserCollections is a helper function to scan user collection rows
-func (s *UserCollectionServiceImpl) scanUserCollections(rows *sql.Rows) ([]UserCollection, error) {
-	var collections []UserCollection
+func (s *UserCollectionServiceImpl) scanUserCollections(rows *sql.Rows) ([]data.UserCollection, error) {
+	var collections []data.UserCollection
 	for rows.Next() {
-		var collection UserCollection
-		var card Card
-		var game CardGame
+		var collection data.UserCollection
+		var card data.Card
+		var game data.CardGame
 		var acquiredDate, releaseDate, gameCreatedAt sql.NullTime
 
 		err := rows.Scan(

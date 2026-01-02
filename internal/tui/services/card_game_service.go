@@ -1,4 +1,4 @@
-package tui
+package services
 
 import (
 	"database/sql"
@@ -6,11 +6,12 @@ import (
 	"log/slog"
 
 	"github.com/laiambryant/tui-cardman/internal/logging"
+	"github.com/laiambryant/tui-cardman/internal/tui/data"
 )
 
 // ICardGameService defines the interface for card game-related operations
 type ICardGameService interface {
-	GetAllCardGames() ([]CardGame, error)
+	GetAllCardGames() ([]data.CardGame, error)
 }
 
 // CardGameServiceImpl implements the ICardGameService interface
@@ -32,7 +33,7 @@ const (
 )
 
 // GetAllCardGames retrieves all card games from the database
-func (s *CardGameServiceImpl) GetAllCardGames() ([]CardGame, error) {
+func (s *CardGameServiceImpl) GetAllCardGames() ([]data.CardGame, error) {
 	slog.Debug("query", "query", logging.SanitizeQuery(selectAllCardGamesQuery))
 	rows, err := s.db.Query(selectAllCardGamesQuery)
 	if err != nil {
@@ -40,9 +41,9 @@ func (s *CardGameServiceImpl) GetAllCardGames() ([]CardGame, error) {
 	}
 	defer rows.Close()
 
-	var games []CardGame
+	var games []data.CardGame
 	for rows.Next() {
-		var game CardGame
+		var game data.CardGame
 		if err := rows.Scan(&game.ID, &game.Name, &game.CreatedAt); err != nil {
 			return nil, fmt.Errorf("failed to scan card game: %w", err)
 		}

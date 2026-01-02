@@ -9,6 +9,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/laiambryant/tui-cardman/internal/auth"
 	"github.com/laiambryant/tui-cardman/internal/runtimecfg"
+	"github.com/laiambryant/tui-cardman/internal/tui/data"
+	"github.com/laiambryant/tui-cardman/internal/tui/services"
 )
 
 // Screen represents different views in the application
@@ -27,10 +29,10 @@ const (
 type Model struct {
 	screen            Screen
 	authService       *auth.Service
-	userService       IUserService
-	cardGameService   ICardGameService
-	cardService       ICardService
-	collectionService IUserCollectionService
+	userService       services.IUserService
+	cardGameService   services.ICardGameService
+	cardService       services.ICardService
+	collectionService services.IUserCollectionService
 	db                *sql.DB
 	user              *auth.User
 	configManager     *runtimecfg.Manager
@@ -42,7 +44,7 @@ type Model struct {
 	isSSHMode  bool
 
 	// Main view state
-	cardGames []CardGame
+	cardGames []data.CardGame
 	cursor    int
 
 	// Card game tabs state
@@ -70,10 +72,10 @@ func NewModel(db *sql.DB, isSSHMode bool) (*Model, error) {
 	}
 
 	// Initialize services
-	userService := NewUserService(db)
-	cardGameService := NewCardGameService(db)
-	cardService := NewCardService(db)
-	collectionService := NewUserCollectionService(db)
+	userService := services.NewUserService(db)
+	cardGameService := services.NewCardGameService(db)
+	cardService := services.NewCardService(db)
+	collectionService := services.NewUserCollectionService(db)
 	authSvc := auth.NewService(&dbAdapter{userService: userService})
 
 	// Load card games from database
@@ -304,7 +306,7 @@ func (m Model) View() string {
 }
 
 type dbAdapter struct {
-	userService IUserService
+	userService services.IUserService
 }
 
 func (a *dbAdapter) CreateUser(req auth.RegisterRequest, passwordHash string) (*auth.User, error) {
@@ -320,7 +322,7 @@ func (a *dbAdapter) UpdateLastLogin(userID int64) error {
 }
 
 // createCardGameTabsModel creates a card game tabs model with loaded data
-func (m *Model) createCardGameTabsModel(selectedGame *CardGame) (CardGameTabsModel, error) {
+func (m *Model) createCardGameTabsModel(selectedGame *data.CardGame) (CardGameTabsModel, error) {
 	cardGameTabs := NewCardGameTabsModel(selectedGame, m.configManager)
 
 	// Load cards for this game
