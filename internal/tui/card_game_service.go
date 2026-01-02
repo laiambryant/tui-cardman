@@ -3,6 +3,7 @@ package tui
 import (
 	"database/sql"
 	"fmt"
+	"log/slog"
 )
 
 // ICardGameService defines the interface for card game-related operations
@@ -30,6 +31,7 @@ const (
 
 // GetAllCardGames retrieves all card games from the database
 func (s *CardGameServiceImpl) GetAllCardGames() ([]CardGame, error) {
+	slog.Debug("query", "query", selectAllCardGamesQuery)
 	rows, err := s.db.Query(selectAllCardGamesQuery)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query card games: %w", err)

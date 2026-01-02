@@ -3,6 +3,7 @@ package tui
 import (
 	"database/sql"
 	"fmt"
+	"log/slog"
 )
 
 // ICardService defines the interface for card-related operations
@@ -31,7 +32,7 @@ const (
 		WHERE c.card_game_id = ?
 		ORDER BY c.name ASC
 	`
-	
+
 	selectAllCardsQuery = `
 		SELECT c.id, c.card_game_id, c.name, c.expansion, c.rarity, 
 		       c.card_number, c.release_date, c.is_placeholder, c.created_at,
@@ -44,17 +45,18 @@ const (
 
 // GetCardsByGameID retrieves all cards for a specific card game
 func (s *CardServiceImpl) GetCardsByGameID(gameID int64) ([]Card, error) {
+	slog.Debug("query", "query", selectCardsByGameIDQuery, "args", []any{gameID})
 	rows, err := s.db.Query(selectCardsByGameIDQuery, gameID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query cards by game ID: %w", err)
 	}
 	defer rows.Close()
-
 	return s.scanCards(rows)
 }
 
 // GetAllCards retrieves all cards from the database
 func (s *CardServiceImpl) GetAllCards() ([]Card, error) {
+	slog.Debug("query", "query", selectAllCardsQuery)
 	rows, err := s.db.Query(selectAllCardsQuery)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query all cards: %w", err)
@@ -71,7 +73,6 @@ func (s *CardServiceImpl) scanCards(rows *sql.Rows) ([]Card, error) {
 		var card Card
 		var game CardGame
 		var releaseDate, gameCreatedAt sql.NullTime
-		
 		err := rows.Scan(
 			&card.ID, &card.CardGameID, &card.Name, &card.Expansion, &card.Rarity,
 			&card.CardNumber, &releaseDate, &card.IsPlaceholder, &card.CreatedAt,
@@ -80,7 +81,6 @@ func (s *CardServiceImpl) scanCards(rows *sql.Rows) ([]Card, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan card: %w", err)
 		}
-		
 		// Handle nullable dates
 		if releaseDate.Valid {
 			card.ReleaseDate = releaseDate.Time
@@ -88,10 +88,8 @@ func (s *CardServiceImpl) scanCards(rows *sql.Rows) ([]Card, error) {
 		if gameCreatedAt.Valid {
 			game.CreatedAt = gameCreatedAt.Time
 		}
-		
 		// Attach card game data
 		card.CardGame = &game
-		
 		cards = append(cards, card)
 	}
 

@@ -95,16 +95,31 @@ func applyMigration(db *sql.DB, m migration) error {
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() {
+		if err := tx.Rollback(); err != nil && err != sql.ErrTxDone {
+			slog.Debug("tx rollback", "err", err, "version", m.version)
+		}
+	}()
+
+	// Execute migration SQL
+	slog.Debug("tx exec", "version", m.version, "path", m.path)
 	if _, err := tx.Exec(string(content)); err != nil {
+		slog.Debug("tx exec failed", "version", m.version, "err", err)
 		return fmt.Errorf("apply %s: %w", m.path, err)
 	}
+
+	// Record migration
+	slog.Debug("tx exec", "query", recordMigration, "args", []any{m.version, time.Now().UTC()})
 	if _, err := tx.Exec(recordMigration, m.version, time.Now().UTC()); err != nil {
+		slog.Debug("record migration failed", "version", m.version, "err", err)
 		return err
 	}
+
 	if err := tx.Commit(); err != nil {
+		slog.Debug("tx commit failed", "version", m.version, "err", err)
 		return err
 	}
+	slog.Debug("tx commit", "version", m.version)
 	slog.Debug("migration applied successfully", "version", m.version)
 	return nil
 }

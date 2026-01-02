@@ -3,6 +3,7 @@ package tui
 import (
 	"database/sql"
 	"fmt"
+	"log/slog"
 )
 
 // IUserCollectionService defines the interface for user collection operations
@@ -52,6 +53,7 @@ const (
 
 // GetUserCollectionByUserID retrieves all collection entries for a specific user
 func (s *UserCollectionServiceImpl) GetUserCollectionByUserID(userID int64) ([]UserCollection, error) {
+	slog.Debug("query", "query", selectUserCollectionByUserIDQuery, "args", []any{userID})
 	rows, err := s.db.Query(selectUserCollectionByUserIDQuery, userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query user collection: %w", err)
@@ -63,6 +65,7 @@ func (s *UserCollectionServiceImpl) GetUserCollectionByUserID(userID int64) ([]U
 
 // GetUserCollectionByGameID retrieves collection entries for a specific user and card game
 func (s *UserCollectionServiceImpl) GetUserCollectionByGameID(userID, gameID int64) ([]UserCollection, error) {
+	slog.Debug("query", "query", selectUserCollectionByGameIDQuery, "args", []any{userID, gameID})
 	rows, err := s.db.Query(selectUserCollectionByGameIDQuery, userID, gameID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query user collection by game: %w", err)
@@ -135,11 +138,13 @@ func (s *UserCollectionServiceImpl) CreateSampleCollectionData(userID int64) err
 	}
 
 	for _, data := range sampleData {
-		_, err := s.db.Exec(`
+		query := `
 			INSERT OR IGNORE INTO user_collections 
 			(user_id, card_id, quantity, condition, acquired_date, notes)
 			VALUES (?, ?, ?, ?, date('2024-01-15'), ?)
-		`, userID, data.cardID, data.quantity, data.condition, data.notes)
+		`
+		slog.Debug("exec", "query", query, "args", []any{userID, data.cardID, data.quantity, data.condition, data.notes})
+		_, err := s.db.Exec(query, userID, data.cardID, data.quantity, data.condition, data.notes)
 		if err != nil {
 			return fmt.Errorf("failed to create sample collection data: %w", err)
 		}
