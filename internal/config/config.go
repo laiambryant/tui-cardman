@@ -16,6 +16,7 @@ var Cfg struct {
 	DBDSN      string   `env:"DB_DSN" default:"file:cardman.db?_fk=1"`
 	SSHPort    int      `env:"SSH_PORT" default:"2222"`
 	SSHHostKey string   `env:"SSH_HOST_KEY" default:"~/.ssh/cardman_host_key"`
+	APIKey     string   `env:"API_KEY" default:""`
 }
 
 func LoadConfig() {
@@ -23,7 +24,15 @@ func LoadConfig() {
 	if err := env.Load(&Cfg, &env.Options{}); err != nil {
 		panic(err)
 	}
-	fmt.Printf("Current configuration: %+v\n", Cfg)
+	displayCfg := Cfg
+	if displayCfg.APIKey != "" {
+		displayCfg.APIKey = "***********"
+	}
+	fmt.Printf("Current configuration: %+v\n", displayCfg)
+}
+
+func GetAPIKey() string {
+	return Cfg.APIKey
 }
 
 func GetLogLevel() slog.Level {
