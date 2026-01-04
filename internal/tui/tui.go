@@ -55,10 +55,6 @@ var (
 	titleStyle   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("170"))
 )
 
-func initializeServices() {
-
-}
-
 func NewModel(db *sql.DB, isSSHMode bool) (*Model, error) {
 	configPath := runtimecfg.GetConfigPath()
 	configManager, err := runtimecfg.NewManager(configPath)

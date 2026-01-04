@@ -56,14 +56,12 @@ const (
 	selectAllSetAPIIDsQuery = `SELECT api_id FROM sets`
 )
 
-// ImportService handles importing Pokemon TCG data into the database
 type ImportService struct {
 	db     *sql.DB
 	client *Client
 	logger *slog.Logger
 }
 
-// NewImportService creates a new import service
 func NewImportService(db *sql.DB, client *Client, logger *slog.Logger) *ImportService {
 	return &ImportService{
 		db:     db,
@@ -72,7 +70,6 @@ func NewImportService(db *sql.DB, client *Client, logger *slog.Logger) *ImportSe
 	}
 }
 
-// ImportRun represents a tracked import operation
 type ImportRun struct {
 	ID            int64
 	ImportType    string
@@ -85,7 +82,6 @@ type ImportRun struct {
 	Notes         string
 }
 
-// CreateImportRun creates a new import run record
 func (s *ImportService) CreateImportRun(ctx context.Context, importType string) (int64, error) {
 	result, err := s.db.ExecContext(ctx, createImportRunQuery, importType, "running", time.Now())
 	if err != nil {
@@ -94,7 +90,6 @@ func (s *ImportService) CreateImportRun(ctx context.Context, importType string) 
 	return result.LastInsertId()
 }
 
-// UpdateImportRun updates an import run record
 func (s *ImportService) UpdateImportRun(ctx context.Context, runID int64, status string, setsProcessed, cardsImported, errorsCount int, notes string) error {
 	_, err := s.db.ExecContext(ctx, updateImportRunQuery, status, setsProcessed, cardsImported, errorsCount, time.Now(), notes, runID)
 	if err != nil {
@@ -103,7 +98,6 @@ func (s *ImportService) UpdateImportRun(ctx context.Context, runID int64, status
 	return nil
 }
 
-// UpsertSet inserts or updates a set in the database
 func (s *ImportService) UpsertSet(ctx context.Context, set Set) (int64, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -139,36 +133,50 @@ func (s *ImportService) UpsertSet(ctx context.Context, set Set) (int64, error) {
 	return setID, nil
 }
 
-// UpsertCard inserts or updates a card with all related data
 func (s *ImportService) UpsertCard(ctx context.Context, card Card, setID int64) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer tx.Rollback()
+	cardID, err := s.upsertCardCore(ctx, tx, card, setID)
+	if err != nil {
+		return err
+	}
+	if err := s.replaceCardChildren(ctx, tx, cardID, card); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit card transaction: %w", err)
+	}
+	return nil
+}
+
+func (s *ImportService) upsertCardCore(ctx context.Context, tx *sql.Tx, card Card, setID int64) (int64, error) {
 	var cardID int64
-	err = tx.QueryRowContext(ctx, selectCardIDQuery, card.ID).Scan(&cardID)
+	err := tx.QueryRowContext(ctx, selectCardIDQuery, card.ID).Scan(&cardID)
 	if err == sql.ErrNoRows {
-		result, err := tx.ExecContext(ctx, insertCardQuery,
-			card.ID, setID, card.Number, card.Name, card.Rarity,
-			card.Artist, time.Now())
+		result, err := tx.ExecContext(ctx, insertCardQuery, card.ID, setID, card.Number, card.Name, card.Rarity, card.Artist, time.Now())
 		if err != nil {
-			return fmt.Errorf("failed to insert card: %w", err)
+			return 0, fmt.Errorf("failed to insert card: %w", err)
 		}
 		cardID, err = result.LastInsertId()
 		if err != nil {
-			return fmt.Errorf("failed to get card ID: %w", err)
+			return 0, fmt.Errorf("failed to get card ID: %w", err)
 		}
-	} else if err != nil {
-		return fmt.Errorf("failed to query card: %w", err)
-	} else {
-		_, err = tx.ExecContext(ctx, updateCardQuery,
-			setID, card.Number, card.Name, card.Rarity,
-			card.Artist, time.Now(), cardID)
-		if err != nil {
-			return fmt.Errorf("failed to update card: %w", err)
-		}
+		return cardID, nil
 	}
+	if err != nil {
+		return 0, fmt.Errorf("failed to query card: %w", err)
+	}
+
+	if _, err := tx.ExecContext(ctx, updateCardQuery, setID, card.Number, card.Name, card.Rarity, card.Artist, time.Now(), cardID); err != nil {
+		return 0, fmt.Errorf("failed to update card: %w", err)
+	}
+	return cardID, nil
+}
+
+func (s *ImportService) replaceCardChildren(ctx context.Context, tx *sql.Tx, cardID int64, card Card) error {
 	if _, err := tx.ExecContext(ctx, deleteCardImagesQuery, cardID); err != nil {
 		return fmt.Errorf("failed to delete old card images: %w", err)
 	}
@@ -178,38 +186,53 @@ func (s *ImportService) UpsertCard(ctx context.Context, card Card, setID int64) 
 	if _, err := tx.ExecContext(ctx, deletePricesCardMarketQuery, cardID); err != nil {
 		return fmt.Errorf("failed to delete old CardMarket prices: %w", err)
 	}
-	if card.Images.Small != "" || card.Images.Large != "" {
-		_, err = tx.ExecContext(ctx, insertCardImagesQuery, cardID, card.Images.Small, card.Images.Large, time.Now())
-		if err != nil {
-			return fmt.Errorf("failed to insert card images: %w", err)
-		}
+
+	if err := s.insertCardImagesTx(ctx, tx, cardID, card); err != nil {
+		return err
 	}
-	if card.TCGPlayer != nil && card.TCGPlayer.Prices != nil {
-		for priceType, price := range card.TCGPlayer.Prices {
-			_, err = tx.ExecContext(ctx, insertPricesTCGQuery, cardID, priceType, nullFloat64(price.Low), nullFloat64(price.Mid),
-				nullFloat64(price.High), nullFloat64(price.Market), nullFloat64(price.DirectLow),
-				card.TCGPlayer.URL, card.TCGPlayer.UpdatedAt, time.Now())
-			if err != nil {
-				return fmt.Errorf("failed to insert TCGPlayer price: %w", err)
-			}
-		}
+	if err := s.insertTCGPricesTx(ctx, tx, cardID, card); err != nil {
+		return err
 	}
-	if card.CardMarket != nil && card.CardMarket.Prices != nil {
-		for _, price := range card.CardMarket.Prices {
-			_, err = tx.ExecContext(ctx, insertPricesCardMarketQuery, cardID, nullFloat64(price.Avg), nullFloat64(price.Trend),
-				card.CardMarket.URL, time.Now())
-			if err != nil {
-				return fmt.Errorf("failed to insert CardMarket price: %w", err)
-			}
-		}
-	}
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("failed to commit card transaction: %w", err)
+	if err := s.insertCardMarketPricesTx(ctx, tx, cardID, card); err != nil {
+		return err
 	}
 	return nil
 }
 
-// GetExistingSetAPIIDs returns a set of API IDs for all sets in the database
+func (s *ImportService) insertCardImagesTx(ctx context.Context, tx *sql.Tx, cardID int64, card Card) error {
+	if card.Images.Small == "" && card.Images.Large == "" {
+		return nil
+	}
+	if _, err := tx.ExecContext(ctx, insertCardImagesQuery, cardID, card.Images.Small, card.Images.Large, time.Now()); err != nil {
+		return fmt.Errorf("failed to insert card images: %w", err)
+	}
+	return nil
+}
+
+func (s *ImportService) insertTCGPricesTx(ctx context.Context, tx *sql.Tx, cardID int64, card Card) error {
+	if card.TCGPlayer == nil || card.TCGPlayer.Prices == nil {
+		return nil
+	}
+	for priceType, price := range card.TCGPlayer.Prices {
+		if _, err := tx.ExecContext(ctx, insertPricesTCGQuery, cardID, priceType, nullFloat64(price.Low), nullFloat64(price.Mid), nullFloat64(price.High), nullFloat64(price.Market), nullFloat64(price.DirectLow), card.TCGPlayer.URL, card.TCGPlayer.UpdatedAt, time.Now()); err != nil {
+			return fmt.Errorf("failed to insert TCGPlayer price: %w", err)
+		}
+	}
+	return nil
+}
+
+func (s *ImportService) insertCardMarketPricesTx(ctx context.Context, tx *sql.Tx, cardID int64, card Card) error {
+	if card.CardMarket == nil || card.CardMarket.Prices == nil {
+		return nil
+	}
+	for _, price := range card.CardMarket.Prices {
+		if _, err := tx.ExecContext(ctx, insertPricesCardMarketQuery, cardID, nullFloat64(price.Avg), nullFloat64(price.Trend), card.CardMarket.URL, time.Now()); err != nil {
+			return fmt.Errorf("failed to insert CardMarket price: %w", err)
+		}
+	}
+	return nil
+}
+
 func (s *ImportService) GetExistingSetAPIIDs(ctx context.Context) (map[string]bool, error) {
 	rows, err := s.db.QueryContext(ctx, selectAllSetAPIIDsQuery)
 	if err != nil {
@@ -227,7 +250,6 @@ func (s *ImportService) GetExistingSetAPIIDs(ctx context.Context) (map[string]bo
 	return existingSets, rows.Err()
 }
 
-// ImportSet imports all cards for a given set
 func (s *ImportService) ImportSet(ctx context.Context, set Set) (int, error) {
 	s.logger.Info("Importing set", "set_id", set.ID, "name", set.Name)
 	setID, err := s.UpsertSet(ctx, set)
