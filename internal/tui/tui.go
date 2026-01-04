@@ -36,22 +36,14 @@ type Model struct {
 	db                *sql.DB
 	user              *auth.User
 	configManager     *runtimecfg.Manager
-
-	// Login/Register screen state
-	inputs     []textinput.Model
-	focusIndex int
-	errorMsg   string
-	isSSHMode  bool
-
-	// Main view state
-	cardGames []model.CardGame
-	cursor    int
-
-	// Card game tabs state
-	cardGameTabs CardGameTabsModel
-
-	// Settings state
-	settingsModel *SettingsModel
+	inputs            []textinput.Model
+	focusIndex        int
+	errorMsg          string
+	isSSHMode         bool
+	cardGames         []model.CardGame
+	cursor            int
+	cardGameTabs      CardGameTabsModel
+	settingsModel     *SettingsModel
 }
 
 var (
@@ -63,27 +55,25 @@ var (
 	titleStyle   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("170"))
 )
 
+func initializeServices() {
+
+}
+
 func NewModel(db *sql.DB, isSSHMode bool) (*Model, error) {
-	// Initialize config manager
 	configPath := runtimecfg.GetConfigPath()
 	configManager, err := runtimecfg.NewManager(configPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize config manager: %w", err)
 	}
-
-	// Initialize services
 	userService := services.NewUserService(db)
 	cardGameService := services.NewCardGameService(db)
 	cardService := services.NewCardService(db)
 	collectionService := services.NewUserCollectionService(db)
 	authSvc := auth.NewService(&dbAdapter{userService: userService})
-
-	// Load card games from database
 	cardGames, err := cardGameService.GetAllCardGames()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load card games: %w", err)
 	}
-
 	m := &Model{
 		authService:       authSvc,
 		userService:       userService,
@@ -101,27 +91,21 @@ func NewModel(db *sql.DB, isSSHMode bool) (*Model, error) {
 		m.screen = ScreenLogin
 		m.initLoginInputs()
 	} else {
-		// Local mode - check if users exist
 		hasUsers, err := userService.HasUsers()
 		if err != nil {
 			return nil, fmt.Errorf("failed to check for existing users: %w", err)
 		}
-
 		if !hasUsers {
-			// No users exist, show local user setup
 			m.screen = ScreenLocalUserSetup
 			m.initLocalUserSetupInputs()
 		} else {
-			// Users exist, automatically log in the first user for local mode
 			firstUser, err := userService.GetFirstUser()
 			if err != nil {
 				return nil, fmt.Errorf("failed to get first user for local mode: %w", err)
 			}
 			m.user = firstUser
-			// Update last login for the user
 			err = userService.UpdateLastLogin(firstUser.ID)
 			if err != nil {
-				// Don't fail initialization if we can't update last login
 				fmt.Printf("Warning: failed to update last login: %v\n", err)
 			}
 			m.screen = ScreenMain
@@ -137,21 +121,16 @@ func (m Model) Init() tea.Cmd {
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		// Interpret key via config manager (fall back to raw string checks where useful)
 		s := msg.String()
 		action := ""
 		if m.configManager != nil {
 			action = m.configManager.MatchAction(s)
 		}
-
-		// Open settings if requested
 		if action == "settings" && m.screen != ScreenSettings {
 			m.settingsModel = NewSettingsModel(m.configManager)
 			m.screen = ScreenSettings
 			return m, m.settingsModel.Init()
 		}
-
-		// Quit handling
 		if action == "quit" || action == "quit_alt" || s == "ctrl+c" {
 			if m.screen == ScreenSettings {
 				m.screen = ScreenMain
@@ -159,12 +138,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, tea.Quit
 		}
-
-		// Navigation and focus handling
 		if action == "nav_prev_tab" || action == "nav_next_tab" || action == "nav_up" || action == "nav_down" || s == "tab" || s == "shift+tab" || s == "up" || s == "down" {
 			switch m.screen {
 			case ScreenLogin, ScreenRegister, ScreenLocalUserSetup:
-				// focus navigation
 				if action == "nav_up" || s == "up" || s == "shift+tab" {
 					m.focusIndex--
 				} else {
@@ -190,7 +166,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				return m, tea.Batch(cmds...)
 			case ScreenMain:
-				// list navigation
 				if action == "nav_up" || s == "up" || s == "shift+tab" {
 					if m.cursor > 0 {
 						m.cursor--
@@ -203,8 +178,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 		}
-
-		// Select / Enter
 		if action == "select" || s == "enter" {
 			switch m.screen {
 			case ScreenLogin:
@@ -243,8 +216,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 	}
-
-	// Handle screen-specific updates
 	switch m.screen {
 	case ScreenLogin, ScreenRegister, ScreenLocalUserSetup:
 		cmd := m.updateInputs(msg)
@@ -252,7 +223,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case ScreenSettings:
 		var cmd tea.Cmd
 		*m.settingsModel, cmd = m.settingsModel.Update(msg)
-		// Check if settings wants to close
 		if m.settingsModel.shouldClose {
 			m.screen = ScreenMain
 		}
@@ -260,21 +230,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case ScreenCardGameTabs:
 		var cmd tea.Cmd
 		m.cardGameTabs, cmd = m.cardGameTabs.Update(msg)
-		// Handle back/quit from card game tabs - check configured keys
 		if keyMsg, ok := msg.(tea.KeyMsg); ok {
 			action := ""
 			if m.configManager != nil {
 				action = m.configManager.MatchAction(keyMsg.String())
 			}
 			if action == "back" || action == "quit_alt" || keyMsg.String() == "q" || keyMsg.String() == "esc" {
-				// Return to main screen
 				m.screen = ScreenMain
 				return m, nil
 			}
 		}
 		return m, cmd
 	}
-
 	return m, nil
 }
 
@@ -324,16 +291,12 @@ func (a *dbAdapter) UpdateLastLogin(userID int64) error {
 // createCardGameTabsModel creates a card game tabs model with loaded data
 func (m *Model) createCardGameTabsModel(selectedGame *model.CardGame) (CardGameTabsModel, error) {
 	cardGameTabs := NewCardGameTabsModel(selectedGame, m.configManager)
-
-	// Load cards for this game
 	cards, err := m.cardService.GetCardsByGameID(selectedGame.ID)
 	if err != nil {
 		return cardGameTabs, fmt.Errorf("failed to load cards: %w", err)
 	}
 	cardGameTabs.cards = cards
 	cardGameTabs.filteredCards = cards
-
-	// Load user collection if user is logged in
 	if m.user != nil {
 		collections, err := m.collectionService.GetUserCollectionByGameID(m.user.ID, selectedGame.ID)
 		if err != nil {
@@ -342,6 +305,5 @@ func (m *Model) createCardGameTabsModel(selectedGame *model.CardGame) (CardGameT
 		cardGameTabs.userCollections = collections
 		cardGameTabs.filteredCollection = collections
 	}
-
 	return cardGameTabs, nil
 }

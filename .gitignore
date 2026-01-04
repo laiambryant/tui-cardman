@@ -36,5 +36,5 @@ cardman.db
 
 #logfiles
 output.log
-.github/plan.md
+.github/*
 cardman
