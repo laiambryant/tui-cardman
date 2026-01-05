@@ -1,4 +1,4 @@
-package services
+package cardgame
 
 import (
 	"database/sql"
@@ -6,11 +6,11 @@ import (
 	"log/slog"
 
 	"github.com/laiambryant/tui-cardman/internal/logging"
-	"github.com/laiambryant/tui-cardman/internal/tui/model"
+	"github.com/laiambryant/tui-cardman/internal/model"
 )
 
 // ICardGameService defines the interface for card game-related operations
-type ICardGameService interface {
+type CardGameService interface {
 	GetAllCardGames() ([]model.CardGame, error)
 }
 
@@ -20,7 +20,7 @@ type CardGameServiceImpl struct {
 }
 
 // NewCardGameService creates a new instance of CardGameServiceImpl
-func NewCardGameService(db *sql.DB) ICardGameService {
+func NewCardGameService(db *sql.DB) CardGameService {
 	return &CardGameServiceImpl{db: db}
 }
 

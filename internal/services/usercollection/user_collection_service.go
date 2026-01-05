@@ -1,4 +1,4 @@
-package services
+package usercollection
 
 import (
 	"database/sql"
@@ -6,23 +6,23 @@ import (
 	"log/slog"
 
 	"github.com/laiambryant/tui-cardman/internal/logging"
-	"github.com/laiambryant/tui-cardman/internal/tui/model"
+	"github.com/laiambryant/tui-cardman/internal/model"
 )
 
-// IUserCollectionService defines the interface for user collection operations
-type IUserCollectionService interface {
+// UserCollectionService defines the interface for user collection operations
+type UserCollectionService interface {
 	GetUserCollectionByUserID(userID int64) ([]model.UserCollection, error)
 	GetUserCollectionByGameID(userID, gameID int64) ([]model.UserCollection, error)
 	CreateSampleCollectionData(userID int64) error
 }
 
-// UserCollectionServiceImpl implements the IUserCollectionService interface
+// UserCollectionServiceImpl implements the UserCollectionService interface
 type UserCollectionServiceImpl struct {
 	db *sql.DB
 }
 
 // NewUserCollectionService creates a new instance of UserCollectionServiceImpl
-func NewUserCollectionService(db *sql.DB) IUserCollectionService {
+func NewUserCollectionService(db *sql.DB) UserCollectionService {
 	return &UserCollectionServiceImpl{db: db}
 }
 

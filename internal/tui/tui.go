@@ -8,9 +8,12 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/laiambryant/tui-cardman/internal/auth"
+	"github.com/laiambryant/tui-cardman/internal/model"
 	"github.com/laiambryant/tui-cardman/internal/runtimecfg"
-	"github.com/laiambryant/tui-cardman/internal/tui/model"
-	"github.com/laiambryant/tui-cardman/internal/tui/services"
+	"github.com/laiambryant/tui-cardman/internal/services/cardgame"
+	card "github.com/laiambryant/tui-cardman/internal/services/cards"
+	"github.com/laiambryant/tui-cardman/internal/services/user"
+	"github.com/laiambryant/tui-cardman/internal/services/usercollection"
 )
 
 // Screen represents different views in the application
@@ -29,10 +32,10 @@ const (
 type Model struct {
 	screen            Screen
 	authService       *auth.Service
-	userService       services.IUserService
-	cardGameService   services.ICardGameService
-	cardService       services.ICardService
-	collectionService services.IUserCollectionService
+	userService       user.UserService
+	cardGameService   cardgame.CardGameService
+	cardService       card.CardService
+	collectionService usercollection.UserCollectionService
 	db                *sql.DB
 	user              *auth.User
 	configManager     *runtimecfg.Manager
@@ -61,10 +64,10 @@ func NewModel(db *sql.DB, isSSHMode bool) (*Model, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize config manager: %w", err)
 	}
-	userService := services.NewUserService(db)
-	cardGameService := services.NewCardGameService(db)
-	cardService := services.NewCardService(db)
-	collectionService := services.NewUserCollectionService(db)
+	userService := user.NewUserService(db)
+	cardGameService := cardgame.NewCardGameService(db)
+	cardService := card.NewCardService(db)
+	collectionService := usercollection.NewUserCollectionService(db)
 	authSvc := auth.NewService(&dbAdapter{userService: userService})
 	cardGames, err := cardGameService.GetAllCardGames()
 	if err != nil {
@@ -269,7 +272,7 @@ func (m Model) View() string {
 }
 
 type dbAdapter struct {
-	userService services.IUserService
+	userService user.UserService
 }
 
 func (a *dbAdapter) CreateUser(req auth.RegisterRequest, passwordHash string) (*auth.User, error) {

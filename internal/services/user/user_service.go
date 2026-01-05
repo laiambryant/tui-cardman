@@ -1,4 +1,4 @@
-package services
+package user
 
 import (
 	"database/sql"
@@ -10,8 +10,8 @@ import (
 	"github.com/laiambryant/tui-cardman/internal/logging"
 )
 
-// IUserService defines the interface for user-related operations
-type IUserService interface {
+// UserService defines the interface for user-related operations
+type UserService interface {
 	CreateUser(req auth.RegisterRequest, passwordHash string) (*auth.User, error)
 	GetUserByEmail(email string) (*auth.User, error)
 	UpdateLastLogin(userID int64) error
@@ -19,13 +19,13 @@ type IUserService interface {
 	GetFirstUser() (*auth.User, error)
 }
 
-// UserServiceImpl implements the IUserService interface
+// UserServiceImpl implements the UserService interface
 type UserServiceImpl struct {
 	db *sql.DB
 }
 
 // NewUserService creates a new instance of UserServiceImpl
-func NewUserService(db *sql.DB) IUserService {
+func NewUserService(db *sql.DB) UserService {
 	return &UserServiceImpl{db: db}
 }
 
