@@ -418,7 +418,7 @@ func (s *ImportService) ImportSpecificSets(ctx context.Context, setIDs []string)
 	if len(setsToImport) == 0 {
 		msg := fmt.Sprintf("None of the specified sets were found: %s", strings.Join(setIDs, ", "))
 		_ = s.UpdateImportRun(ctx, runID, "failed", 0, 0, 1, msg)
-		return fmt.Errorf(msg)
+		return fmt.Errorf("%s", msg)
 	}
 
 	s.logger.Info("Starting import of specific sets", "sets_to_import", len(setsToImport), "requested", len(setIDs))
