@@ -82,16 +82,13 @@ func (s *ImportService) UpsertCard(ctx context.Context, card Card, setID int64) 
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer tx.Rollback()
-
 	cardID, err := s.cardService.UpsertCard(ctx, tx, card.ID, setID, card.Number, card.Name, card.Rarity, card.Artist)
 	if err != nil {
 		return err
 	}
-
 	if err := s.replaceCardChildren(ctx, tx, cardID, card); err != nil {
 		return err
 	}
-
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("failed to commit card transaction: %w", err)
 	}
@@ -102,21 +99,18 @@ func (s *ImportService) replaceCardChildren(ctx context.Context, tx *sql.Tx, car
 	if err := s.cardImageService.ReplaceCardImages(ctx, tx, cardID, card.Images.Small, card.Images.Large); err != nil {
 		return err
 	}
-
 	if err := s.tcgPlayerPriceService.DeletePrices(ctx, tx, cardID); err != nil {
 		return err
 	}
 	if err := s.insertTCGPricesTx(ctx, tx, cardID, card); err != nil {
 		return err
 	}
-
 	if err := s.cardMarketPriceService.DeletePrices(ctx, tx, cardID); err != nil {
 		return err
 	}
 	if err := s.insertCardMarketPricesTx(ctx, tx, cardID, card); err != nil {
 		return err
 	}
-
 	return nil
 }
 
@@ -159,6 +153,13 @@ func (s *ImportService) GetExistingSetAPIIDs(ctx context.Context) (map[string]bo
 	return existingSets, nil
 }
 
+type importResult struct {
+	setsProcessed      int
+	totalCardsImported int
+	errorCount         int
+	errorMessages      []string
+}
+
 func (s *ImportService) ImportSet(ctx context.Context, set Set) (int, error) {
 	s.logger.Info("Importing set", "set_id", set.ID, "name", set.Name)
 	setID, err := s.UpsertSet(ctx, set)
@@ -190,6 +191,44 @@ func (s *ImportService) ImportSet(ctx context.Context, set Set) (int, error) {
 	return cardsImported, nil
 }
 
+func (s *ImportService) processSets(ctx context.Context, sets []Set) *importResult {
+	result := &importResult{}
+	for _, set := range sets {
+		cardsImported, err := s.ImportSet(ctx, set)
+		if err != nil {
+			s.logger.Error("Failed to import set", "set_id", set.ID, "error", err)
+			result.errorCount++
+			result.errorMessages = append(result.errorMessages, fmt.Sprintf("Set %s: %v", set.ID, err))
+			continue
+		}
+		result.totalCardsImported += cardsImported
+		result.setsProcessed++
+	}
+	return result
+}
+
+func (s *ImportService) buildImportNotes(setsProcessed, totalCards, errorCount int, extraNotes ...string) (string, string) {
+	status := "completed"
+	notes := fmt.Sprintf("Imported %d sets with %d total cards", setsProcessed, totalCards)
+	for _, extra := range extraNotes {
+		if extra != "" {
+			notes += ". " + extra
+		}
+	}
+	if errorCount > 0 {
+		status = "completed_with_errors"
+	}
+	return status, notes
+}
+
+func (s *ImportService) completeImportRun(ctx context.Context, runID int64, result *importResult, extraNotes ...string) error {
+	status, notes := s.buildImportNotes(result.setsProcessed, result.totalCardsImported, result.errorCount, extraNotes...)
+	if result.errorCount > 0 {
+		notes += fmt.Sprintf(". Errors: %s", strings.Join(result.errorMessages, "; "))
+	}
+	return s.UpdateImportRun(ctx, runID, status, result.setsProcessed, result.totalCardsImported, result.errorCount, notes)
+}
+
 // ImportAllSets imports all sets (full import)
 func (s *ImportService) ImportAllSets(ctx context.Context) error {
 	runID, err := s.CreateImportRun(ctx, "import-full")
@@ -202,31 +241,12 @@ func (s *ImportService) ImportAllSets(ctx context.Context) error {
 		return fmt.Errorf("failed to fetch sets: %w", err)
 	}
 	s.logger.Info("Starting full import", "total_sets", len(sets))
-	totalCardsImported := 0
-	setsProcessed := 0
-	errorCount := 0
-	var errorMessages []string
-	for _, set := range sets {
-		cardsImported, err := s.ImportSet(ctx, set)
-		if err != nil {
-			s.logger.Error("Failed to import set", "set_id", set.ID, "error", err)
-			errorCount++
-			errorMessages = append(errorMessages, fmt.Sprintf("Set %s: %v", set.ID, err))
-			continue
-		}
-		totalCardsImported += cardsImported
-		setsProcessed++
-	}
-	status := "completed"
-	notes := fmt.Sprintf("Imported %d sets with %d total cards", setsProcessed, totalCardsImported)
-	if errorCount > 0 {
-		status = "completed_with_errors"
-		notes += fmt.Sprintf(". Errors: %s", strings.Join(errorMessages, "; "))
-	}
-	if err := s.UpdateImportRun(ctx, runID, status, setsProcessed, totalCardsImported, errorCount, notes); err != nil {
+	result := s.processSets(ctx, sets)
+	if err := s.completeImportRun(ctx, runID, result); err != nil {
 		return fmt.Errorf("failed to update import run: %w", err)
 	}
-	s.logger.Info("Full import completed", "sets_processed", setsProcessed, "cards_imported", totalCardsImported, "errors", errorCount)
+
+	s.logger.Info("Full import completed", "sets_processed", result.setsProcessed, "cards_imported", result.totalCardsImported, "errors", result.errorCount)
 	return nil
 }
 
@@ -236,24 +256,15 @@ func (s *ImportService) ImportNewSets(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to create import run: %w", err)
 	}
-	// Fetch all sets from API
 	sets, err := s.client.GetSets(ctx)
 	if err != nil {
 		_ = s.UpdateImportRun(ctx, runID, "failed", 0, 0, 1, fmt.Sprintf("Failed to fetch sets: %v", err))
 		return fmt.Errorf("failed to fetch sets: %w", err)
 	}
-	// Get existing set API IDs from database
-	existingSets, err := s.GetExistingSetAPIIDs(ctx)
+	newSets, err := s.filterNewSets(ctx, sets)
 	if err != nil {
 		_ = s.UpdateImportRun(ctx, runID, "failed", 0, 0, 1, fmt.Sprintf("Failed to query existing sets: %v", err))
 		return fmt.Errorf("failed to query existing sets: %w", err)
-	}
-	// Filter to only new sets
-	var newSets []Set
-	for _, set := range sets {
-		if !existingSets[set.ID] {
-			newSets = append(newSets, set)
-		}
 	}
 	if len(newSets) == 0 {
 		s.logger.Info("No new sets to import")
@@ -261,32 +272,26 @@ func (s *ImportService) ImportNewSets(ctx context.Context) error {
 		return nil
 	}
 	s.logger.Info("Starting incremental import", "new_sets", len(newSets), "total_sets", len(sets))
-	totalCardsImported := 0
-	setsProcessed := 0
-	errorCount := 0
-	var errorMessages []string
-	for _, set := range newSets {
-		cardsImported, err := s.ImportSet(ctx, set)
-		if err != nil {
-			s.logger.Error("Failed to import set", "set_id", set.ID, "error", err)
-			errorCount++
-			errorMessages = append(errorMessages, fmt.Sprintf("Set %s: %v", set.ID, err))
-			continue
-		}
-		totalCardsImported += cardsImported
-		setsProcessed++
-	}
-	status := "completed"
-	notes := fmt.Sprintf("Imported %d new sets with %d total cards", setsProcessed, totalCardsImported)
-	if errorCount > 0 {
-		status = "completed_with_errors"
-		notes += fmt.Sprintf(". Errors: %s", strings.Join(errorMessages, "; "))
-	}
-	if err := s.UpdateImportRun(ctx, runID, status, setsProcessed, totalCardsImported, errorCount, notes); err != nil {
+	result := s.processSets(ctx, newSets)
+	if err := s.completeImportRun(ctx, runID, result); err != nil {
 		return fmt.Errorf("failed to update import run: %w", err)
 	}
-	s.logger.Info("Incremental import completed", "sets_processed", setsProcessed, "cards_imported", totalCardsImported, "errors", errorCount)
+	s.logger.Info("Incremental import completed", "sets_processed", result.setsProcessed, "cards_imported", result.totalCardsImported, "errors", result.errorCount)
 	return nil
+}
+
+func (s *ImportService) filterNewSets(ctx context.Context, sets []Set) ([]Set, error) {
+	existingSets, err := s.GetExistingSetAPIIDs(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var newSets []Set
+	for _, set := range sets {
+		if !existingSets[set.ID] {
+			newSets = append(newSets, set)
+		}
+	}
+	return newSets, nil
 }
 
 // ImportSpecificSets imports only the specified sets by their IDs
@@ -295,21 +300,38 @@ func (s *ImportService) ImportSpecificSets(ctx context.Context, setIDs []string)
 	if err != nil {
 		return fmt.Errorf("failed to create import run: %w", err)
 	}
-
-	// Fetch all sets from API to find the requested ones
 	allSets, err := s.client.GetSets(ctx)
 	if err != nil {
 		_ = s.UpdateImportRun(ctx, runID, "failed", 0, 0, 1, fmt.Sprintf("Failed to fetch sets: %v", err))
 		return fmt.Errorf("failed to fetch sets: %w", err)
 	}
+	setsToImport, notFound := s.findRequestedSets(allSets, setIDs)
+	if len(notFound) > 0 {
+		s.logger.Warn("Some sets were not found", "not_found", strings.Join(notFound, ", "))
+	}
+	if len(setsToImport) == 0 {
+		msg := fmt.Sprintf("None of the specified sets were found: %s", strings.Join(setIDs, ", "))
+		_ = s.UpdateImportRun(ctx, runID, "failed", 0, 0, 1, msg)
+		return fmt.Errorf("%s", msg)
+	}
+	s.logger.Info("Starting import of specific sets", "sets_to_import", len(setsToImport), "requested", len(setIDs))
+	result := s.processSets(ctx, setsToImport)
+	var extraNote string
+	if len(notFound) > 0 {
+		extraNote = fmt.Sprintf("Not found: %s", strings.Join(notFound, ", "))
+	}
+	if err := s.completeImportRun(ctx, runID, result, extraNote); err != nil {
+		return fmt.Errorf("failed to update import run: %w", err)
+	}
+	s.logger.Info("Specific sets import completed", "sets_processed", result.setsProcessed, "cards_imported", result.totalCardsImported, "errors", result.errorCount)
+	return nil
+}
 
-	// Build a map for quick lookup
+func (s *ImportService) findRequestedSets(allSets []Set, setIDs []string) ([]Set, []string) {
 	setMap := make(map[string]Set)
 	for _, set := range allSets {
 		setMap[set.ID] = set
 	}
-
-	// Find the requested sets
 	var setsToImport []Set
 	var notFound []string
 	for _, setID := range setIDs {
@@ -319,50 +341,5 @@ func (s *ImportService) ImportSpecificSets(ctx context.Context, setIDs []string)
 			notFound = append(notFound, setID)
 		}
 	}
-
-	if len(notFound) > 0 {
-		s.logger.Warn("Some sets were not found", "not_found", strings.Join(notFound, ", "))
-	}
-
-	if len(setsToImport) == 0 {
-		msg := fmt.Sprintf("None of the specified sets were found: %s", strings.Join(setIDs, ", "))
-		_ = s.UpdateImportRun(ctx, runID, "failed", 0, 0, 1, msg)
-		return fmt.Errorf("%s", msg)
-	}
-
-	s.logger.Info("Starting import of specific sets", "sets_to_import", len(setsToImport), "requested", len(setIDs))
-
-	totalCardsImported := 0
-	setsProcessed := 0
-	errorCount := 0
-	var errorMessages []string
-
-	for _, set := range setsToImport {
-		cardsImported, err := s.ImportSet(ctx, set)
-		if err != nil {
-			s.logger.Error("Failed to import set", "set_id", set.ID, "error", err)
-			errorCount++
-			errorMessages = append(errorMessages, fmt.Sprintf("Set %s: %v", set.ID, err))
-			continue
-		}
-		totalCardsImported += cardsImported
-		setsProcessed++
-	}
-
-	status := "completed"
-	notes := fmt.Sprintf("Imported %d sets with %d total cards", setsProcessed, totalCardsImported)
-	if len(notFound) > 0 {
-		notes += fmt.Sprintf(". Not found: %s", strings.Join(notFound, ", "))
-	}
-	if errorCount > 0 {
-		status = "completed_with_errors"
-		notes += fmt.Sprintf(". Errors: %s", strings.Join(errorMessages, "; "))
-	}
-
-	if err := s.UpdateImportRun(ctx, runID, status, setsProcessed, totalCardsImported, errorCount, notes); err != nil {
-		return fmt.Errorf("failed to update import run: %w", err)
-	}
-
-	s.logger.Info("Specific sets import completed", "sets_processed", setsProcessed, "cards_imported", totalCardsImported, "errors", errorCount)
-	return nil
+	return setsToImport, notFound
 }
