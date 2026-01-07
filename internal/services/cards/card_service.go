@@ -1,9 +1,11 @@
 package card
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/laiambryant/tui-cardman/internal/logging"
 	"github.com/laiambryant/tui-cardman/internal/model"
@@ -13,6 +15,8 @@ import (
 type CardService interface {
 	GetCardsByGameID(gameID int64) ([]model.Card, error)
 	GetAllCards() ([]model.Card, error)
+	GetCardIDByAPIID(ctx context.Context, apiID string) (int64, error)
+	UpsertCard(ctx context.Context, tx *sql.Tx, apiID string, setID int64, number, name, rarity, artist string) (int64, error)
 }
 
 // CardServiceImpl implements the CardService interface
@@ -44,6 +48,16 @@ const (
 		JOIN card_games cg ON c.card_game_id = cg.id
 		ORDER BY cg.name ASC, c.name ASC
 	`
+
+	selectCardIDQuery = `SELECT id FROM cards WHERE api_id = ?`
+
+	insertCardQuery = `INSERT INTO cards (api_id, set_id, number, name, rarity, artist, updated_at)
+		    VALUES (?, ?, ?, ?, ?, ?, ?)`
+
+	updateCardQuery = `UPDATE cards 
+		 SET set_id = ?, number = ?, name = ?, rarity = ?, 
+			 artist = ?, updated_at = ?
+		 WHERE id = ?`
 )
 
 // GetCardsByGameID retrieves all cards for a specific card game
@@ -101,4 +115,39 @@ func (s *CardServiceImpl) scanCards(rows *sql.Rows) ([]model.Card, error) {
 	}
 
 	return cards, nil
+}
+
+// GetCardIDByAPIID retrieves the database ID for a card by its API ID
+func (s *CardServiceImpl) GetCardIDByAPIID(ctx context.Context, apiID string) (int64, error) {
+	var cardID int64
+	err := s.db.QueryRowContext(ctx, selectCardIDQuery, apiID).Scan(&cardID)
+	if err != nil {
+		return 0, err
+	}
+	return cardID, nil
+}
+
+// UpsertCard inserts or updates a card within a transaction and returns its database ID
+func (s *CardServiceImpl) UpsertCard(ctx context.Context, tx *sql.Tx, apiID string, setID int64, number, name, rarity, artist string) (int64, error) {
+	var cardID int64
+	err := tx.QueryRowContext(ctx, selectCardIDQuery, apiID).Scan(&cardID)
+	if err == sql.ErrNoRows {
+		result, err := tx.ExecContext(ctx, insertCardQuery, apiID, setID, number, name, rarity, artist, time.Now())
+		if err != nil {
+			return 0, fmt.Errorf("failed to insert card: %w", err)
+		}
+		cardID, err = result.LastInsertId()
+		if err != nil {
+			return 0, fmt.Errorf("failed to get card ID: %w", err)
+		}
+		return cardID, nil
+	}
+	if err != nil {
+		return 0, fmt.Errorf("failed to query card: %w", err)
+	}
+
+	if _, err := tx.ExecContext(ctx, updateCardQuery, setID, number, name, rarity, artist, time.Now(), cardID); err != nil {
+		return 0, fmt.Errorf("failed to update card: %w", err)
+	}
+	return cardID, nil
 }
