@@ -8,8 +8,17 @@ CREATE TABLE IF NOT EXISTS cards (
     release_date DATE,
     is_placeholder BOOLEAN DEFAULT false,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    api_id TEXT UNIQUE,
+    set_id INTEGER,
+    number TEXT,
+    artist TEXT,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (card_game_id) REFERENCES card_games(id)
 );
+
+CREATE INDEX IF NOT EXISTS idx_cards_api_id ON cards(api_id);
+CREATE INDEX IF NOT EXISTS idx_cards_set_id ON cards(set_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_cards_set_number ON cards(set_id, number);
 
 -- Insert some placeholder data for testing
 -- Pokemon cards

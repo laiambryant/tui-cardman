@@ -380,6 +380,84 @@ func (s *ImportService) ImportNewSets(ctx context.Context) error {
 	return nil
 }
 
+// ImportSpecificSets imports only the specified sets by their IDs
+func (s *ImportService) ImportSpecificSets(ctx context.Context, setIDs []string) error {
+	runID, err := s.CreateImportRun(ctx, "import-specific")
+	if err != nil {
+		return fmt.Errorf("failed to create import run: %w", err)
+	}
+
+	// Fetch all sets from API to find the requested ones
+	allSets, err := s.client.GetSets(ctx)
+	if err != nil {
+		_ = s.UpdateImportRun(ctx, runID, "failed", 0, 0, 1, fmt.Sprintf("Failed to fetch sets: %v", err))
+		return fmt.Errorf("failed to fetch sets: %w", err)
+	}
+
+	// Build a map for quick lookup
+	setMap := make(map[string]Set)
+	for _, set := range allSets {
+		setMap[set.ID] = set
+	}
+
+	// Find the requested sets
+	var setsToImport []Set
+	var notFound []string
+	for _, setID := range setIDs {
+		if set, exists := setMap[setID]; exists {
+			setsToImport = append(setsToImport, set)
+		} else {
+			notFound = append(notFound, setID)
+		}
+	}
+
+	if len(notFound) > 0 {
+		s.logger.Warn("Some sets were not found", "not_found", strings.Join(notFound, ", "))
+	}
+
+	if len(setsToImport) == 0 {
+		msg := fmt.Sprintf("None of the specified sets were found: %s", strings.Join(setIDs, ", "))
+		_ = s.UpdateImportRun(ctx, runID, "failed", 0, 0, 1, msg)
+		return fmt.Errorf(msg)
+	}
+
+	s.logger.Info("Starting import of specific sets", "sets_to_import", len(setsToImport), "requested", len(setIDs))
+
+	totalCardsImported := 0
+	setsProcessed := 0
+	errorCount := 0
+	var errorMessages []string
+
+	for _, set := range setsToImport {
+		cardsImported, err := s.ImportSet(ctx, set)
+		if err != nil {
+			s.logger.Error("Failed to import set", "set_id", set.ID, "error", err)
+			errorCount++
+			errorMessages = append(errorMessages, fmt.Sprintf("Set %s: %v", set.ID, err))
+			continue
+		}
+		totalCardsImported += cardsImported
+		setsProcessed++
+	}
+
+	status := "completed"
+	notes := fmt.Sprintf("Imported %d sets with %d total cards", setsProcessed, totalCardsImported)
+	if len(notFound) > 0 {
+		notes += fmt.Sprintf(". Not found: %s", strings.Join(notFound, ", "))
+	}
+	if errorCount > 0 {
+		status = "completed_with_errors"
+		notes += fmt.Sprintf(". Errors: %s", strings.Join(errorMessages, "; "))
+	}
+
+	if err := s.UpdateImportRun(ctx, runID, status, setsProcessed, totalCardsImported, errorCount, notes); err != nil {
+		return fmt.Errorf("failed to update import run: %w", err)
+	}
+
+	s.logger.Info("Specific sets import completed", "sets_processed", setsProcessed, "cards_imported", totalCardsImported, "errors", errorCount)
+	return nil
+}
+
 // Helper function to convert float64 to sql.NullFloat64
 func nullFloat64(f float64) sql.NullFloat64 {
 	if f == 0 {

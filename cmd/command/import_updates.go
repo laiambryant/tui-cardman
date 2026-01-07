@@ -31,6 +31,7 @@ var importUpdatesCmd = &cobra.Command{
 	Short: shortMessageImportUpdates,
 	Long:  longMessageImportUpdates,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		config.LoadConfig()
 		ctx := context.Background()
 		database, err := db.OpenDB(config.Cfg.DBDSN)
 		if err != nil {

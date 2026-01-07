@@ -16,6 +16,7 @@ var importFullCmd = &cobra.Command{
 	Short: shortMessageImportAll,
 	Long:  longMessageImportAll,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		config.LoadConfig()
 		ctx := context.Background()
 		database, err := db.OpenDB(config.Cfg.DBDSN)
 		if err != nil {
