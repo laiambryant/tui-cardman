@@ -8,6 +8,7 @@ This project uses [go-sqlite3](https://github.com/mattn/go-sqlite3), which is a 
 
 1. A C compiler (GCC or similar)
 2. The `CGO_ENABLED=1` environment variable
+
 ```bash
 CGO_ENABLED=1 go build -o cardman ./cmd/main.go
 ```
@@ -21,6 +22,7 @@ cp .env.example .env
 ```
 
 Edit `.env` to configure:
+
 - `LOG_LEVEL` - Logging verbosity (DEBUG, INFO, WARN, ERROR)
 - `DB_DSN` - Database connection string
 - `SSH_PORT` - SSH server port
@@ -29,9 +31,11 @@ Edit `.env` to configure:
 
 ### TCGDex API Key
 
-Get your API key or use the public TCGDex endpoints at https://tcgdex.dev/:
+Get your API key or use the public TCGDex endpoints at <https://tcgdex.dev/>:
+
 - **Without API key**: limited public access depending on TCGDex rate limits
 - **With API key**: pass the token via `API_KEY` in your `.env` and the application will send it as `X-Api-Key`.
+
 ## Importing Pokemon TCG Data (via TCGDex)
 
 ## Database Setup
