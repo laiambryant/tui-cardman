@@ -430,14 +430,6 @@ func (m CardGameTabsModel) filterUserCollection(query string) []model.UserCollec
 	return filtered
 }
 
-// renderCardTable renders the filtered cards in a table format using bubbles table
-func (m CardGameTabsModel) renderCardTable() string {
-	if len(m.filteredCards) == 0 {
-		return ""
-	}
-	return m.cardTable.View()
-}
-
 // updateCardTable updates the table with current filtered cards
 func (m *CardGameTabsModel) updateCardTable() {
 	var rows []table.Row
