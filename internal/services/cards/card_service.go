@@ -16,7 +16,7 @@ type CardService interface {
 	GetCardsByGameID(gameID int64) ([]model.Card, error)
 	GetAllCards() ([]model.Card, error)
 	GetCardIDByAPIID(ctx context.Context, apiID string) (int64, error)
-	UpsertCard(ctx context.Context, tx *sql.Tx, apiID string, setID int64, number, name, rarity, artist string) (int64, error)
+	UpsertCard(ctx context.Context, tx *sql.Tx, apiID string, setID int64, number, name, rarity, artist string, cardGameID int64) (int64, error)
 }
 
 // CardServiceImpl implements the CardService interface
@@ -51,8 +51,8 @@ const (
 
 	selectCardIDQuery = `SELECT id FROM cards WHERE api_id = ?`
 
-	insertCardQuery = `INSERT INTO cards (api_id, set_id, number, name, rarity, artist, updated_at)
-		    VALUES (?, ?, ?, ?, ?, ?, ?)`
+	insertCardQuery = `INSERT INTO cards (api_id, set_id, number, name, rarity, artist, card_game_id, updated_at)
+		    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
 
 	updateCardQuery = `UPDATE cards 
 		 SET set_id = ?, number = ?, name = ?, rarity = ?, 
@@ -128,11 +128,11 @@ func (s *CardServiceImpl) GetCardIDByAPIID(ctx context.Context, apiID string) (i
 }
 
 // UpsertCard inserts or updates a card within a transaction and returns its database ID
-func (s *CardServiceImpl) UpsertCard(ctx context.Context, tx *sql.Tx, apiID string, setID int64, number, name, rarity, artist string) (int64, error) {
+func (s *CardServiceImpl) UpsertCard(ctx context.Context, tx *sql.Tx, apiID string, setID int64, number, name, rarity, artist string, cardGameID int64) (int64, error) {
 	var cardID int64
 	err := tx.QueryRowContext(ctx, selectCardIDQuery, apiID).Scan(&cardID)
 	if err == sql.ErrNoRows {
-		result, err := tx.ExecContext(ctx, insertCardQuery, apiID, setID, number, name, rarity, artist, time.Now())
+		result, err := tx.ExecContext(ctx, insertCardQuery, apiID, setID, number, name, rarity, artist, cardGameID, time.Now())
 		if err != nil {
 			return 0, fmt.Errorf("failed to insert card: %w", err)
 		}

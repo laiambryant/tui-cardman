@@ -25,6 +25,7 @@ type ImportService struct {
 	cardImageService       cardimages.CardImageService
 	tcgPlayerPriceService  prices.TCGPlayerPriceService
 	cardMarketPriceService prices.CardMarketPriceService
+	pokemonGameID          int64
 }
 
 func NewImportService(
@@ -38,7 +39,7 @@ func NewImportService(
 	tcgPlayerPriceService prices.TCGPlayerPriceService,
 	cardMarketPriceService prices.CardMarketPriceService,
 ) *ImportService {
-	return &ImportService{
+	service := &ImportService{
 		db:                     db,
 		client:                 client,
 		logger:                 logger,
@@ -49,6 +50,24 @@ func NewImportService(
 		tcgPlayerPriceService:  tcgPlayerPriceService,
 		cardMarketPriceService: cardMarketPriceService,
 	}
+	
+	// Fetch Pokemon card game ID
+	if err := service.initPokemonGameID(context.Background()); err != nil {
+		logger.Error("Failed to initialize Pokemon game ID", "error", err)
+	}
+	
+	return service
+}
+
+func (s *ImportService) initPokemonGameID(ctx context.Context) error {
+	var gameID int64
+	err := s.db.QueryRowContext(ctx, "SELECT id FROM card_games WHERE name = ?", "Pokemon").Scan(&gameID)
+	if err != nil {
+		return fmt.Errorf("failed to get Pokemon card game ID: %w", err)
+	}
+	s.pokemonGameID = gameID
+	s.logger.Debug("Initialized Pokemon card game ID", "id", gameID)
+	return nil
 }
 
 type ImportRun struct {
@@ -82,7 +101,7 @@ func (s *ImportService) UpsertCard(ctx context.Context, card Card, setID int64) 
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer tx.Rollback()
-	cardID, err := s.cardService.UpsertCard(ctx, tx, card.ID, setID, card.Number, card.Name, card.Rarity, card.Artist)
+	cardID, err := s.cardService.UpsertCard(ctx, tx, card.ID, setID, card.Number, card.Name, card.Rarity, card.Artist, s.pokemonGameID)
 	if err != nil {
 		return err
 	}
