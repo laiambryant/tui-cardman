@@ -33,7 +33,6 @@ type SettingsModel struct {
 
 // NewSettingsModel creates a new settings model
 func NewSettingsModel(configManager *runtimecfg.Manager) *SettingsModel {
-	// Get all actions and sort them
 	cfg := configManager.Get()
 	actions := make([]string, 0, len(cfg.Keybindings))
 	for action := range cfg.Keybindings {
@@ -61,64 +60,49 @@ func (m SettingsModel) Init() tea.Cmd {
 func (m SettingsModel) Update(msg tea.Msg) (SettingsModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		// If we're editing a keybinding, capture the key
 		if m.editing {
 			s := msg.String()
 			action := ""
 			if m.configManager != nil {
 				action = m.configManager.MatchAction(s)
 			}
-
-			// Allow configured cancel (e.g., Esc) to cancel
 			if action == "quit_alt" || action == "back" {
 				m.editing = false
 				m.editingAction = ""
 				m.errorMsg = ""
 				return m, nil
 			}
-
-			// Try to set the keybinding
 			err := m.configManager.SetKeybinding(m.editingAction, s)
 			if err != nil {
 				m.errorMsg = err.Error()
 				return m, nil
 			}
-
-			// Save the updated config
 			cfg := m.configManager.Get()
 			err = m.configManager.Set(cfg)
 			if err != nil {
 				m.errorMsg = fmt.Sprintf("Failed to save: %v", err)
 				return m, nil
 			}
-
 			m.editing = false
 			m.editingAction = ""
 			m.errorMsg = ""
 			return m, nil
 		}
-
-		// Normal navigation (use configured actions when available)
 		s := msg.String()
 		action := ""
 		if m.configManager != nil {
 			action = m.configManager.MatchAction(s)
 		}
-
-		// Close / back (use configured keys)
 		if action == "back" || action == "quit_alt" {
 			m.shouldClose = true
 			return m, nil
 		}
-
-		// Up/down
 		if action == "nav_up" || s == "k" {
 			if m.cursor > 0 {
 				m.cursor--
 			}
 			return m, nil
 		}
-
 		if action == "nav_down" || s == "j" {
 			maxCursor := len(m.actions) - 1
 			if m.cursor < maxCursor {
@@ -126,8 +110,6 @@ func (m SettingsModel) Update(msg tea.Msg) (SettingsModel, tea.Cmd) {
 			}
 			return m, nil
 		}
-
-		// Left/right sections
 		if action == "nav_left" || s == "h" {
 			if m.section > 0 {
 				m.section--
@@ -135,7 +117,6 @@ func (m SettingsModel) Update(msg tea.Msg) (SettingsModel, tea.Cmd) {
 			}
 			return m, nil
 		}
-
 		if action == "nav_right" || s == "l" {
 			if m.section < sectionUI {
 				m.section++
@@ -143,8 +124,6 @@ func (m SettingsModel) Update(msg tea.Msg) (SettingsModel, tea.Cmd) {
 			}
 			return m, nil
 		}
-
-		// Select / enter
 		if action == "select" {
 			if m.section == sectionKeybindings && m.cursor < len(m.actions) {
 				m.editing = true
@@ -160,10 +139,7 @@ func (m SettingsModel) Update(msg tea.Msg) (SettingsModel, tea.Cmd) {
 
 func (m SettingsModel) View() string {
 	var b strings.Builder
-
 	b.WriteString(settingsTitleStyle.Render("⚙️  Settings") + "\n\n")
-
-	// Section tabs
 	tabs := []string{"Keybindings", "UI"}
 	var renderedTabs []string
 	for i, tab := range tabs {
@@ -174,24 +150,17 @@ func (m SettingsModel) View() string {
 		}
 	}
 	b.WriteString(strings.Join(renderedTabs, " ") + "\n\n")
-
-	// Show error if any
 	if m.errorMsg != "" {
 		b.WriteString(settingsErrorStyle.Render("⚠ "+m.errorMsg) + "\n\n")
 	}
-
-	// Section content
 	switch m.section {
 	case sectionKeybindings:
 		b.WriteString(m.renderKeybindingsSection())
 	case sectionUI:
 		b.WriteString(m.renderUISection())
 	}
-
 	b.WriteString("\n")
-
 	if m.editing {
-		// show cancel key dynamically
 		cancelKey := "Esc"
 		if m.configManager != nil {
 			if k := m.configManager.KeyForAction("quit_alt"); k != "" {
@@ -233,7 +202,6 @@ func (m SettingsModel) View() string {
 		help := fmt.Sprintf("%s: Settings • %s/%s: Navigate • %s/%s: Switch sections • %s: Edit • %s: Close", settingsKey, navUp, navDown, navLeft, navRight, editKey, closeKey)
 		b.WriteString(helpStyle.Render(help) + "\n")
 	}
-
 	return b.String()
 }
 
@@ -245,16 +213,12 @@ func (m SettingsModel) renderKeybindingsSection() string {
 		b.WriteString(settingsBlurStyle.Render("Press the key you want to bind...") + "\n")
 		return b.String()
 	}
-
 	cfg := m.configManager.Get()
-
 	b.WriteString(settingsFocusStyle.Render("Action") + strings.Repeat(" ", 25) + settingsFocusStyle.Render("Key") + "\n")
 	b.WriteString(strings.Repeat("─", 50) + "\n")
-
 	visibleStart := 0
 	visibleEnd := len(m.actions)
 	maxVisible := 15
-
 	if len(m.actions) > maxVisible {
 		visibleStart = max(m.cursor-maxVisible/2, 0)
 		visibleEnd = visibleStart + maxVisible
@@ -263,48 +227,39 @@ func (m SettingsModel) renderKeybindingsSection() string {
 			visibleStart = max(visibleEnd-maxVisible, 0)
 		}
 	}
-
 	for i := visibleStart; i < visibleEnd; i++ {
 		action := m.actions[i]
 		key := cfg.Keybindings[action]
-
 		actionDisplay := action
 		if len(actionDisplay) > 25 {
 			actionDisplay = actionDisplay[:22] + "..."
 		} else {
 			actionDisplay = actionDisplay + strings.Repeat(" ", 25-len(actionDisplay))
 		}
-
 		keyDisplay := key
 		if keyDisplay == "" {
 			keyDisplay = "<unbound>"
 		}
-
 		if i == m.cursor {
 			b.WriteString(settingsFocusStyle.Render("> "+actionDisplay) + " " + settingsFocusStyle.Render(keyDisplay) + "\n")
 		} else {
 			b.WriteString(settingsBlurStyle.Render("  "+actionDisplay) + " " + noStyle.Render(keyDisplay) + "\n")
 		}
 	}
-
 	if len(m.actions) > maxVisible {
 		b.WriteString(blurredStyle.Render(fmt.Sprintf("\n  [Showing %d-%d of %d]", visibleStart+1, visibleEnd, len(m.actions))) + "\n")
 	}
-
 	return b.String()
 }
 
 func (m SettingsModel) renderUISection() string {
 	var b strings.Builder
-
 	cfg := m.configManager.Get()
-
 	b.WriteString(settingsFocusStyle.Render("UI Settings") + "\n\n")
 	b.WriteString(fmt.Sprintf("Compact Lists: %v\n", cfg.UI.CompactLists))
 	b.WriteString(fmt.Sprintf("Color Scheme: %s\n", cfg.UI.ColorScheme))
 	b.WriteString("\n")
 	b.WriteString(settingsBlurStyle.Render("(UI settings editing coming soon)") + "\n")
-
 	return b.String()
 }
 
