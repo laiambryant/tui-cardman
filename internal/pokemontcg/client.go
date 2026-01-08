@@ -27,19 +27,14 @@ type Client struct {
 // NewClient creates a new Pokemon TCG API client using tcgdex SDK
 func NewClient(apiKey string) *Client {
 	limiter := rate.NewLimiter(rate.Every(2*time.Second), 1)
-
-	// Create custom HTTP client with rate limiting
 	httpClient := &rateLimitedHTTPClient{
 		client:  &http.Client{Timeout: 30 * time.Second},
 		limiter: limiter,
 		apiKey:  apiKey,
 	}
-
-	// Create tcgdex SDK with custom HTTP client
 	sdk := tcgdex.New(
 		client.WithHTTPClient(httpClient),
 	)
-
 	return &Client{
 		sdk:     sdk,
 		limiter: limiter,
@@ -75,12 +70,10 @@ type PaginatedResponse struct {
 type Set struct {
 	ID           string    `json:"id"`
 	Name         string    `json:"name"`
-	Series       string    `json:"series"`
 	PrintedTotal int       `json:"printedTotal"`
 	Total        int       `json:"total"`
 	Legalities   Legality  `json:"legalities"`
 	PtcgoCode    string    `json:"ptcgoCode"`
-	ReleaseDate  string    `json:"releaseDate"`
 	UpdatedAt    string    `json:"updatedAt"`
 	Images       SetImages `json:"images"`
 }
@@ -195,7 +188,6 @@ func (c *Client) GetSets(ctx context.Context) ([]Set, error) {
 
 // GetCardsForSet fetches all cards for a specific set with pagination
 func (c *Client) GetCardsForSet(ctx context.Context, setID string, page int) (*PaginatedResponse, []Card, error) {
-	// tcgdex uses query builder for filtering
 	q := query.New().
 		Equal("set.id", setID).
 		Paginate(page, MaxPageSize)
@@ -207,11 +199,9 @@ func (c *Client) GetCardsForSet(ctx context.Context, setID string, page int) (*P
 
 	cards := make([]Card, 0, len(tcgdexCards))
 	for _, tcgdexCard := range tcgdexCards {
-		// Fetch full card details
 		fullCard, err := c.sdk.Card.Get(ctx, tcgdexCard.ID)
 		if err != nil {
-			// Skip cards that fail to fetch
-			continue
+			continue // skip
 		}
 		cards = append(cards, mapTCGDexCardToCard(fullCard))
 	}
@@ -221,7 +211,7 @@ func (c *Client) GetCardsForSet(ctx context.Context, setID string, page int) (*P
 		Page:       page,
 		PageSize:   MaxPageSize,
 		Count:      len(cards),
-		TotalCount: len(cards), // tcgdex doesn't provide total count in the same way
+		TotalCount: len(cards),
 	}
 
 	return paginatedResp, cards, nil
@@ -243,11 +233,9 @@ func mapTCGDexSetToSet(tcgdexSet tcgdexModels.SetResume) Set {
 	return Set{
 		ID:           tcgdexSet.ID,
 		Name:         tcgdexSet.Name,
-		Series:       "", // Series info not in resume
 		PrintedTotal: tcgdexSet.CardCount.Official,
 		Total:        tcgdexSet.CardCount.Total,
 		PtcgoCode:    tcgdexSet.ID, // Use ID as code
-		ReleaseDate:  "",           // Not in resume
 		UpdatedAt:    "",
 		Images: SetImages{
 			Symbol: getStringOrEmpty(tcgdexSet.Symbol),

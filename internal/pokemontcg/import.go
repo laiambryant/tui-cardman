@@ -91,8 +91,8 @@ func (s *ImportService) UpdateImportRun(ctx context.Context, runID int64, status
 }
 
 func (s *ImportService) UpsertSet(ctx context.Context, set Set) (int64, error) {
-	return s.setService.UpsertSet(ctx, set.ID, set.PtcgoCode, set.Name, set.Series,
-		set.PrintedTotal, set.Total, set.ReleaseDate, set.Images.Symbol, set.Images.Logo)
+	return s.setService.UpsertSet(ctx, set.ID, set.PtcgoCode, set.Name,
+		set.PrintedTotal, set.Total, set.Images.Symbol, set.Images.Logo)
 }
 
 func (s *ImportService) UpsertCard(ctx context.Context, card Card, setID int64) error {

@@ -10,7 +10,7 @@ import (
 // SetService defines the interface for set-related operations
 type SetService interface {
 	GetSetIDByAPIID(ctx context.Context, apiID string) (int64, error)
-	UpsertSet(ctx context.Context, apiID, code, name, series string, printedTotal, total int, releaseDate, symbolURL, logoURL string) (int64, error)
+	UpsertSet(ctx context.Context, apiID, code, name string, printedTotal, total int, symbolURL, logoURL string) (int64, error)
 	GetAllSetAPIIDs(ctx context.Context) ([]string, error)
 }
 
@@ -27,13 +27,13 @@ func NewSetService(db *sql.DB) SetService {
 const (
 	selectSetIDQuery = `SELECT id FROM sets WHERE api_id = ?`
 
-	insertSetQuery = `INSERT INTO sets (api_id, code, name, series, printed_total, total, 
-					  release_date, symbol_url, logo_url, updated_at)
-	    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+insertSetQuery = `INSERT INTO sets (api_id, code, name, printed_total, total, 
+				  symbol_url, logo_url, updated_at)
+	    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
 
 	updateSetQuery = `UPDATE sets 
-	    SET code = ?, name = ?, series = ?, printed_total = ?, total = ?, 
-		   release_date = ?, symbol_url = ?, logo_url = ?, updated_at = ?
+	    SET code = ?, name = ?, printed_total = ?, total = ?, 
+		   symbol_url = ?, logo_url = ?, updated_at = ?
 	    WHERE id = ?`
 
 	selectAllSetAPIIDsQuery = `SELECT api_id FROM sets`
@@ -50,7 +50,7 @@ func (s *SetServiceImpl) GetSetIDByAPIID(ctx context.Context, apiID string) (int
 }
 
 // UpsertSet inserts or updates a set and returns its database ID
-func (s *SetServiceImpl) UpsertSet(ctx context.Context, apiID, code, name, series string, printedTotal, total int, releaseDate, symbolURL, logoURL string) (int64, error) {
+func (s *SetServiceImpl) UpsertSet(ctx context.Context, apiID, code, name string, printedTotal, total int, symbolURL, logoURL string) (int64, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, fmt.Errorf("failed to begin transaction: %w", err)
@@ -61,8 +61,8 @@ func (s *SetServiceImpl) UpsertSet(ctx context.Context, apiID, code, name, serie
 	err = tx.QueryRowContext(ctx, selectSetIDQuery, apiID).Scan(&setID)
 	if err == sql.ErrNoRows {
 		result, err := tx.ExecContext(ctx, insertSetQuery,
-			apiID, code, name, series, printedTotal, total,
-			releaseDate, symbolURL, logoURL, time.Now())
+			apiID, code, name, printedTotal, total,
+			symbolURL, logoURL, time.Now())
 		if err != nil {
 			return 0, fmt.Errorf("failed to insert set: %w", err)
 		}
@@ -74,8 +74,8 @@ func (s *SetServiceImpl) UpsertSet(ctx context.Context, apiID, code, name, serie
 		return 0, fmt.Errorf("failed to query set: %w", err)
 	} else {
 		_, err = tx.ExecContext(ctx, updateSetQuery,
-			code, name, series, printedTotal, total,
-			releaseDate, symbolURL, logoURL, time.Now(), setID)
+			code, name, printedTotal, total,
+			symbolURL, logoURL, time.Now(), setID)
 		if err != nil {
 			return 0, fmt.Errorf("failed to update set: %w", err)
 		}

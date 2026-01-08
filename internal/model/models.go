@@ -14,12 +14,15 @@ type Card struct {
 	ID            int64     `json:"id"`
 	CardGameID    int64     `json:"card_game_id"`
 	Name          string    `json:"name"`
-	Expansion     string    `json:"expansion"`
 	Rarity        string    `json:"rarity"`
-	CardNumber    string    `json:"card_number"`
 	ReleaseDate   time.Time `json:"release_date"`
 	IsPlaceholder bool      `json:"is_placeholder"`
 	CreatedAt     time.Time `json:"created_at"`
+	APIID         string    `json:"api_id"`
+	SetID         int64     `json:"set_id"`
+	Number        string    `json:"number"`
+	Artist        string    `json:"artist"`
+	UpdatedAt     time.Time `json:"updated_at"`
 
 	// Related data
 	CardGame *CardGame `json:"card_game,omitempty"`

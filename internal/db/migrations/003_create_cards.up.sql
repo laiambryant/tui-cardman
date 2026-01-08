@@ -2,9 +2,7 @@ CREATE TABLE IF NOT EXISTS cards (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     card_game_id INTEGER NOT NULL,
     name TEXT NOT NULL,
-    expansion TEXT,
     rarity TEXT,
-    card_number TEXT,
     release_date DATE,
     is_placeholder BOOLEAN DEFAULT false,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -13,7 +11,8 @@ CREATE TABLE IF NOT EXISTS cards (
     number TEXT,
     artist TEXT,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (card_game_id) REFERENCES card_games(id)
+    FOREIGN KEY (card_game_id) REFERENCES card_games(id),
+    FOREIGN KEY (set_id) REFERENCES sets(id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_cards_api_id ON cards(api_id);

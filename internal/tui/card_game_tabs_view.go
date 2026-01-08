@@ -308,44 +308,12 @@ func (m CardGameTabsModel) renderCardSearchTab() string {
 
 	if showAll {
 		for _, card := range m.cards {
-			name := card.Name
-			if len(name) > 25 {
-				name = name[:22] + "..."
-			}
-			expansion := card.Expansion
-			if len(expansion) > 15 {
-				expansion = expansion[:12] + "..."
-			}
-			rarity := card.Rarity
-			if len(rarity) > 12 {
-				rarity = rarity[:9] + "..."
-			}
-			cardNum := card.CardNumber
-			if len(cardNum) > 8 {
-				cardNum = cardNum[:5] + "..."
-			}
-			rows = append(rows, table.Row{name, expansion, rarity, cardNum})
+			rows = append(rows, cardToRow(card))
 		}
 		any = len(rows) > 0
 	} else {
 		for _, card := range m.filteredCards {
-			name := card.Name
-			if len(name) > 25 {
-				name = name[:22] + "..."
-			}
-			expansion := card.Expansion
-			if len(expansion) > 15 {
-				expansion = expansion[:12] + "..."
-			}
-			rarity := card.Rarity
-			if len(rarity) > 12 {
-				rarity = rarity[:9] + "..."
-			}
-			cardNum := card.CardNumber
-			if len(cardNum) > 8 {
-				cardNum = cardNum[:5] + "..."
-			}
-			rows = append(rows, table.Row{name, expansion, rarity, cardNum})
+			rows = append(rows, cardToRow(card))
 		}
 		any = len(rows) > 0
 	}
@@ -400,7 +368,7 @@ func (m CardGameTabsModel) filterCards(query string) []model.Card {
 	query = strings.ToLower(query)
 	for _, card := range m.cards {
 		if strings.Contains(strings.ToLower(card.Name), query) ||
-			strings.Contains(strings.ToLower(card.Expansion), query) ||
+			strings.Contains(strings.ToLower(card.Number), query) ||
 			strings.Contains(strings.ToLower(card.Rarity), query) {
 			filtered = append(filtered, card)
 		}
@@ -419,7 +387,7 @@ func (m CardGameTabsModel) filterUserCollection(query string) []model.UserCollec
 	for _, collection := range m.userCollections {
 		if collection.Card != nil {
 			if strings.Contains(strings.ToLower(collection.Card.Name), query) ||
-				strings.Contains(strings.ToLower(collection.Card.Expansion), query) ||
+				strings.Contains(strings.ToLower(collection.Card.Number), query) ||
 				strings.Contains(strings.ToLower(collection.Card.Rarity), query) ||
 				strings.Contains(strings.ToLower(collection.Condition), query) ||
 				strings.Contains(strings.ToLower(collection.Notes), query) {
@@ -449,30 +417,37 @@ func truncate(s string, max int) string {
 
 // cardToRow converts a Card into a table.Row with appropriate truncation.
 func cardToRow(card model.Card) table.Row {
+	// For expansion, we'll show the set_id for now (could be enhanced to join with sets table)
+	setDisplay := ""
+	if card.SetID > 0 {
+		setDisplay = fmt.Sprintf("Set#%d", card.SetID)
+	}
 	return table.Row{
 		truncate(card.Name, 25),
-		truncate(card.Expansion, 15),
+		truncate(setDisplay, 15),
 		truncate(card.Rarity, 12),
-		truncate(card.CardNumber, 8),
+		truncate(card.Number, 8),
 	}
 }
 
 // collectionToRow converts a UserCollection into a table.Row with truncation.
 func collectionToRow(c model.UserCollection) table.Row {
 	name := "Unknown Card"
-	expansion := ""
+	setDisplay := ""
 	rarity := ""
 	cardNum := ""
 	if c.Card != nil {
 		name = c.Card.Name
-		expansion = c.Card.Expansion
+		if c.Card.SetID > 0 {
+			setDisplay = fmt.Sprintf("Set#%d", c.Card.SetID)
+		}
 		rarity = c.Card.Rarity
-		cardNum = c.Card.CardNumber
+		cardNum = c.Card.Number
 	}
 	nameWithQty := fmt.Sprintf("%s x%d", name, c.Quantity)
 	return table.Row{
 		truncate(nameWithQty, 25),
-		truncate(expansion, 15),
+		truncate(setDisplay, 15),
 		truncate(rarity, 12),
 		truncate(cardNum, 8),
 	}

@@ -31,7 +31,7 @@ const (
 		SELECT uc.id, uc.user_id, uc.card_id, uc.quantity, uc.condition,
 		       uc.acquired_date, uc.notes, uc.created_at, uc.updated_at,
 		       c.id, c.card_game_id, c.name, c.expansion, c.rarity, 
-		       c.card_number, c.release_date, c.is_placeholder, c.created_at,
+		       c.release_date, c.is_placeholder, c.created_at,
 		       cg.id, cg.name, cg.created_at
 		FROM user_collections uc
 		JOIN cards c ON uc.card_id = c.id
@@ -44,7 +44,7 @@ const (
 		SELECT uc.id, uc.user_id, uc.card_id, uc.quantity, uc.condition,
 		       uc.acquired_date, uc.notes, uc.created_at, uc.updated_at,
 		       c.id, c.card_game_id, c.name, c.expansion, c.rarity, 
-		       c.card_number, c.release_date, c.is_placeholder, c.created_at,
+		       c.release_date, c.is_placeholder, c.created_at,
 		       cg.id, cg.name, cg.created_at
 		FROM user_collections uc
 		JOIN cards c ON uc.card_id = c.id
@@ -90,8 +90,8 @@ func (s *UserCollectionServiceImpl) scanUserCollections(rows *sql.Rows) ([]model
 		err := rows.Scan(
 			&collection.ID, &collection.UserID, &collection.CardID, &collection.Quantity, &collection.Condition,
 			&acquiredDate, &collection.Notes, &collection.CreatedAt, &collection.UpdatedAt,
-			&card.ID, &card.CardGameID, &card.Name, &card.Expansion, &card.Rarity,
-			&card.CardNumber, &releaseDate, &card.IsPlaceholder, &card.CreatedAt,
+			&card.ID, &card.CardGameID, &card.Name, &card.Rarity,
+			&releaseDate, &card.IsPlaceholder, &card.CreatedAt,
 			&game.ID, &game.Name, &gameCreatedAt,
 		)
 		if err != nil {

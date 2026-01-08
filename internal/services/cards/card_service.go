@@ -31,8 +31,9 @@ func NewCardService(db *sql.DB) CardService {
 
 const (
 	selectCardsByGameIDQuery = `
-		SELECT c.id, c.card_game_id, c.name, c.expansion, c.rarity, 
-		       c.card_number, c.release_date, c.is_placeholder, c.created_at,
+		SELECT c.id, c.card_game_id, c.name, c.rarity, 
+		       c.release_date, c.is_placeholder, c.created_at,
+		       c.api_id, c.set_id, c.number, c.artist, c.updated_at,
 		       cg.id, cg.name, cg.created_at
 		FROM cards c
 		JOIN card_games cg ON c.card_game_id = cg.id
@@ -41,8 +42,9 @@ const (
 	`
 
 	selectAllCardsQuery = `
-		SELECT c.id, c.card_game_id, c.name, c.expansion, c.rarity, 
-		       c.card_number, c.release_date, c.is_placeholder, c.created_at,
+		SELECT c.id, c.card_game_id, c.name, c.rarity, 
+		       c.release_date, c.is_placeholder, c.created_at,
+		       c.api_id, c.set_id, c.number, c.artist, c.updated_at,
 		       cg.id, cg.name, cg.created_at
 		FROM cards c
 		JOIN card_games cg ON c.card_game_id = cg.id
@@ -89,10 +91,13 @@ func (s *CardServiceImpl) scanCards(rows *sql.Rows) ([]model.Card, error) {
 	for rows.Next() {
 		var card model.Card
 		var game model.CardGame
-		var releaseDate, gameCreatedAt sql.NullTime
+		var releaseDate, gameCreatedAt, updatedAt sql.NullTime
+		var apiID, number, artist sql.NullString
+		var setID sql.NullInt64
 		err := rows.Scan(
-			&card.ID, &card.CardGameID, &card.Name, &card.Expansion, &card.Rarity,
-			&card.CardNumber, &releaseDate, &card.IsPlaceholder, &card.CreatedAt,
+			&card.ID, &card.CardGameID, &card.Name, &card.Rarity,
+			&releaseDate, &card.IsPlaceholder, &card.CreatedAt,
+			&apiID, &setID, &number, &artist, &updatedAt,
 			&game.ID, &game.Name, &gameCreatedAt,
 		)
 		if err != nil {
@@ -104,6 +109,22 @@ func (s *CardServiceImpl) scanCards(rows *sql.Rows) ([]model.Card, error) {
 		}
 		if gameCreatedAt.Valid {
 			game.CreatedAt = gameCreatedAt.Time
+		}
+		if updatedAt.Valid {
+			card.UpdatedAt = updatedAt.Time
+		}
+		// Handle nullable strings
+		if apiID.Valid {
+			card.APIID = apiID.String
+		}
+		if number.Valid {
+			card.Number = number.String
+		}
+		if artist.Valid {
+			card.Artist = artist.String
+		}
+		if setID.Valid {
+			card.SetID = setID.Int64
 		}
 		// Attach card game data
 		card.CardGame = &game
