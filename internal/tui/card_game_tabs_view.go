@@ -300,23 +300,72 @@ func (m CardGameTabsModel) renderCollectionTab() string {
 
 func (m CardGameTabsModel) renderCardSearchTab() string {
 	var b strings.Builder
-
 	b.WriteString(focusedStyle.Render("Search All Cards") + "\n\n")
-
-	// Search input
 	b.WriteString(blurredStyle.Render("Search: ") + m.searchInput.View() + "\n\n")
+	showAll := m.searchInput.Value() == ""
+	var rows []table.Row
+	var any bool
 
-	if len(m.filteredCards) == 0 {
-		if m.searchInput.Value() == "" {
-			b.WriteString(blurredStyle.Render("Type to search for cards...") + "\n")
-		} else {
-			b.WriteString(blurredStyle.Render("No cards match your search.") + "\n")
+	if showAll {
+		for _, card := range m.cards {
+			name := card.Name
+			if len(name) > 25 {
+				name = name[:22] + "..."
+			}
+			expansion := card.Expansion
+			if len(expansion) > 15 {
+				expansion = expansion[:12] + "..."
+			}
+			rarity := card.Rarity
+			if len(rarity) > 12 {
+				rarity = rarity[:9] + "..."
+			}
+			cardNum := card.CardNumber
+			if len(cardNum) > 8 {
+				cardNum = cardNum[:5] + "..."
+			}
+			rows = append(rows, table.Row{name, expansion, rarity, cardNum})
 		}
+		any = len(rows) > 0
 	} else {
-		b.WriteString(focusedStyle.Render("Found cards:") + "\n")
-		b.WriteString(m.renderCardTable())
+		for _, card := range m.filteredCards {
+			name := card.Name
+			if len(name) > 25 {
+				name = name[:22] + "..."
+			}
+			expansion := card.Expansion
+			if len(expansion) > 15 {
+				expansion = expansion[:12] + "..."
+			}
+			rarity := card.Rarity
+			if len(rarity) > 12 {
+				rarity = rarity[:9] + "..."
+			}
+			cardNum := card.CardNumber
+			if len(cardNum) > 8 {
+				cardNum = cardNum[:5] + "..."
+			}
+			rows = append(rows, table.Row{name, expansion, rarity, cardNum})
+		}
+		any = len(rows) > 0
 	}
 
+	if !any {
+		if showAll {
+			b.WriteString(blurredStyle.Render("No cards available.") + "\n")
+		} else {
+			if m.searchInput.Value() == "" {
+				b.WriteString(blurredStyle.Render("Type to search for cards...") + "\n")
+			} else {
+				b.WriteString(blurredStyle.Render("No cards match your search.") + "\n")
+			}
+		}
+		return b.String()
+	}
+
+	b.WriteString(focusedStyle.Render("Found cards:") + "\n")
+	m.cardTable.SetRows(rows)
+	b.WriteString(m.cardTable.View())
 	return b.String()
 }
 
@@ -334,31 +383,7 @@ func (m CardGameTabsModel) renderUserSearchTab() string {
 		b.WriteString(focusedStyle.Render("Your matching cards:") + "\n")
 		var rows []table.Row
 		for _, collection := range m.filteredCollection {
-			name := "Unknown Card"
-			expansion := ""
-			rarity := ""
-			cardNum := ""
-			if collection.Card != nil {
-				name = collection.Card.Name
-				expansion = collection.Card.Expansion
-				rarity = collection.Card.Rarity
-				cardNum = collection.Card.CardNumber
-			}
-			nameWithQty := fmt.Sprintf("%s x%d", name, collection.Quantity)
-			if len(nameWithQty) > 25 {
-				nameWithQty = nameWithQty[:22] + "..."
-			}
-			if len(expansion) > 15 {
-				expansion = expansion[:12] + "..."
-			}
-			if len(rarity) > 12 {
-				rarity = rarity[:9] + "..."
-			}
-			if len(cardNum) > 8 {
-				cardNum = cardNum[:5] + "..."
-			}
-
-			rows = append(rows, table.Row{nameWithQty, expansion, rarity, cardNum})
+			rows = append(rows, collectionToRow(collection))
 		}
 		m.cardTable.SetRows(rows)
 		b.WriteString(m.cardTable.View())
@@ -417,29 +442,46 @@ func (m CardGameTabsModel) renderCardTable() string {
 func (m *CardGameTabsModel) updateCardTable() {
 	var rows []table.Row
 	for _, card := range m.filteredCards {
-		// Truncate long text to fit columns
-		name := card.Name
-		if len(name) > 25 {
-			name = name[:22] + "..."
-		}
-		expansion := card.Expansion
-		if len(expansion) > 15 {
-			expansion = expansion[:12] + "..."
-		}
-		rarity := card.Rarity
-		if len(rarity) > 12 {
-			rarity = rarity[:9] + "..."
-		}
-		cardNum := card.CardNumber
-		if len(cardNum) > 8 {
-			cardNum = cardNum[:5] + "..."
-		}
-		rows = append(rows, table.Row{
-			name,
-			expansion,
-			rarity,
-			cardNum,
-		})
+		rows = append(rows, cardToRow(card))
 	}
 	m.cardTable.SetRows(rows)
+}
+
+// truncate shortens strings to `max` characters, appending an ellipsis when truncated.
+func truncate(s string, max int) string {
+	if len(s) > max {
+		return s[:max-3] + "..."
+	}
+	return s
+}
+
+// cardToRow converts a Card into a table.Row with appropriate truncation.
+func cardToRow(card model.Card) table.Row {
+	return table.Row{
+		truncate(card.Name, 25),
+		truncate(card.Expansion, 15),
+		truncate(card.Rarity, 12),
+		truncate(card.CardNumber, 8),
+	}
+}
+
+// collectionToRow converts a UserCollection into a table.Row with truncation.
+func collectionToRow(c model.UserCollection) table.Row {
+	name := "Unknown Card"
+	expansion := ""
+	rarity := ""
+	cardNum := ""
+	if c.Card != nil {
+		name = c.Card.Name
+		expansion = c.Card.Expansion
+		rarity = c.Card.Rarity
+		cardNum = c.Card.CardNumber
+	}
+	nameWithQty := fmt.Sprintf("%s x%d", name, c.Quantity)
+	return table.Row{
+		truncate(nameWithQty, 25),
+		truncate(expansion, 15),
+		truncate(rarity, 12),
+		truncate(cardNum, 8),
+	}
 }
