@@ -50,12 +50,12 @@ func NewImportService(
 		tcgPlayerPriceService:  tcgPlayerPriceService,
 		cardMarketPriceService: cardMarketPriceService,
 	}
-	
+
 	// Fetch Pokemon card game ID
 	if err := service.initPokemonGameID(context.Background()); err != nil {
 		logger.Error("Failed to initialize Pokemon game ID", "error", err)
 	}
-	
+
 	return service
 }
 

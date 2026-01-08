@@ -27,7 +27,7 @@ func NewSetService(db *sql.DB) SetService {
 const (
 	selectSetIDQuery = `SELECT id FROM sets WHERE api_id = ?`
 
-insertSetQuery = `INSERT INTO sets (api_id, code, name, printed_total, total, 
+	insertSetQuery = `INSERT INTO sets (api_id, code, name, printed_total, total, 
 				  symbol_url, logo_url, updated_at)
 	    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
 
