@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS user_collections (
+CREATE TABLE user_collections (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
     card_id INTEGER NOT NULL,

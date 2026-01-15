@@ -8,7 +8,6 @@ import (
 	"github.com/laiambryant/tui-cardman/internal/config"
 	"github.com/laiambryant/tui-cardman/internal/db"
 	"github.com/laiambryant/tui-cardman/internal/pokemontcg"
-	"github.com/laiambryant/tui-cardman/internal/services/cardimages"
 	card "github.com/laiambryant/tui-cardman/internal/services/cards"
 	"github.com/laiambryant/tui-cardman/internal/services/importruns"
 	"github.com/laiambryant/tui-cardman/internal/services/prices"
@@ -36,14 +35,13 @@ var importFullCmd = &cobra.Command{
 		importRunService := importruns.NewImportRunService(database)
 		setService := sets.NewSetService(database)
 		cardService := card.NewCardService(database)
-		cardImageService := cardimages.NewCardImageService(database)
 		tcgPlayerPriceService := prices.NewTCGPlayerPriceService(database)
 		cardMarketPriceService := prices.NewCardMarketPriceService(database)
 
 		importService := pokemontcg.NewImportService(
 			database, client, logger,
 			importRunService, setService, cardService,
-			cardImageService, tcgPlayerPriceService, cardMarketPriceService,
+			tcgPlayerPriceService, cardMarketPriceService,
 		)
 
 		logger.Info("Starting full Pokemon TCG import")

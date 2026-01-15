@@ -15,16 +15,13 @@ type Card struct {
 	CardGameID    int64     `json:"card_game_id"`
 	Name          string    `json:"name"`
 	Rarity        string    `json:"rarity"`
-	ReleaseDate   time.Time `json:"release_date"`
 	IsPlaceholder bool      `json:"is_placeholder"`
 	CreatedAt     time.Time `json:"created_at"`
 	APIID         string    `json:"api_id"`
 	SetID         int64     `json:"set_id"`
 	Number        string    `json:"number"`
 	Artist        string    `json:"artist"`
-	UpdatedAt     time.Time `json:"updated_at"`
-
-	// Related data
+	idUpdatedAt     time.Time `json:"updated_at"`
 	CardGame *CardGame `json:"card_game,omitempty"`
 }
 
@@ -39,7 +36,5 @@ type UserCollection struct {
 	Notes        string    `json:"notes"`
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
-
-	// Related data
 	Card *Card `json:"card,omitempty"`
 }

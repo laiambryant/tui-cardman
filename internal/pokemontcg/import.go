@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/laiambryant/tui-cardman/internal/services/cardimages"
 	card "github.com/laiambryant/tui-cardman/internal/services/cards"
 	"github.com/laiambryant/tui-cardman/internal/services/importruns"
 	"github.com/laiambryant/tui-cardman/internal/services/prices"
@@ -22,7 +21,6 @@ type ImportService struct {
 	importRunService       importruns.ImportRunService
 	setService             sets.SetService
 	cardService            card.CardService
-	cardImageService       cardimages.CardImageService
 	tcgPlayerPriceService  prices.TCGPlayerPriceService
 	cardMarketPriceService prices.CardMarketPriceService
 	pokemonGameID          int64
@@ -35,7 +33,6 @@ func NewImportService(
 	importRunService importruns.ImportRunService,
 	setService sets.SetService,
 	cardService card.CardService,
-	cardImageService cardimages.CardImageService,
 	tcgPlayerPriceService prices.TCGPlayerPriceService,
 	cardMarketPriceService prices.CardMarketPriceService,
 ) *ImportService {
@@ -46,7 +43,6 @@ func NewImportService(
 		importRunService:       importRunService,
 		setService:             setService,
 		cardService:            cardService,
-		cardImageService:       cardImageService,
 		tcgPlayerPriceService:  tcgPlayerPriceService,
 		cardMarketPriceService: cardMarketPriceService,
 	}
@@ -115,9 +111,6 @@ func (s *ImportService) UpsertCard(ctx context.Context, card Card, setID int64) 
 }
 
 func (s *ImportService) replaceCardChildren(ctx context.Context, tx *sql.Tx, cardID int64, card Card) error {
-	if err := s.cardImageService.ReplaceCardImages(ctx, tx, cardID, card.Images.Small, card.Images.Large); err != nil {
-		return err
-	}
 	if err := s.tcgPlayerPriceService.DeletePrices(ctx, tx, cardID); err != nil {
 		return err
 	}

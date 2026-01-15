@@ -103,15 +103,8 @@ func (s *CardServiceImpl) scanCards(rows *sql.Rows) ([]model.Card, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan card: %w", err)
 		}
-		// Handle nullable dates
-		if releaseDate.Valid {
-			card.ReleaseDate = releaseDate.Time
-		}
 		if gameCreatedAt.Valid {
 			game.CreatedAt = gameCreatedAt.Time
-		}
-		if updatedAt.Valid {
-			card.UpdatedAt = updatedAt.Time
 		}
 		// Handle nullable strings
 		if apiID.Valid {

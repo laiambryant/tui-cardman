@@ -102,9 +102,6 @@ func (s *UserCollectionServiceImpl) scanUserCollections(rows *sql.Rows) ([]model
 		if acquiredDate.Valid {
 			collection.AcquiredDate = acquiredDate.Time
 		}
-		if releaseDate.Valid {
-			card.ReleaseDate = releaseDate.Time
-		}
 		if gameCreatedAt.Valid {
 			game.CreatedAt = gameCreatedAt.Time
 		}
