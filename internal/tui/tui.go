@@ -60,7 +60,7 @@ var (
 
 func NewModel(db *sql.DB, isSSHMode bool) (*Model, error) {
 	configPath := runtimecfg.GetConfigPath()
-	configManager, err := runtimecfg.NewManager(configPath)
+	configManager, err := runtimecfg.NewManager(true, configPath, nil, 0)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize config manager: %w", err)
 	}
