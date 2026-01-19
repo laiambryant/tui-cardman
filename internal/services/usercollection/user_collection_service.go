@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/laiambryant/tui-cardman/internal/logging"
+	"github.com/laiambryant/tui-cardman/internal/db"
 	"github.com/laiambryant/tui-cardman/internal/model"
 )
 
@@ -56,10 +56,8 @@ const (
 
 // GetUserCollectionByUserID retrieves all collection entries for a specific user
 func (s *UserCollectionServiceImpl) GetUserCollectionByUserID(userID int64) ([]model.UserCollection, error) {
-	slog.Debug("query", "query", logging.SanitizeQuery(selectUserCollectionByUserIDQuery), "args", []any{userID})
-	rows, err := s.db.Query(selectUserCollectionByUserIDQuery, userID)
+	rows, err := db.Query(s.db, selectUserCollectionByUserIDQuery, userID)
 	if err != nil {
-		slog.Error("failed to query user collection", "user_id", userID, "error", err)
 		return nil, fmt.Errorf("failed to query user collection: %w", err)
 	}
 	defer rows.Close()
@@ -75,10 +73,8 @@ func (s *UserCollectionServiceImpl) GetUserCollectionByUserID(userID int64) ([]m
 
 // GetUserCollectionByGameID retrieves collection entries for a specific user and card game
 func (s *UserCollectionServiceImpl) GetUserCollectionByGameID(userID, gameID int64) ([]model.UserCollection, error) {
-	slog.Debug("query", "query", logging.SanitizeQuery(selectUserCollectionByGameIDQuery), "args", []any{userID, gameID})
-	rows, err := s.db.Query(selectUserCollectionByGameIDQuery, userID, gameID)
+	rows, err := db.Query(s.db, selectUserCollectionByGameIDQuery, userID, gameID)
 	if err != nil {
-		slog.Error("failed to query user collection by game", "user_id", userID, "game_id", gameID, "error", err)
 		return nil, fmt.Errorf("failed to query user collection by game: %w", err)
 	}
 	defer rows.Close()

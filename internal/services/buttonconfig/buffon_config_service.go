@@ -8,7 +8,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/laiambryant/tui-cardman/internal/logging"
+	"github.com/laiambryant/tui-cardman/internal/db"
 	"github.com/laiambryant/tui-cardman/internal/model"
 	"github.com/laiambryant/tui-cardman/internal/runtimecfg"
 )
@@ -45,9 +45,8 @@ func NewButtonConfigService(db *sql.DB) ButtonConfigService {
 }
 
 func (b *ButtonConfigServiceImpl) GetByUserID(ctx context.Context, userID int64) (*model.ButtonConfiguration, error) {
-	slog.Debug("executing query", "query", logging.SanitizeQuery(getByUserIDQuery), "args", []any{userID})
 	var config model.ButtonConfiguration
-	err := b.db.QueryRowContext(ctx, getByUserIDQuery, userID).Scan(
+	err := db.QueryRowContext(ctx, b.db, getByUserIDQuery, userID).Scan(
 		&config.ID,
 		&config.UserID,
 		&config.Configuration,
@@ -67,8 +66,7 @@ func (b *ButtonConfigServiceImpl) Save(ctx context.Context, userID int64, config
 		slog.Error("failed to marshal configuration", "user_id", userID, "error", err)
 		return fmt.Errorf("failed to marshal configuration: %w", err)
 	}
-	slog.Debug("executing query", "query", logging.SanitizeQuery(saveConfigQuery), "args", []any{userID, string(configJSON), time.Now()})
-	result, err := b.db.ExecContext(ctx, saveConfigQuery, userID, string(configJSON), time.Now())
+	result, err := db.ExecContext(ctx, b.db, saveConfigQuery, userID, string(configJSON), time.Now())
 	if err != nil {
 		slog.Error("failed to save button configuration", "user_id", userID, "error", err)
 		return fmt.Errorf("failed to save button configuration: %w", err)

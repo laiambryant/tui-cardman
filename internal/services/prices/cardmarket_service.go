@@ -7,7 +7,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/laiambryant/tui-cardman/internal/logging"
+	"github.com/laiambryant/tui-cardman/internal/db"
 )
 
 // CardMarketPriceService defines the interface for CardMarket price-related operations
@@ -35,8 +35,7 @@ const (
 
 // DeletePrices deletes all CardMarket prices for a specific card within a transaction
 func (s *CardMarketPriceServiceImpl) DeletePrices(ctx context.Context, tx *sql.Tx, cardID int64) error {
-	slog.Debug("exec", "query", logging.SanitizeQuery(deletePricesCardMarketQuery), "args", []any{cardID})
-	if _, err := tx.ExecContext(ctx, deletePricesCardMarketQuery, cardID); err != nil {
+	if _, err := db.ExecContextTx(ctx, tx, deletePricesCardMarketQuery, cardID); err != nil {
 		slog.Error("failed to delete CardMarket prices", "card_id", cardID, "error", err)
 		return fmt.Errorf("failed to delete CardMarket prices: %w", err)
 	}
@@ -45,8 +44,7 @@ func (s *CardMarketPriceServiceImpl) DeletePrices(ctx context.Context, tx *sql.T
 
 // InsertPrice inserts a CardMarket price record within a transaction
 func (s *CardMarketPriceServiceImpl) InsertPrice(ctx context.Context, tx *sql.Tx, cardID int64, avgPrice, trendPrice float64, url string) error {
-	slog.Debug("exec", "query", logging.SanitizeQuery(insertPricesCardMarketQuery), "args", []any{cardID, avgPrice, trendPrice, url, time.Now()})
-	if _, err := tx.ExecContext(ctx, insertPricesCardMarketQuery, cardID,
+	if _, err := db.ExecContextTx(ctx, tx, insertPricesCardMarketQuery, cardID,
 		nullFloat64(avgPrice), nullFloat64(trendPrice), url, time.Now()); err != nil {
 		slog.Error("failed to insert CardMarket price", "card_id", cardID, "error", err)
 		return fmt.Errorf("failed to insert CardMarket price: %w", err)

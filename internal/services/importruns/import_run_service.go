@@ -7,7 +7,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/laiambryant/tui-cardman/internal/logging"
+	"github.com/laiambryant/tui-cardman/internal/db"
 )
 
 // ImportRunService defines the interface for import run-related operations
@@ -38,8 +38,7 @@ const (
 
 // CreateImportRun creates a new import run record and returns its ID
 func (s *ImportRunServiceImpl) CreateImportRun(ctx context.Context, importType string) (int64, error) {
-	slog.Debug("exec", "query", logging.SanitizeQuery(createImportRunQuery), "args", []any{importType, "running", time.Now()})
-	result, err := s.db.ExecContext(ctx, createImportRunQuery, importType, "running", time.Now())
+	result, err := db.ExecContext(ctx, s.db, createImportRunQuery, importType, "running", time.Now())
 	if err != nil {
 		slog.Error("failed to create import run", "import_type", importType, "error", err)
 		return 0, fmt.Errorf("failed to create import run: %w", err)
@@ -55,8 +54,7 @@ func (s *ImportRunServiceImpl) CreateImportRun(ctx context.Context, importType s
 
 // UpdateImportRun updates an existing import run record
 func (s *ImportRunServiceImpl) UpdateImportRun(ctx context.Context, runID int64, status string, setsProcessed, cardsImported, errorsCount int, notes string) error {
-	slog.Debug("exec", "query", logging.SanitizeQuery(updateImportRunQuery), "args", []any{status, setsProcessed, cardsImported, errorsCount, time.Now(), notes, runID})
-	_, err := s.db.ExecContext(ctx, updateImportRunQuery, status, setsProcessed, cardsImported, errorsCount, time.Now(), notes, runID)
+	_, err := db.ExecContext(ctx, s.db, updateImportRunQuery, status, setsProcessed, cardsImported, errorsCount, time.Now(), notes, runID)
 	if err != nil {
 		slog.Error("failed to update import run", "run_id", runID, "status", status, "error", err)
 		return fmt.Errorf("failed to update import run: %w", err)

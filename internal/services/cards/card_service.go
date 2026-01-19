@@ -7,7 +7,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/laiambryant/tui-cardman/internal/logging"
+	"github.com/laiambryant/tui-cardman/internal/db"
 	"github.com/laiambryant/tui-cardman/internal/model"
 )
 
@@ -63,10 +63,8 @@ const (
 
 // GetCardsByGameID retrieves all cards for a specific card game
 func (s *CardServiceImpl) GetCardsByGameID(gameID int64) ([]model.Card, error) {
-	slog.Debug("query", "query", logging.SanitizeQuery(selectCardsByGameIDQuery), "args", []any{gameID})
-	rows, err := s.db.Query(selectCardsByGameIDQuery, gameID)
+	rows, err := db.Query(s.db, selectCardsByGameIDQuery, gameID)
 	if err != nil {
-		slog.Error("failed to query cards by game ID", "game_id", gameID, "error", err)
 		return nil, fmt.Errorf("failed to query cards by game ID: %w", err)
 	}
 	defer rows.Close()
@@ -81,10 +79,8 @@ func (s *CardServiceImpl) GetCardsByGameID(gameID int64) ([]model.Card, error) {
 
 // GetAllCards retrieves all cards from the database
 func (s *CardServiceImpl) GetAllCards() ([]model.Card, error) {
-	slog.Debug("query", "query", logging.SanitizeQuery(selectAllCardsQuery))
-	rows, err := s.db.Query(selectAllCardsQuery)
+	rows, err := db.Query(s.db, selectAllCardsQuery)
 	if err != nil {
-		slog.Error("failed to query all cards", "error", err)
 		return nil, fmt.Errorf("failed to query all cards: %w", err)
 	}
 	defer rows.Close()
@@ -147,9 +143,8 @@ func (s *CardServiceImpl) scanCards(rows *sql.Rows) ([]model.Card, error) {
 
 // GetCardIDByAPIID retrieves the database ID for a card by its API ID
 func (s *CardServiceImpl) GetCardIDByAPIID(ctx context.Context, apiID string) (int64, error) {
-	slog.Debug("query row", "query", logging.SanitizeQuery(selectCardIDQuery), "args", []any{apiID})
 	var cardID int64
-	err := s.db.QueryRowContext(ctx, selectCardIDQuery, apiID).Scan(&cardID)
+	err := db.QueryRowContext(ctx, s.db, selectCardIDQuery, apiID).Scan(&cardID)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			slog.Debug("card not found by API ID", "api_id", apiID)
@@ -164,12 +159,10 @@ func (s *CardServiceImpl) GetCardIDByAPIID(ctx context.Context, apiID string) (i
 
 // UpsertCard inserts or updates a card within a transaction and returns its database ID
 func (s *CardServiceImpl) UpsertCard(ctx context.Context, tx *sql.Tx, apiID string, setID int64, number, name, rarity, artist string, cardGameID int64) (int64, error) {
-	slog.Debug("query row", "query", logging.SanitizeQuery(selectCardIDQuery), "args", []any{apiID})
 	var cardID int64
-	err := tx.QueryRowContext(ctx, selectCardIDQuery, apiID).Scan(&cardID)
+	err := db.QueryRowContextTx(ctx, tx, selectCardIDQuery, apiID).Scan(&cardID)
 	if err == sql.ErrNoRows {
-		slog.Debug("exec", "query", logging.SanitizeQuery(insertCardQuery), "args", []any{apiID, setID, number, name, rarity, artist, cardGameID, time.Now()})
-		result, err := tx.ExecContext(ctx, insertCardQuery, apiID, setID, number, name, rarity, artist, cardGameID, time.Now())
+		result, err := db.ExecContextTx(ctx, tx, insertCardQuery, apiID, setID, number, name, rarity, artist, cardGameID, time.Now())
 		if err != nil {
 			slog.Error("failed to insert card", "api_id", apiID, "name", name, "error", err)
 			return 0, fmt.Errorf("failed to insert card: %w", err)
@@ -187,8 +180,7 @@ func (s *CardServiceImpl) UpsertCard(ctx context.Context, tx *sql.Tx, apiID stri
 		return 0, fmt.Errorf("failed to query card: %w", err)
 	}
 
-	slog.Debug("exec", "query", logging.SanitizeQuery(updateCardQuery), "args", []any{setID, number, name, rarity, artist, time.Now(), cardID})
-	if _, err := tx.ExecContext(ctx, updateCardQuery, setID, number, name, rarity, artist, time.Now(), cardID); err != nil {
+	if _, err := db.ExecContextTx(ctx, tx, updateCardQuery, setID, number, name, rarity, artist, time.Now(), cardID); err != nil {
 		slog.Error("failed to update card", "api_id", apiID, "name", name, "card_id", cardID, "error", err)
 		return 0, fmt.Errorf("failed to update card: %w", err)
 	}

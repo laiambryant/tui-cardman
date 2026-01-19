@@ -7,7 +7,6 @@ import (
 	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/laiambryant/tui-cardman/internal/model"
 	"github.com/laiambryant/tui-cardman/internal/runtimecfg"
 )
@@ -49,24 +48,7 @@ func NewCardGameTabsModel(selectedGame *model.CardGame, cfg *runtimecfg.Manager)
 		{Title: "Card #", Width: 8},
 	}
 
-	cardTable := table.New(
-		table.WithColumns(columns),
-		table.WithHeight(10),
-		table.WithFocused(true),
-	)
-
-	// Style the table
-	s := table.DefaultStyles()
-	s.Header = s.Header.
-		BorderStyle(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color("240")).
-		BorderBottom(true).
-		Bold(false)
-	s.Selected = s.Selected.
-		Foreground(lipgloss.Color("229")).
-		Background(lipgloss.Color("57")).
-		Bold(false)
-	cardTable.SetStyles(s)
+	cardTable := NewStyledTable(columns, 10, true)
 
 	return CardGameTabsModel{
 		selectedGame:  selectedGame,
@@ -407,14 +389,6 @@ func (m *CardGameTabsModel) updateCardTable() {
 	m.cardTable.SetRows(rows)
 }
 
-// truncate shortens strings to `max` characters, appending an ellipsis when truncated.
-func truncate(s string, max int) string {
-	if len(s) > max {
-		return s[:max-3] + "..."
-	}
-	return s
-}
-
 // cardToRow converts a Card into a table.Row with appropriate truncation.
 func cardToRow(card model.Card) table.Row {
 	// For expansion, we'll show the set_id for now (could be enhanced to join with sets table)
@@ -423,10 +397,10 @@ func cardToRow(card model.Card) table.Row {
 		setDisplay = fmt.Sprintf("Set#%d", card.SetID)
 	}
 	return table.Row{
-		truncate(card.Name, 25),
-		truncate(setDisplay, 15),
-		truncate(card.Rarity, 12),
-		truncate(card.Number, 8),
+		Truncate(card.Name, 25),
+		Truncate(setDisplay, 15),
+		Truncate(card.Rarity, 12),
+		Truncate(card.Number, 8),
 	}
 }
 
@@ -444,11 +418,11 @@ func collectionToRow(c model.UserCollection) table.Row {
 		rarity = c.Card.Rarity
 		cardNum = c.Card.Number
 	}
-	nameWithQty := fmt.Sprintf("%s x%d", name, c.Quantity)
+	nameWithQty := FormatNameWithQty(name, c.Quantity)
 	return table.Row{
-		truncate(nameWithQty, 25),
-		truncate(setDisplay, 15),
-		truncate(rarity, 12),
-		truncate(cardNum, 8),
+		Truncate(nameWithQty, 25),
+		Truncate(setDisplay, 15),
+		Truncate(rarity, 12),
+		Truncate(cardNum, 8),
 	}
 }

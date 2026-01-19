@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/laiambryant/tui-cardman/internal/logging"
+	"github.com/laiambryant/tui-cardman/internal/db"
 	"github.com/laiambryant/tui-cardman/internal/model"
 )
 
@@ -34,10 +34,8 @@ const (
 
 // GetAllCardGames retrieves all card games from the database
 func (s *CardGameServiceImpl) GetAllCardGames() ([]model.CardGame, error) {
-	slog.Debug("query", "query", logging.SanitizeQuery(selectAllCardGamesQuery))
-	rows, err := s.db.Query(selectAllCardGamesQuery)
+	rows, err := db.Query(s.db, selectAllCardGamesQuery)
 	if err != nil {
-		slog.Error("failed to query card games", "error", err)
 		return nil, fmt.Errorf("failed to query card games: %w", err)
 	}
 	defer rows.Close()

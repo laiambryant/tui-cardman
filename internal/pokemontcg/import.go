@@ -97,15 +97,23 @@ func (s *ImportService) UpsertCard(ctx context.Context, card Card, setID int64) 
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer tx.Rollback()
+	if err := s.upsertCardTx(ctx, tx, card, setID); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit card transaction: %w", err)
+	}
+	return nil
+}
+
+// upsertCardTx upserts a card using the provided transaction
+func (s *ImportService) upsertCardTx(ctx context.Context, tx *sql.Tx, card Card, setID int64) error {
 	cardID, err := s.cardService.UpsertCard(ctx, tx, card.ID, setID, card.Number, card.Name, card.Rarity, card.Artist, s.pokemonGameID)
 	if err != nil {
 		return err
 	}
 	if err := s.replaceCardChildren(ctx, tx, cardID, card); err != nil {
 		return err
-	}
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("failed to commit card transaction: %w", err)
 	}
 	return nil
 }
@@ -178,6 +186,14 @@ func (s *ImportService) ImportSet(ctx context.Context, set Set) (int, error) {
 	if err != nil {
 		return 0, fmt.Errorf("failed to upsert set: %w", err)
 	}
+
+	// Create a single transaction for all cards in this set
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
 	cardsImported := 0
 	page := 1
 	for {
@@ -187,7 +203,7 @@ func (s *ImportService) ImportSet(ctx context.Context, set Set) (int, error) {
 			return cardsImported, fmt.Errorf("failed to fetch cards for set %s page %d: %w", set.ID, page, err)
 		}
 		for _, card := range cards {
-			if err := s.UpsertCard(ctx, card, setID); err != nil {
+			if err := s.upsertCardTx(ctx, tx, card, setID); err != nil {
 				s.logger.Error("Failed to upsert card", "card_id", card.ID, "error", err)
 				continue
 			}
@@ -199,6 +215,13 @@ func (s *ImportService) ImportSet(ctx context.Context, set Set) (int, error) {
 		}
 		page++
 	}
+
+	// Commit the transaction once for all cards in the set
+	if err := tx.Commit(); err != nil {
+		s.logger.Error("Failed to commit set transaction", "set_id", set.ID, "error", err)
+		return cardsImported, fmt.Errorf("failed to commit set transaction: %w", err)
+	}
+
 	s.logger.Info("Completed set import", "set_id", set.ID, "total_cards", cardsImported)
 	return cardsImported, nil
 }

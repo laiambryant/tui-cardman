@@ -7,7 +7,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/laiambryant/tui-cardman/internal/logging"
+	"github.com/laiambryant/tui-cardman/internal/db"
 )
 
 // TCGPlayerPriceService defines the interface for TCGPlayer price-related operations
@@ -36,8 +36,7 @@ const (
 
 // DeletePrices deletes all TCGPlayer prices for a specific card within a transaction
 func (s *TCGPlayerPriceServiceImpl) DeletePrices(ctx context.Context, tx *sql.Tx, cardID int64) error {
-	slog.Debug("exec", "query", logging.SanitizeQuery(deletePricesTCGQuery), "args", []any{cardID})
-	if _, err := tx.ExecContext(ctx, deletePricesTCGQuery, cardID); err != nil {
+	if _, err := db.ExecContextTx(ctx, tx, deletePricesTCGQuery, cardID); err != nil {
 		slog.Error("failed to delete TCGPlayer prices", "card_id", cardID, "error", err)
 		return fmt.Errorf("failed to delete TCGPlayer prices: %w", err)
 	}
@@ -46,8 +45,7 @@ func (s *TCGPlayerPriceServiceImpl) DeletePrices(ctx context.Context, tx *sql.Tx
 
 // InsertPrice inserts a TCGPlayer price record within a transaction
 func (s *TCGPlayerPriceServiceImpl) InsertPrice(ctx context.Context, tx *sql.Tx, cardID int64, priceType string, low, mid, high, market, directLow float64, url, updatedAt string) error {
-	slog.Debug("exec", "query", logging.SanitizeQuery(insertPricesTCGQuery), "args", []any{cardID, priceType, low, mid, high, market, directLow, url, updatedAt, time.Now()})
-	if _, err := tx.ExecContext(ctx, insertPricesTCGQuery, cardID, priceType,
+	if _, err := db.ExecContextTx(ctx, tx, insertPricesTCGQuery, cardID, priceType,
 		nullFloat64(low), nullFloat64(mid), nullFloat64(high),
 		nullFloat64(market), nullFloat64(directLow),
 		url, updatedAt, time.Now()); err != nil {

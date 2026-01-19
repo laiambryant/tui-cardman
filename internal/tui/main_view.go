@@ -52,6 +52,14 @@ func (m Model) mainView() string {
 	}
 
 	b.WriteString("\n")
+	help := NewHelpBuilder(m.configManager).Build(
+		KeyItem{"settings", "F1", "Settings"},
+		KeyItem{"nav_up", "↑", "Navigate"},
+		KeyItem{"nav_down", "↓", "Navigate"},
+		KeyItem{"select", "Enter", "Select"},
+		KeyItem{"quit", "Ctrl+C", "Quit"},
+	)
+	// Adjust to show nav_up/nav_down together
 	settingsKey := "F1"
 	navUp := "↑"
 	navDown := "↓"
@@ -74,7 +82,7 @@ func (m Model) mainView() string {
 			quitKey = k
 		}
 	}
-	help := fmt.Sprintf("%s: Settings • %s/%s: Navigate • %s: Select • %s: Quit", settingsKey, navUp, navDown, selectKey, quitKey)
+	help = fmt.Sprintf("%s: Settings • %s/%s: Navigate • %s: Select • %s: Quit", settingsKey, navUp, navDown, selectKey, quitKey)
 	b.WriteString(helpStyle.Render(help) + "\n")
 
 	return b.String()

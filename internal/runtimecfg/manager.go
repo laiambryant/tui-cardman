@@ -15,6 +15,7 @@ type Manager struct {
 	config      *RuntimeConfig
 	strategy    ButtonStrategy
 	subscribers []Subscriber
+	keyToAction map[string]string // Reverse index for O(1) key→action lookups
 }
 
 // NewManager creates a new config manager
@@ -41,6 +42,7 @@ func NewManager(isLocal bool, configPath string, service ButtonConfigService, us
 		config:      config,
 		strategy:    strategy,
 		subscribers: make([]Subscriber, 0),
+		keyToAction: buildKeyToActionMap(config.Keybindings),
 	}, nil
 }
 
@@ -61,6 +63,7 @@ func (m *Manager) Set(cfg *RuntimeConfig) error {
 		return err
 	}
 	m.config = cfg
+	m.keyToAction = buildKeyToActionMap(cfg.Keybindings)
 	m.strategy.MarkUnsaved()
 	subscribers := make([]Subscriber, len(m.subscribers))
 	copy(subscribers, m.subscribers)
@@ -98,22 +101,21 @@ func (m *Manager) MatchAction(keyPress string, actions ...string) string {
 	if len(actions) > 0 {
 		return m.matchAmongActions(keyPress, actions)
 	}
-	return m.matchAnyAction(keyPress)
-}
-
-func (m *Manager) matchAmongActions(keyPress string, actions []string) string {
-	for _, action := range actions {
-		if key, exists := m.config.Keybindings[action]; exists && key == keyPress {
-			return action
-		}
+	// Use reverse index for O(1) lookup
+	if action, exists := m.keyToAction[keyPress]; exists {
+		return action
 	}
 	return ""
 }
 
-func (m *Manager) matchAnyAction(keyPress string) string {
-	for action, key := range m.config.Keybindings {
-		if key == keyPress {
-			return action
+func (m *Manager) matchAmongActions(keyPress string, actions []string) string {
+	// First try the reverse index
+	if action, exists := m.keyToAction[keyPress]; exists {
+		// Verify it's in the allowed actions list
+		for _, allowed := range actions {
+			if action == allowed {
+				return action
+			}
 		}
 	}
 	return ""
@@ -145,6 +147,7 @@ func (m *Manager) SetKeybinding(action, key string) error {
 		return err
 	}
 	m.config.Keybindings[action] = key
+	m.keyToAction = buildKeyToActionMap(m.config.Keybindings)
 	return nil
 }
 
@@ -182,4 +185,13 @@ func (m *Manager) MarkUnsaved() {
 func (m *Manager) IsUserMode() bool {
 	_, isRemote := m.strategy.(*RemoteStrategy)
 	return isRemote
+}
+
+// buildKeyToActionMap creates a reverse index from key to action
+func buildKeyToActionMap(keybindings map[string]string) map[string]string {
+	keyToAction := make(map[string]string, len(keybindings))
+	for action, key := range keybindings {
+		keyToAction[key] = action
+	}
+	return keyToAction
 }
