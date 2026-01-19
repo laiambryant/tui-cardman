@@ -30,7 +30,7 @@ const (
 	selectUserCollectionByUserIDQuery = `
 		SELECT uc.id, uc.user_id, uc.card_id, uc.quantity, uc.condition,
 		       uc.acquired_date, uc.notes, uc.created_at, uc.updated_at,
-		       c.id, c.card_game_id, c.name, c.expansion, c.rarity, 
+		       c.id, c.card_game_id, c.name, c.rarity, 
 					  c.is_placeholder, c.created_at,
 		       cg.id, cg.name, cg.created_at
 		FROM user_collections uc
@@ -43,7 +43,7 @@ const (
 	selectUserCollectionByGameIDQuery = `
 		SELECT uc.id, uc.user_id, uc.card_id, uc.quantity, uc.condition,
 		       uc.acquired_date, uc.notes, uc.created_at, uc.updated_at,
-		       c.id, c.card_game_id, c.name, c.expansion, c.rarity, 
+		       c.id, c.card_game_id, c.name, c.rarity, 
 		       c.is_placeholder, c.created_at,
 		       cg.id, cg.name, cg.created_at
 		FROM user_collections uc

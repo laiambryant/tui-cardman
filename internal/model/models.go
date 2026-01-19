@@ -21,7 +21,7 @@ type Card struct {
 	SetID         int64     `json:"set_id"`
 	Number        string    `json:"number"`
 	Artist        string    `json:"artist"`
-	idUpdatedAt   time.Time `json:"updated_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
 	CardGame      *CardGame `json:"card_game,omitempty"`
 }
 
