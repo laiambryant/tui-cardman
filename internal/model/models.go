@@ -1,6 +1,10 @@
 package model
 
-import "time"
+import (
+	"time"
+
+	"github.com/laiambryant/tui-cardman/internal/auth"
+)
 
 // CardGame represents a card game in the database
 type CardGame struct {
@@ -37,4 +41,13 @@ type UserCollection struct {
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
 	Card         *Card     `json:"card,omitempty"`
+}
+
+type ButtonConfiguration struct {
+	ID            int64      `json:"id"`
+	UserID        int64      `json:"user_id"`
+	Configuration string     `json:"configuration"`
+	CreatedAt     time.Time  `json:"created_at"`
+	UpdatedAt     time.Time  `json:"updated_at"`
+	User          *auth.User `json:"user,omitempty"`
 }
