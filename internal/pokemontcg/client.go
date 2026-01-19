@@ -125,10 +125,6 @@ func mapTCGDexSetToSet(tcgdexSet tcgdexModels.SetResume) Set {
 		Total:        tcgdexSet.CardCount.Total,
 		PtcgoCode:    tcgdexSet.ID, // Use ID as code
 		UpdatedAt:    "",
-		Images: SetImages{
-			Symbol: getStringOrEmpty(tcgdexSet.Symbol),
-			Logo:   getStringOrEmpty(tcgdexSet.Logo),
-		},
 	}
 }
 
@@ -142,10 +138,6 @@ func mapTCGDexCardToCard(tcgdexCard tcgdexModels.Card) Card {
 			Name:         tcgdexCard.Set.Name,
 			PrintedTotal: tcgdexCard.Set.CardCount.Official,
 			Total:        tcgdexCard.Set.CardCount.Total,
-			Images: SetImages{
-				Symbol: getStringOrEmpty(tcgdexCard.Set.Symbol),
-				Logo:   getStringOrEmpty(tcgdexCard.Set.Logo),
-			},
 		},
 		Number:     tcgdexCard.LocalID,
 		Artist:     getStringOrEmpty(tcgdexCard.Illustrator),

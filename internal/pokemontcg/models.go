@@ -2,39 +2,24 @@ package pokemontcg
 
 // Set represents a Pokemon TCG set
 type Set struct {
-	ID           string    `json:"id"`
-	Name         string    `json:"name"`
-	PrintedTotal int       `json:"printedTotal"`
-	Total        int       `json:"total"`
-	Legalities   Legality  `json:"legalities"`
-	PtcgoCode    string    `json:"ptcgoCode"`
-	UpdatedAt    string    `json:"updatedAt"`
-	Images       SetImages `json:"images"`
-}
-
-// SetImages represents set image URLs
-type SetImages struct {
-	Symbol string `json:"symbol"`
-	Logo   string `json:"logo"`
-}
-
-// Legality represents legality information
-type Legality struct {
-	Unlimited string `json:"unlimited,omitempty"`
-	Standard  string `json:"standard,omitempty"`
-	Expanded  string `json:"expanded,omitempty"`
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	PrintedTotal int    `json:"printedTotal"`
+	Total        int    `json:"total"`
+	PtcgoCode    string `json:"ptcgoCode"`
+	UpdatedAt    string `json:"updatedAt"`
 }
 
 // Card represents a Pokemon TCG card
 type Card struct {
-	ID                     string            `json:"id"`
-	Name                   string            `json:"name"`
-	Set                    Set               `json:"set"`
-	Number                 string            `json:"number"`
-	Artist                 string            `json:"artist,omitempty"`
-	Rarity                 string            `json:"rarity,omitempty"`
-	TCGPlayer              *TCGPlayerPrices  `json:"tcgplayer,omitempty"`
-	CardMarket             *CardMarketPrices `json:"cardmarket,omitempty"`
+	ID         string            `json:"id"`
+	Name       string            `json:"name"`
+	Set        Set               `json:"set"`
+	Number     string            `json:"number"`
+	Artist     string            `json:"artist,omitempty"`
+	Rarity     string            `json:"rarity,omitempty"`
+	TCGPlayer  *TCGPlayerPrices  `json:"tcgplayer,omitempty"`
+	CardMarket *CardMarketPrices `json:"cardmarket,omitempty"`
 }
 
 type TCGPlayerPrices struct {

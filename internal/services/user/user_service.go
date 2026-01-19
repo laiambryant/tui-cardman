@@ -54,15 +54,17 @@ func (s *UserServiceImpl) CreateUser(req auth.RegisterRequest, passwordHash stri
 	slog.Debug("exec", "query", logging.SanitizeQuery(insertUserQuery), "args", []any{req.Name, req.Surname, req.Email, passwordHash, now, now})
 	result, err := s.db.Exec(insertUserQuery, req.Name, req.Surname, req.Email, passwordHash, now, now)
 	if err != nil {
+		slog.Error("failed to create user", "email", req.Email, "error", err)
 		return nil, fmt.Errorf("failed to create user: %w", err)
 	}
 
 	id, err := result.LastInsertId()
 	if err != nil {
+		slog.Error("failed to get last insert id for user", "email", req.Email, "error", err)
 		return nil, fmt.Errorf("failed to get user id: %w", err)
 	}
 
-	return &auth.User{
+	user := &auth.User{
 		ID:           id,
 		Name:         req.Name,
 		Surname:      req.Surname,
@@ -71,7 +73,9 @@ func (s *UserServiceImpl) CreateUser(req auth.RegisterRequest, passwordHash stri
 		CreatedAt:    now,
 		UpdatedAt:    now,
 		Active:       true,
-	}, nil
+	}
+	slog.Debug("created user", "user_id", id, "email", req.Email)
+	return user, nil
 }
 
 // GetUserByEmail retrieves a user by email
@@ -93,8 +97,10 @@ func (s *UserServiceImpl) GetUserByEmail(email string) (*auth.User, error) {
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
+			slog.Debug("user not found by email", "email", email)
 			return nil, fmt.Errorf("user not found")
 		}
+		slog.Error("failed to get user by email", "email", email, "error", err)
 		return nil, fmt.Errorf("failed to get user: %w", err)
 	}
 
@@ -102,6 +108,7 @@ func (s *UserServiceImpl) GetUserByEmail(email string) (*auth.User, error) {
 		user.LastLogin = &lastLogin.Time
 	}
 
+	slog.Debug("found user by email", "email", email, "user_id", user.ID)
 	return &user, nil
 }
 
@@ -111,8 +118,10 @@ func (s *UserServiceImpl) UpdateLastLogin(userID int64) error {
 	slog.Debug("exec", "query", logging.SanitizeQuery(updateLastLoginQuery), "args", args)
 	_, err := s.db.Exec(updateLastLoginQuery, time.Now(), userID)
 	if err != nil {
+		slog.Error("failed to update last login", "user_id", userID, "error", err)
 		return fmt.Errorf("failed to update last login: %w", err)
 	}
+	slog.Debug("updated last login", "user_id", userID)
 	return nil
 }
 
@@ -123,9 +132,12 @@ func (s *UserServiceImpl) HasUsers() (bool, error) {
 	slog.Debug("query row", "query", logging.SanitizeQuery(query))
 	err := s.db.QueryRow(query).Scan(&count)
 	if err != nil {
+		slog.Error("failed to count users", "error", err)
 		return false, fmt.Errorf("failed to count users: %w", err)
 	}
-	return count > 0, nil
+	hasUsers := count > 0
+	slog.Debug("checked if users exist", "count", count, "has_users", hasUsers)
+	return hasUsers, nil
 }
 
 // GetFirstUser retrieves the first user (by creation date) from the database
@@ -147,8 +159,10 @@ func (s *UserServiceImpl) GetFirstUser() (*auth.User, error) {
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
+			slog.Debug("no users found")
 			return nil, fmt.Errorf("no users found")
 		}
+		slog.Error("failed to get first user", "error", err)
 		return nil, fmt.Errorf("failed to get first user: %w", err)
 	}
 
@@ -156,5 +170,6 @@ func (s *UserServiceImpl) GetFirstUser() (*auth.User, error) {
 		user.LastLogin = &lastLogin.Time
 	}
 
+	slog.Debug("found first user", "user_id", user.ID, "email", user.Email)
 	return &user, nil
 }

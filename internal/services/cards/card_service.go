@@ -31,8 +31,7 @@ func NewCardService(db *sql.DB) CardService {
 
 const (
 	selectCardsByGameIDQuery = `
-		SELECT c.id, c.card_game_id, c.name, c.rarity, 
-		       c.release_date, c.is_placeholder, c.created_at,
+		SELECT c.id, c.card_game_id, c.name, c.rarity, c.is_placeholder, c.created_at,
 		       c.api_id, c.set_id, c.number, c.artist, c.updated_at,
 		       cg.id, cg.name, cg.created_at
 		FROM cards c
@@ -43,9 +42,9 @@ const (
 
 	selectAllCardsQuery = `
 		SELECT c.id, c.card_game_id, c.name, c.rarity, 
-		       c.release_date, c.is_placeholder, c.created_at,
-		       c.api_id, c.set_id, c.number, c.artist, c.updated_at,
-		       cg.id, cg.name, cg.created_at
+			c.is_placeholder, c.created_at,
+			c.api_id, c.set_id, c.number, c.artist, c.updated_at,
+			cg.id, cg.name, cg.created_at
 		FROM cards c
 		JOIN card_games cg ON c.card_game_id = cg.id
 		ORDER BY cg.name ASC, c.name ASC
@@ -67,10 +66,17 @@ func (s *CardServiceImpl) GetCardsByGameID(gameID int64) ([]model.Card, error) {
 	slog.Debug("query", "query", logging.SanitizeQuery(selectCardsByGameIDQuery), "args", []any{gameID})
 	rows, err := s.db.Query(selectCardsByGameIDQuery, gameID)
 	if err != nil {
+		slog.Error("failed to query cards by game ID", "game_id", gameID, "error", err)
 		return nil, fmt.Errorf("failed to query cards by game ID: %w", err)
 	}
 	defer rows.Close()
-	return s.scanCards(rows)
+	cards, err := s.scanCards(rows)
+	if err != nil {
+		slog.Error("failed to scan cards", "game_id", gameID, "error", err)
+		return nil, err
+	}
+	slog.Debug("retrieved cards by game ID", "game_id", gameID, "count", len(cards))
+	return cards, nil
 }
 
 // GetAllCards retrieves all cards from the database
@@ -78,11 +84,18 @@ func (s *CardServiceImpl) GetAllCards() ([]model.Card, error) {
 	slog.Debug("query", "query", logging.SanitizeQuery(selectAllCardsQuery))
 	rows, err := s.db.Query(selectAllCardsQuery)
 	if err != nil {
+		slog.Error("failed to query all cards", "error", err)
 		return nil, fmt.Errorf("failed to query all cards: %w", err)
 	}
 	defer rows.Close()
 
-	return s.scanCards(rows)
+	cards, err := s.scanCards(rows)
+	if err != nil {
+		slog.Error("failed to scan all cards", "error", err)
+		return nil, err
+	}
+	slog.Debug("retrieved all cards", "count", len(cards))
+	return cards, nil
 }
 
 // scanCards is a helper function to scan card rows
@@ -91,16 +104,17 @@ func (s *CardServiceImpl) scanCards(rows *sql.Rows) ([]model.Card, error) {
 	for rows.Next() {
 		var card model.Card
 		var game model.CardGame
-		var releaseDate, gameCreatedAt, updatedAt sql.NullTime
+		var gameCreatedAt, updatedAt sql.NullTime
 		var apiID, number, artist sql.NullString
 		var setID sql.NullInt64
 		err := rows.Scan(
 			&card.ID, &card.CardGameID, &card.Name, &card.Rarity,
-			&releaseDate, &card.IsPlaceholder, &card.CreatedAt,
+			&card.IsPlaceholder, &card.CreatedAt,
 			&apiID, &setID, &number, &artist, &updatedAt,
 			&game.ID, &game.Name, &gameCreatedAt,
 		)
 		if err != nil {
+			slog.Error("failed to scan card", "error", err)
 			return nil, fmt.Errorf("failed to scan card: %w", err)
 		}
 		if gameCreatedAt.Valid {
@@ -133,35 +147,51 @@ func (s *CardServiceImpl) scanCards(rows *sql.Rows) ([]model.Card, error) {
 
 // GetCardIDByAPIID retrieves the database ID for a card by its API ID
 func (s *CardServiceImpl) GetCardIDByAPIID(ctx context.Context, apiID string) (int64, error) {
+	slog.Debug("query row", "query", logging.SanitizeQuery(selectCardIDQuery), "args", []any{apiID})
 	var cardID int64
 	err := s.db.QueryRowContext(ctx, selectCardIDQuery, apiID).Scan(&cardID)
 	if err != nil {
+		if err == sql.ErrNoRows {
+			slog.Debug("card not found by API ID", "api_id", apiID)
+		} else {
+			slog.Error("failed to query card ID by API ID", "api_id", apiID, "error", err)
+		}
 		return 0, err
 	}
+	slog.Debug("found card ID by API ID", "api_id", apiID, "card_id", cardID)
 	return cardID, nil
 }
 
 // UpsertCard inserts or updates a card within a transaction and returns its database ID
 func (s *CardServiceImpl) UpsertCard(ctx context.Context, tx *sql.Tx, apiID string, setID int64, number, name, rarity, artist string, cardGameID int64) (int64, error) {
+	slog.Debug("query row", "query", logging.SanitizeQuery(selectCardIDQuery), "args", []any{apiID})
 	var cardID int64
 	err := tx.QueryRowContext(ctx, selectCardIDQuery, apiID).Scan(&cardID)
 	if err == sql.ErrNoRows {
+		slog.Debug("exec", "query", logging.SanitizeQuery(insertCardQuery), "args", []any{apiID, setID, number, name, rarity, artist, cardGameID, time.Now()})
 		result, err := tx.ExecContext(ctx, insertCardQuery, apiID, setID, number, name, rarity, artist, cardGameID, time.Now())
 		if err != nil {
+			slog.Error("failed to insert card", "api_id", apiID, "name", name, "error", err)
 			return 0, fmt.Errorf("failed to insert card: %w", err)
 		}
 		cardID, err = result.LastInsertId()
 		if err != nil {
+			slog.Error("failed to get last insert id for card", "api_id", apiID, "name", name, "error", err)
 			return 0, fmt.Errorf("failed to get card ID: %w", err)
 		}
+		slog.Debug("inserted new card", "api_id", apiID, "name", name, "card_id", cardID)
 		return cardID, nil
 	}
 	if err != nil {
+		slog.Error("failed to query card during upsert", "api_id", apiID, "error", err)
 		return 0, fmt.Errorf("failed to query card: %w", err)
 	}
 
+	slog.Debug("exec", "query", logging.SanitizeQuery(updateCardQuery), "args", []any{setID, number, name, rarity, artist, time.Now(), cardID})
 	if _, err := tx.ExecContext(ctx, updateCardQuery, setID, number, name, rarity, artist, time.Now(), cardID); err != nil {
+		slog.Error("failed to update card", "api_id", apiID, "name", name, "card_id", cardID, "error", err)
 		return 0, fmt.Errorf("failed to update card: %w", err)
 	}
+	slog.Debug("updated existing card", "api_id", apiID, "name", name, "card_id", cardID)
 	return cardID, nil
 }

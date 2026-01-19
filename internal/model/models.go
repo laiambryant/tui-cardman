@@ -21,8 +21,8 @@ type Card struct {
 	SetID         int64     `json:"set_id"`
 	Number        string    `json:"number"`
 	Artist        string    `json:"artist"`
-	idUpdatedAt     time.Time `json:"updated_at"`
-	CardGame *CardGame `json:"card_game,omitempty"`
+	idUpdatedAt   time.Time `json:"updated_at"`
+	CardGame      *CardGame `json:"card_game,omitempty"`
 }
 
 // UserCollection represents a user's card collection entry
@@ -36,5 +36,5 @@ type UserCollection struct {
 	Notes        string    `json:"notes"`
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
-	Card *Card `json:"card,omitempty"`
+	Card         *Card     `json:"card,omitempty"`
 }

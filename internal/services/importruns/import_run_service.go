@@ -4,7 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log/slog"
 	"time"
+
+	"github.com/laiambryant/tui-cardman/internal/logging"
 )
 
 // ImportRunService defines the interface for import run-related operations
@@ -35,18 +38,29 @@ const (
 
 // CreateImportRun creates a new import run record and returns its ID
 func (s *ImportRunServiceImpl) CreateImportRun(ctx context.Context, importType string) (int64, error) {
+	slog.Debug("exec", "query", logging.SanitizeQuery(createImportRunQuery), "args", []any{importType, "running", time.Now()})
 	result, err := s.db.ExecContext(ctx, createImportRunQuery, importType, "running", time.Now())
 	if err != nil {
+		slog.Error("failed to create import run", "import_type", importType, "error", err)
 		return 0, fmt.Errorf("failed to create import run: %w", err)
 	}
-	return result.LastInsertId()
+	runID, err := result.LastInsertId()
+	if err != nil {
+		slog.Error("failed to get last insert id for import run", "import_type", importType, "error", err)
+		return 0, fmt.Errorf("failed to get last insert id: %w", err)
+	}
+	slog.Debug("created import run", "run_id", runID, "import_type", importType)
+	return runID, nil
 }
 
 // UpdateImportRun updates an existing import run record
 func (s *ImportRunServiceImpl) UpdateImportRun(ctx context.Context, runID int64, status string, setsProcessed, cardsImported, errorsCount int, notes string) error {
+	slog.Debug("exec", "query", logging.SanitizeQuery(updateImportRunQuery), "args", []any{status, setsProcessed, cardsImported, errorsCount, time.Now(), notes, runID})
 	_, err := s.db.ExecContext(ctx, updateImportRunQuery, status, setsProcessed, cardsImported, errorsCount, time.Now(), notes, runID)
 	if err != nil {
+		slog.Error("failed to update import run", "run_id", runID, "status", status, "error", err)
 		return fmt.Errorf("failed to update import run: %w", err)
 	}
+	slog.Debug("updated import run", "run_id", runID, "status", status, "sets_processed", setsProcessed, "cards_imported", cardsImported, "errors_count", errorsCount)
 	return nil
 }

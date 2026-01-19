@@ -31,7 +31,7 @@ const (
 		SELECT uc.id, uc.user_id, uc.card_id, uc.quantity, uc.condition,
 		       uc.acquired_date, uc.notes, uc.created_at, uc.updated_at,
 		       c.id, c.card_game_id, c.name, c.expansion, c.rarity, 
-		       c.release_date, c.is_placeholder, c.created_at,
+					  c.is_placeholder, c.created_at,
 		       cg.id, cg.name, cg.created_at
 		FROM user_collections uc
 		JOIN cards c ON uc.card_id = c.id
@@ -44,7 +44,7 @@ const (
 		SELECT uc.id, uc.user_id, uc.card_id, uc.quantity, uc.condition,
 		       uc.acquired_date, uc.notes, uc.created_at, uc.updated_at,
 		       c.id, c.card_game_id, c.name, c.expansion, c.rarity, 
-		       c.release_date, c.is_placeholder, c.created_at,
+		       c.is_placeholder, c.created_at,
 		       cg.id, cg.name, cg.created_at
 		FROM user_collections uc
 		JOIN cards c ON uc.card_id = c.id
@@ -59,11 +59,18 @@ func (s *UserCollectionServiceImpl) GetUserCollectionByUserID(userID int64) ([]m
 	slog.Debug("query", "query", logging.SanitizeQuery(selectUserCollectionByUserIDQuery), "args", []any{userID})
 	rows, err := s.db.Query(selectUserCollectionByUserIDQuery, userID)
 	if err != nil {
+		slog.Error("failed to query user collection", "user_id", userID, "error", err)
 		return nil, fmt.Errorf("failed to query user collection: %w", err)
 	}
 	defer rows.Close()
 
-	return s.scanUserCollections(rows)
+	collections, err := s.scanUserCollections(rows)
+	if err != nil {
+		slog.Error("failed to scan user collections", "user_id", userID, "error", err)
+		return nil, err
+	}
+	slog.Debug("retrieved user collection", "user_id", userID, "count", len(collections))
+	return collections, nil
 }
 
 // GetUserCollectionByGameID retrieves collection entries for a specific user and card game
@@ -71,11 +78,18 @@ func (s *UserCollectionServiceImpl) GetUserCollectionByGameID(userID, gameID int
 	slog.Debug("query", "query", logging.SanitizeQuery(selectUserCollectionByGameIDQuery), "args", []any{userID, gameID})
 	rows, err := s.db.Query(selectUserCollectionByGameIDQuery, userID, gameID)
 	if err != nil {
+		slog.Error("failed to query user collection by game", "user_id", userID, "game_id", gameID, "error", err)
 		return nil, fmt.Errorf("failed to query user collection by game: %w", err)
 	}
 	defer rows.Close()
 
-	return s.scanUserCollections(rows)
+	collections, err := s.scanUserCollections(rows)
+	if err != nil {
+		slog.Error("failed to scan user collections by game", "user_id", userID, "game_id", gameID, "error", err)
+		return nil, err
+	}
+	slog.Debug("retrieved user collection by game", "user_id", userID, "game_id", gameID, "count", len(collections))
+	return collections, nil
 }
 
 // scanUserCollections is a helper function to scan user collection rows
@@ -122,6 +136,7 @@ func (s *UserCollectionServiceImpl) scanUserCollections(rows *sql.Rows) ([]model
 
 // CreateSampleCollectionData creates sample collection entries for a new local user
 func (s *UserCollectionServiceImpl) CreateSampleCollectionData(userID int64) error {
+	slog.Debug("creating sample collection data", "user_id", userID)
 	// Sample collection data - a few cards from each game
 	sampleData := []struct {
 		cardID    int64
@@ -146,9 +161,11 @@ func (s *UserCollectionServiceImpl) CreateSampleCollectionData(userID int64) err
 		slog.Debug("exec", "query", query, "args", []any{userID, data.cardID, data.quantity, data.condition, data.notes})
 		_, err := s.db.Exec(query, userID, data.cardID, data.quantity, data.condition, data.notes)
 		if err != nil {
+			slog.Error("failed to create sample collection data", "user_id", userID, "card_id", data.cardID, "error", err)
 			return fmt.Errorf("failed to create sample collection data: %w", err)
 		}
 	}
 
+	slog.Debug("created sample collection data", "user_id", userID, "sample_count", len(sampleData))
 	return nil
 }
