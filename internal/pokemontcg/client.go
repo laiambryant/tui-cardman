@@ -17,7 +17,7 @@ const (
 	DefaultPageSize  = 250
 	MaxPageSize      = 250
 	DefaultTimeout   = 30 * time.Second
-	DefaultRateLimit = 2 * time.Second
+	DefaultRateLimit = 500 * time.Millisecond
 )
 
 // Client is the Pokemon TCG API client
