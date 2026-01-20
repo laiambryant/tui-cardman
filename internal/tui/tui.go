@@ -64,11 +64,7 @@ func NewModel(db *sql.DB, isSSHMode bool) (*Model, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize config manager: %w", err)
 	}
-	userService := user.NewUserService(db)
-	cardGameService := cardgame.NewCardGameService(db)
-	cardService := card.NewCardService(db)
-	collectionService := usercollection.NewUserCollectionService(db)
-	authSvc := auth.NewService(&dbAdapter{userService: userService})
+	userService, cardGameService, cardService, collectionService, authSvc := initServices(db)
 	cardGames, err := cardGameService.GetAllCardGames()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load card games: %w", err)
@@ -111,6 +107,15 @@ func NewModel(db *sql.DB, isSSHMode bool) (*Model, error) {
 		}
 	}
 	return m, nil
+}
+
+func initServices(db *sql.DB) (user.UserService, cardgame.CardGameService, card.CardService, usercollection.UserCollectionService, *auth.Service) {
+	userService := user.NewUserService(db)
+	cardGameService := cardgame.NewCardGameService(db)
+	cardService := card.NewCardService(db)
+	collectionService := usercollection.NewUserCollectionService(db)
+	authSvc := auth.NewService(&dbAdapter{userService: userService})
+	return userService, cardGameService, cardService, collectionService, authSvc
 }
 
 func (m Model) Init() tea.Cmd {
