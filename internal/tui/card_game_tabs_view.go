@@ -226,7 +226,6 @@ func (m CardGameTabsModel) View() string {
 
 	// Help text
 	b.WriteString("\n")
-	// Build dynamic help text from config if available
 	settingsKey := "F1"
 	nextTab := "Tab"
 	prevTab := "Shift+Tab"
@@ -234,6 +233,9 @@ func (m CardGameTabsModel) View() string {
 	navDown := "↓"
 	backKey := "Q"
 	quitKey := "Ctrl+C"
+	incrementKey := "Enter"
+	decrementKey := "Backspace"
+	saveKey := "Ctrl+S"
 	if m.configManager != nil {
 		if k := m.configManager.KeyForAction("settings"); k != "" {
 			settingsKey = k
@@ -256,8 +258,22 @@ func (m CardGameTabsModel) View() string {
 		if k := m.configManager.KeyForAction("quit"); k != "" {
 			quitKey = k
 		}
+		if k := m.configManager.KeyForAction("increment_quantity"); k != "" {
+			incrementKey = k
+		}
+		if k := m.configManager.KeyForAction("decrement_quantity"); k != "" {
+			decrementKey = k
+		}
+		if k := m.configManager.KeyForAction("save"); k != "" {
+			saveKey = k
+		}
 	}
-	help := fmt.Sprintf("%s: Settings • %s/%s: Switch tabs • %s/%s: Navigate • %s: Back • %s: Quit", settingsKey, prevTab, nextTab, navUp, navDown, backKey, quitKey)
+	var help string
+	if m.currentTab == TabCardSearch {
+		help = fmt.Sprintf("%s: Add • %s: Remove • %s: Save • %s/%s: Navigate • %s: Back", incrementKey, decrementKey, saveKey, navUp, navDown, backKey)
+	} else {
+		help = fmt.Sprintf("%s: Settings • %s/%s: Switch tabs • %s/%s: Navigate • %s: Back • %s: Quit", settingsKey, prevTab, nextTab, navUp, navDown, backKey, quitKey)
+	}
 	b.WriteString(helpStyle.Render(help) + "\n")
 
 	content := b.String()
