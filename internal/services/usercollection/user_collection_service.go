@@ -1,6 +1,7 @@
 package usercollection
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"log/slog"
@@ -14,6 +15,11 @@ type UserCollectionService interface {
 	GetUserCollectionByUserID(userID int64) ([]model.UserCollection, error)
 	GetUserCollectionByGameID(userID, gameID int64) ([]model.UserCollection, error)
 	CreateSampleCollectionData(userID int64) error
+	GetCardQuantity(userID, cardID int64) (int, error)
+	IncrementQuantity(ctx context.Context, userID, cardID int64) error
+	DecrementQuantity(ctx context.Context, userID, cardID int64) error
+	UpsertCollectionBatch(ctx context.Context, userID int64, updates map[int64]int) error
+	GetAllQuantitiesForGame(userID, gameID int64) (map[int64]int, error)
 }
 
 // UserCollectionServiceImpl implements the UserCollectionService interface
@@ -51,6 +57,31 @@ const (
 		JOIN card_games cg ON c.card_game_id = cg.id
 		WHERE uc.user_id = ? AND c.card_game_id = ?
 		ORDER BY uc.created_at DESC
+	`
+
+	selectCardQuantityQuery = `
+		SELECT uc.quantity 
+		FROM user_collections uc 
+		WHERE uc.user_id = ? AND uc.card_id = ?
+	`
+
+	selectAllQuantitiesForGameQuery = `
+		SELECT uc.card_id, uc.quantity
+		FROM user_collections uc
+		JOIN cards c ON uc.card_id = c.id
+		WHERE uc.user_id = ? AND c.card_game_id = ?
+	`
+
+	upsertCollectionQuery = `
+		INSERT INTO user_collections (user_id, card_id, quantity, condition)
+		VALUES (?, ?, ?, 'Near Mint')
+		ON CONFLICT(user_id, card_id) 
+		DO UPDATE SET quantity = excluded.quantity, updated_at = CURRENT_TIMESTAMP
+	`
+
+	deleteCollectionQuery = `
+		DELETE FROM user_collections 
+		WHERE user_id = ? AND card_id = ?
 	`
 )
 
@@ -163,4 +194,111 @@ func (s *UserCollectionServiceImpl) CreateSampleCollectionData(userID int64) err
 
 	slog.Debug("created sample collection data", "user_id", userID, "sample_count", len(sampleData))
 	return nil
+}
+
+// GetCardQuantity retrieves the quantity of a specific card in a user's collection
+func (s *UserCollectionServiceImpl) GetCardQuantity(userID, cardID int64) (int, error) {
+	var quantity int
+	err := db.QueryRow(s.db, selectCardQuantityQuery, userID, cardID).Scan(&quantity)
+	if err == sql.ErrNoRows {
+		return 0, nil
+	}
+	if err != nil {
+		slog.Error("failed to get card quantity", "user_id", userID, "card_id", cardID, "error", err)
+		return 0, &FailedToGetQuantityError{Err: err}
+	}
+	return quantity, nil
+}
+
+// GetAllQuantitiesForGame retrieves all card quantities for a specific game
+func (s *UserCollectionServiceImpl) GetAllQuantitiesForGame(userID, gameID int64) (map[int64]int, error) {
+	rows, err := db.Query(s.db, selectAllQuantitiesForGameQuery, userID, gameID)
+	if err != nil {
+		slog.Error("failed to get all quantities for game", "user_id", userID, "game_id", gameID, "error", err)
+		return nil, &FailedToGetQuantityError{Err: err}
+	}
+	defer rows.Close()
+	quantities := make(map[int64]int)
+	for rows.Next() {
+		var cardID int64
+		var quantity int
+		if err := rows.Scan(&cardID, &quantity); err != nil {
+			slog.Error("failed to scan quantity row", "error", err)
+			continue
+		}
+		quantities[cardID] = quantity
+	}
+	if err := rows.Err(); err != nil {
+		slog.Error("error iterating quantity rows", "error", err)
+		return nil, &FailedToGetQuantityError{Err: err}
+	}
+	slog.Debug("retrieved all quantities for game", "user_id", userID, "game_id", gameID, "count", len(quantities))
+	return quantities, nil
+}
+
+// IncrementQuantity increments the quantity of a card in a user's collection
+func (s *UserCollectionServiceImpl) IncrementQuantity(ctx context.Context, userID, cardID int64) error {
+	currentQty, err := s.GetCardQuantity(userID, cardID)
+	if err != nil {
+		return err
+	}
+	newQty := currentQty + 1
+	_, err = db.ExecContext(ctx, s.db, upsertCollectionQuery, userID, cardID, newQty)
+	if err != nil {
+		slog.Error("failed to increment quantity", "user_id", userID, "card_id", cardID, "error", err)
+		return &FailedToIncrementQuantityError{Err: err}
+	}
+	slog.Debug("incremented card quantity", "user_id", userID, "card_id", cardID, "new_quantity", newQty)
+	return nil
+}
+
+// DecrementQuantity decrements the quantity of a card in a user's collection
+func (s *UserCollectionServiceImpl) DecrementQuantity(ctx context.Context, userID, cardID int64) error {
+	currentQty, err := s.GetCardQuantity(userID, cardID)
+	if err != nil {
+		return err
+	}
+	if currentQty <= 0 {
+		return nil
+	}
+	newQty := currentQty - 1
+	if newQty == 0 {
+		_, err = db.ExecContext(ctx, s.db, deleteCollectionQuery, userID, cardID)
+		if err != nil {
+			slog.Error("failed to delete card from collection", "user_id", userID, "card_id", cardID, "error", err)
+			return &FailedToDecrementQuantityError{Err: err}
+		}
+		slog.Debug("removed card from collection", "user_id", userID, "card_id", cardID)
+		return nil
+	}
+	_, err = db.ExecContext(ctx, s.db, upsertCollectionQuery, userID, cardID, newQty)
+	if err != nil {
+		slog.Error("failed to decrement quantity", "user_id", userID, "card_id", cardID, "error", err)
+		return &FailedToDecrementQuantityError{Err: err}
+	}
+	slog.Debug("decremented card quantity", "user_id", userID, "card_id", cardID, "new_quantity", newQty)
+	return nil
+}
+
+// UpsertCollectionBatch updates multiple card quantities in a single transaction
+func (s *UserCollectionServiceImpl) UpsertCollectionBatch(ctx context.Context, userID int64, updates map[int64]int) error {
+	return db.WithTransaction(ctx, s.db, func(tx *sql.Tx) error {
+		for cardID, quantity := range updates {
+			if quantity <= 0 {
+				_, err := db.ExecContextTx(ctx, tx, deleteCollectionQuery, userID, cardID)
+				if err != nil {
+					slog.Error("failed to delete card in batch", "user_id", userID, "card_id", cardID, "error", err)
+					return &FailedToUpsertCollectionError{Err: err}
+				}
+				continue
+			}
+			_, err := db.ExecContextTx(ctx, tx, upsertCollectionQuery, userID, cardID, quantity)
+			if err != nil {
+				slog.Error("failed to upsert card in batch", "user_id", userID, "card_id", cardID, "error", err)
+				return &FailedToUpsertCollectionError{Err: err}
+			}
+		}
+		slog.Debug("batch upserted collection", "user_id", userID, "update_count", len(updates))
+		return nil
+	})
 }
