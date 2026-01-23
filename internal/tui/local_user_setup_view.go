@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/laiambryant/tui-cardman/internal/auth"
+	"github.com/laiambryant/tui-cardman/internal/runtimecfg"
 )
 
 func (m *Model) initLocalUserSetupInputs() {
@@ -93,11 +94,9 @@ func (m Model) localUserSetupView() string {
 }
 
 func (m *Model) handleLocalUserSetup() (tea.Model, tea.Cmd) {
-	// Validate inputs
 	name := strings.TrimSpace(m.inputs[0].Value())
 	surname := strings.TrimSpace(m.inputs[1].Value())
 	email := strings.TrimSpace(m.inputs[2].Value())
-
 	if name == "" {
 		m.errorMsg = "First name is required"
 		return m, nil
@@ -110,22 +109,12 @@ func (m *Model) handleLocalUserSetup() (tea.Model, tea.Cmd) {
 		m.errorMsg = "Email is required"
 		return m, nil
 	}
-
-	// Basic email validation
 	if !strings.Contains(email, "@") || !strings.Contains(email, ".") {
 		m.errorMsg = "Please enter a valid email address"
 		return m, nil
 	}
-
-	// Create user with empty password (local mode)
-	req := auth.RegisterRequest{
-		Name:     name,
-		Surname:  surname,
-		Email:    email,
-		Password: "", // No password for local mode
-	}
-
-	user, err := m.userService.CreateUser(req, "") // Empty password hash
+	req := createUserRequestForLocalMode(name, surname, email)
+	user, err := m.userService.CreateUser(req, "")
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint") {
 			m.errorMsg = "This email is already registered"
@@ -134,22 +123,33 @@ func (m *Model) handleLocalUserSetup() (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
-
-	// Set the user as current user and go to main screen
 	m.user = user
-
-	// Create sample collection data for the new local user
+	if m.configManager == nil {
+		configPath := runtimecfg.GetConfigPath()
+		configManager, cfgErr := runtimecfg.NewManager(true, configPath, nil, 0)
+		if cfgErr != nil {
+			fmt.Printf("Warning: failed to initialize config manager, will fallback to default configuration: %v\n", cfgErr)
+		} else {
+			m.configManager = configManager
+		}
+	}
 	err = m.collectionService.CreateSampleCollectionData(user.ID)
 	if err != nil {
-		// Don't fail user creation if sample data fails, just log it
 		m.errorMsg = fmt.Sprintf("Profile created but failed to add sample collection cards: %v", err)
-		// Still proceed to main screen after a brief delay
 		m.screen = ScreenMain
 		return m, nil
 	}
-
 	m.screen = ScreenMain
 	m.errorMsg = ""
-
 	return m, nil
+}
+
+func createUserRequestForLocalMode(name string, surname string, email string) auth.RegisterRequest {
+	req := auth.RegisterRequest{
+		Name:     name,
+		Surname:  surname,
+		Email:    email,
+		Password: "",
+	}
+	return req
 }

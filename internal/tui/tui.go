@@ -3,6 +3,7 @@ package tui
 import (
 	"database/sql"
 	"fmt"
+	"log/slog"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -182,7 +183,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 		}
-		if action == "select" || s == "enter" {
+		if action == "select" || s == "enter" || s == "\r" || s == "\n" {
 			switch m.screen {
 			case ScreenLogin:
 				if m.focusIndex == len(m.inputs) {
@@ -211,10 +212,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					selectedGame := &m.cardGames[m.cursor]
 					cardGameTabs, err := m.createCardGameTabsModel(selectedGame)
 					if err != nil {
+						slog.Error("failed to create card game tabs model", "error", err)
+						m.errorMsg = fmt.Sprintf("Failed to load card game: %v", err)
 						return m, nil
 					}
 					m.cardGameTabs = cardGameTabs
 					m.screen = ScreenCardGameTabs
+					m.errorMsg = ""
 					return m, m.cardGameTabs.Init()
 				}
 			}

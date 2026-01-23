@@ -84,6 +84,8 @@ func (m Model) mainView() string {
 	}
 	help = fmt.Sprintf("%s: Settings • %s/%s: Navigate • %s: Select • %s: Quit", settingsKey, navUp, navDown, selectKey, quitKey)
 	b.WriteString(helpStyle.Render(help) + "\n")
-
+	if m.errorMsg != "" {
+		b.WriteString("\n" + errorStyle.Render(m.errorMsg) + "\n")
+	}
 	return b.String()
 }

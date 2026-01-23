@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"os"
+
+	"github.com/laiambryant/tui-cardman/internal/model"
 )
 
 // ButtonStrategy defines the interface for configuration storage strategies
@@ -56,8 +59,10 @@ func (s *LocalStrategy) IsAvailable() bool {
 
 // ButtonConfigService interface for remote strategy (to avoid import cycle)
 type ButtonConfigService interface {
-	GetByUserID(ctx context.Context, userID int64) (interface{}, error)
+	GetByUserID(ctx context.Context, userID int64) (*model.ButtonConfiguration, error)
 	Save(ctx context.Context, userID int64, config *RuntimeConfig) error
+	InitializeDefault(ctx context.Context, userID int64) error
+	MigrateLocalToDB(ctx context.Context, userID int64, localPath string) error
 }
 
 // RemoteStrategy handles database-based configuration storage
@@ -69,12 +74,24 @@ type RemoteStrategy struct {
 }
 
 // NewRemoteStrategy creates a new remote database strategy
-func NewRemoteStrategy(service ButtonConfigService, userID int64, defaultConfig *RuntimeConfig) *RemoteStrategy {
-	return &RemoteStrategy{
+func NewRemoteStrategy(service ButtonConfigService, userID int64, defaultConfig *RuntimeConfig, localPath string) *RemoteStrategy {
+	strategy := &RemoteStrategy{
 		service:       service,
 		userID:        userID,
 		defaultConfig: defaultConfig,
 	}
+
+	// Attempt migration if local config exists and service is available
+	if service != nil && localPath != "" {
+		if _, err := os.Stat(localPath); err == nil {
+			ctx := context.Background()
+			if migrateErr := service.MigrateLocalToDB(ctx, userID, localPath); migrateErr != nil {
+				slog.Warn("failed to migrate local config to database", "user_id", userID, "path", localPath, "error", migrateErr)
+			}
+		}
+	}
+
+	return strategy
 }
 
 func (s *RemoteStrategy) Load() (*RuntimeConfig, error) {
@@ -83,34 +100,33 @@ func (s *RemoteStrategy) Load() (*RuntimeConfig, error) {
 		return s.defaultConfig, nil
 	}
 	slog.Info("loading configuration from database", "user_id", s.userID)
-	configInterface, err := s.service.GetByUserID(context.Background(), s.userID)
+	buttonConfig, err := s.service.GetByUserID(context.Background(), s.userID)
 	if err != nil {
 		slog.Debug("no database configuration found, using default", "user_id", s.userID, "error", err)
 		return s.defaultConfig, nil
 	}
-	if configStruct, ok := configInterface.(struct {
-		Configuration string
-	}); ok {
-		var dbConfig RuntimeConfig
-		if err := json.Unmarshal([]byte(configStruct.Configuration), &dbConfig); err != nil {
-			slog.Error("failed to unmarshal database configuration", "user_id", s.userID, "error", err)
-			return s.defaultConfig, nil
-		}
-		if dbConfig.Keybindings == nil {
-			dbConfig.Keybindings = s.defaultConfig.Keybindings
-		} else {
-			for action, key := range s.defaultConfig.Keybindings {
-				if _, exists := dbConfig.Keybindings[action]; !exists {
-					dbConfig.Keybindings[action] = key
-				}
+
+	// Parse the JSON configuration string
+	var dbConfig RuntimeConfig
+	if err := json.Unmarshal([]byte(buttonConfig.Configuration), &dbConfig); err != nil {
+		slog.Error("failed to unmarshal database configuration", "user_id", s.userID, "error", err)
+		return s.defaultConfig, nil
+	}
+
+	// Merge with defaults to ensure all keybindings are present
+	if dbConfig.Keybindings == nil {
+		dbConfig.Keybindings = s.defaultConfig.Keybindings
+	} else {
+		for action, key := range s.defaultConfig.Keybindings {
+			if _, exists := dbConfig.Keybindings[action]; !exists {
+				dbConfig.Keybindings[action] = key
 			}
 		}
-		s.hasUnsavedChanges = false
-		slog.Info("loaded configuration from database", "user_id", s.userID)
-		return &dbConfig, nil
 	}
-	slog.Debug("unexpected config format, using default", "user_id", s.userID)
-	return s.defaultConfig, nil
+
+	s.hasUnsavedChanges = false
+	slog.Info("loaded configuration from database", "user_id", s.userID)
+	return &dbConfig, nil
 }
 
 func (s *RemoteStrategy) Save(config *RuntimeConfig) error {

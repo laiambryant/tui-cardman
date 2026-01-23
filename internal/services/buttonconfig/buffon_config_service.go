@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"os"
 	"time"
 
 	"github.com/laiambryant/tui-cardman/internal/db"
@@ -32,6 +33,7 @@ type ButtonConfigService interface {
 	GetByUserID(ctx context.Context, userID int64) (*model.ButtonConfiguration, error)
 	Save(ctx context.Context, userID int64, config *runtimecfg.RuntimeConfig) error
 	InitializeDefault(ctx context.Context, userID int64) error
+	MigrateLocalToDB(ctx context.Context, userID int64, localPath string) error
 }
 
 type ButtonConfigServiceImpl struct {
@@ -83,6 +85,34 @@ func (b *ButtonConfigServiceImpl) Save(ctx context.Context, userID int64, config
 func (b *ButtonConfigServiceImpl) InitializeDefault(ctx context.Context, userID int64) error {
 	defaultConfig := runtimecfg.Default()
 	return b.Save(ctx, userID, defaultConfig)
+}
+
+func (b *ButtonConfigServiceImpl) MigrateLocalToDB(ctx context.Context, userID int64, localPath string) error {
+	_, err := b.GetByUserID(ctx, userID)
+	if err == nil {
+		slog.Info("user already has database configuration, skipping migration", "user_id", userID)
+		return nil
+	}
+	if err != sql.ErrNoRows {
+		return fmt.Errorf("failed to check existing config: %w", err)
+	}
+
+	localConfig, err := runtimecfg.Load(localPath)
+	if err != nil {
+		return fmt.Errorf("failed to load local config for migration: %w", err)
+	}
+
+	err = b.Save(ctx, userID, localConfig)
+	if err != nil {
+		return fmt.Errorf("failed to migrate config to database: %w", err)
+	}
+
+	if err := os.Remove(localPath); err != nil {
+		slog.Warn("failed to remove local config after migration", "path", localPath, "error", err)
+	}
+
+	slog.Info("successfully migrated local configuration to database", "user_id", userID, "path", localPath)
+	return nil
 }
 
 func handle_no_config_err(err error, userID int64) (*model.ButtonConfiguration, error) {

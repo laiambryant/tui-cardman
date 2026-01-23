@@ -95,13 +95,12 @@ func (s *UserCollectionServiceImpl) scanUserCollections(rows *sql.Rows) ([]model
 		var collection model.UserCollection
 		var card model.Card
 		var game model.CardGame
-		var acquiredDate, releaseDate, gameCreatedAt sql.NullTime
-
+		var acquiredDate, gameCreatedAt sql.NullTime
 		err := rows.Scan(
 			&collection.ID, &collection.UserID, &collection.CardID, &collection.Quantity, &collection.Condition,
 			&acquiredDate, &collection.Notes, &collection.CreatedAt, &collection.UpdatedAt,
 			&card.ID, &card.CardGameID, &card.Name, &card.Rarity,
-			&releaseDate, &card.IsPlaceholder, &card.CreatedAt,
+			&card.IsPlaceholder, &card.CreatedAt,
 			&game.ID, &game.Name, &gameCreatedAt,
 		)
 		if err != nil {

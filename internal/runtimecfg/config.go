@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/charmbracelet/lipgloss"
 )
 
 // RuntimeConfig holds all application configuration
@@ -17,6 +19,65 @@ type RuntimeConfig struct {
 type UIConfig struct {
 	CompactLists bool   `json:"compact_lists"`
 	ColorScheme  string `json:"color_scheme"`
+}
+
+// ColorScheme defines a color palette for the TUI
+type ColorScheme struct {
+	Name       string
+	Focused    lipgloss.Color
+	Blurred    lipgloss.Color
+	Error      lipgloss.Color
+	Title      lipgloss.Color
+	Background lipgloss.Color
+	Foreground lipgloss.Color
+}
+
+// ColorSchemes contains predefined color schemes
+var ColorSchemes = map[string]ColorScheme{
+	"default": {
+		Name:       "Default",
+		Focused:    lipgloss.Color("205"),
+		Blurred:    lipgloss.Color("240"),
+		Error:      lipgloss.Color("9"),
+		Title:      lipgloss.Color("170"),
+		Background: lipgloss.Color(""),
+		Foreground: lipgloss.Color(""),
+	},
+	"dark": {
+		Name:       "Dark",
+		Focused:    lipgloss.Color("15"),
+		Blurred:    lipgloss.Color("8"),
+		Error:      lipgloss.Color("1"),
+		Title:      lipgloss.Color("12"),
+		Background: lipgloss.Color("0"),
+		Foreground: lipgloss.Color("15"),
+	},
+	"light": {
+		Name:       "Light",
+		Focused:    lipgloss.Color("4"),
+		Blurred:    lipgloss.Color("7"),
+		Error:      lipgloss.Color("1"),
+		Title:      lipgloss.Color("2"),
+		Background: lipgloss.Color("15"),
+		Foreground: lipgloss.Color("0"),
+	},
+}
+
+// GetColorScheme returns a color scheme by name, or default if not found
+func GetColorScheme(name string) ColorScheme {
+	if scheme, exists := ColorSchemes[name]; exists {
+		return scheme
+	}
+	return ColorSchemes["default"]
+}
+
+// GetColorSchemeNames returns all available color scheme names
+func GetColorSchemeNames() []string {
+	names := make([]string, 0, len(ColorSchemes))
+	for name := range ColorSchemes {
+		names = append(names, name)
+	}
+	return names
 }
 
 // Default returns a RuntimeConfig with sensible defaults
