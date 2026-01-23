@@ -48,6 +48,7 @@ func NewCardGameTabsModel(selectedGame *model.CardGame, cfg *runtimecfg.Manager)
 		{Title: "Expansion", Width: 15},
 		{Title: "Rarity", Width: 12},
 		{Title: "Card #", Width: 8},
+		{Title: "Quantity", Width: 8},
 	}
 
 	cardTable := NewStyledTable(columns, 10, true)
@@ -294,12 +295,16 @@ func (m CardGameTabsModel) renderCardSearchTab() string {
 
 	if showAll {
 		for _, card := range m.cards {
-			rows = append(rows, cardToRow(card))
+			dbQty := m.dbQuantities[card.ID]
+			tempDelta := m.tempQuantityChanges[card.ID]
+			rows = append(rows, cardToRow(card, dbQty, tempDelta))
 		}
 		any = len(rows) > 0
 	} else {
 		for _, card := range m.filteredCards {
-			rows = append(rows, cardToRow(card))
+			dbQty := m.dbQuantities[card.ID]
+			tempDelta := m.tempQuantityChanges[card.ID]
+			rows = append(rows, cardToRow(card, dbQty, tempDelta))
 		}
 		any = len(rows) > 0
 	}
@@ -388,23 +393,26 @@ func (m CardGameTabsModel) filterUserCollection(query string) []model.UserCollec
 func (m *CardGameTabsModel) updateCardTable() {
 	var rows []table.Row
 	for _, card := range m.filteredCards {
-		rows = append(rows, cardToRow(card))
+		dbQty := m.dbQuantities[card.ID]
+		tempDelta := m.tempQuantityChanges[card.ID]
+		rows = append(rows, cardToRow(card, dbQty, tempDelta))
 	}
 	m.cardTable.SetRows(rows)
 }
 
-// cardToRow converts a Card into a table.Row with appropriate truncation.
-func cardToRow(card model.Card) table.Row {
-	// For expansion, we'll show the set_id for now (could be enhanced to join with sets table)
+// cardToRow converts a Card into a table.Row with appropriate truncation and quantity.
+func cardToRow(card model.Card, dbQty, tempDelta int) table.Row {
 	setDisplay := ""
 	if card.SetID > 0 {
 		setDisplay = fmt.Sprintf("Set#%d", card.SetID)
 	}
+	totalQty := dbQty + tempDelta
 	return table.Row{
 		Truncate(card.Name, 25),
 		Truncate(setDisplay, 15),
 		Truncate(card.Rarity, 12),
 		Truncate(card.Number, 8),
+		fmt.Sprintf("%d", totalQty),
 	}
 }
 
