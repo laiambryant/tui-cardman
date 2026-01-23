@@ -109,6 +109,11 @@ func Default() *RuntimeConfig {
 			// Search
 			"search_focus": "/",
 			"search_clear": "ctrl+u",
+
+			// Collection management
+			"save":               "ctrl+s",
+			"increment_quantity": "enter",
+			"decrement_quantity": "backspace",
 		},
 		UI: UIConfig{
 			CompactLists: false,
