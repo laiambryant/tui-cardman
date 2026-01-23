@@ -112,8 +112,8 @@ func Default() *RuntimeConfig {
 
 			// Collection management
 			"save":               "ctrl+s",
-			"increment_quantity": "enter",
-			"decrement_quantity": "backspace",
+			"increment_quantity": "+",
+			"decrement_quantity": "delete",
 		},
 		UI: UIConfig{
 			CompactLists: false,

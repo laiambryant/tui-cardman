@@ -233,8 +233,8 @@ func (m CardGameTabsModel) View() string {
 	navDown := "↓"
 	backKey := "Q"
 	quitKey := "Ctrl+C"
-	incrementKey := "Enter"
-	decrementKey := "Backspace"
+	incrementKey := "+"
+	decrementKey := "Delete"
 	saveKey := "Ctrl+S"
 	if m.configManager != nil {
 		if k := m.configManager.KeyForAction("settings"); k != "" {
@@ -488,6 +488,9 @@ func collectionToRow(c model.UserCollection) table.Row {
 // handleIncrementQuantity increments the quantity of the selected card
 func (m CardGameTabsModel) handleIncrementQuantity() (CardGameTabsModel, tea.Cmd) {
 	selectedRow := m.cardTable.Cursor()
+	if selectedRow < 0 {
+		return m, nil
+	}
 	showAll := m.searchInput.Value() == ""
 	var card model.Card
 	if showAll {
@@ -512,6 +515,9 @@ func (m CardGameTabsModel) handleIncrementQuantity() (CardGameTabsModel, tea.Cmd
 // handleDecrementQuantity decrements the quantity of the selected card
 func (m CardGameTabsModel) handleDecrementQuantity() (CardGameTabsModel, tea.Cmd) {
 	selectedRow := m.cardTable.Cursor()
+	if selectedRow < 0 {
+		return m, nil
+	}
 	showAll := m.searchInput.Value() == ""
 	var card model.Card
 	if showAll {
