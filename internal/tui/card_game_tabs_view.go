@@ -22,16 +22,18 @@ const (
 
 // CardGameTabsModel represents the state for the card game tabs view
 type CardGameTabsModel struct {
-	selectedGame       *model.CardGame
-	currentTab         Tab
-	searchInput        textinput.Model
-	cards              []model.Card
-	userCollections    []model.UserCollection
-	filteredCards      []model.Card
-	filteredCollection []model.UserCollection
-	cursor             int
-	cardTable          table.Model
-	configManager      *runtimecfg.Manager
+	selectedGame        *model.CardGame
+	currentTab          Tab
+	searchInput         textinput.Model
+	cards               []model.Card
+	userCollections     []model.UserCollection
+	filteredCards       []model.Card
+	filteredCollection  []model.UserCollection
+	cursor              int
+	cardTable           table.Model
+	configManager       *runtimecfg.Manager
+	tempQuantityChanges map[int64]int
+	dbQuantities        map[int64]int
 }
 
 // NewCardGameTabsModel creates a new card game tabs model
@@ -51,12 +53,14 @@ func NewCardGameTabsModel(selectedGame *model.CardGame, cfg *runtimecfg.Manager)
 	cardTable := NewStyledTable(columns, 10, true)
 
 	return CardGameTabsModel{
-		selectedGame:  selectedGame,
-		currentTab:    TabCollection,
-		searchInput:   searchInput,
-		cursor:        0,
-		cardTable:     cardTable,
-		configManager: cfg,
+		selectedGame:        selectedGame,
+		currentTab:          TabCollection,
+		searchInput:         searchInput,
+		cursor:              0,
+		cardTable:           cardTable,
+		configManager:       cfg,
+		tempQuantityChanges: make(map[int64]int),
+		dbQuantities:        make(map[int64]int),
 	}
 }
 
