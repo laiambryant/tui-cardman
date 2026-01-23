@@ -39,6 +39,7 @@ type CardGameTabsModel struct {
 	dbQuantities        map[int64]int
 	collectionService   usercollection.UserCollectionService
 	user                *auth.User
+	modal               ModalModel
 }
 
 // NewCardGameTabsModel creates a new card game tabs model
@@ -75,7 +76,14 @@ func (m CardGameTabsModel) Init() tea.Cmd {
 }
 
 func (m CardGameTabsModel) Update(msg tea.Msg) (CardGameTabsModel, tea.Cmd) {
+	if m.modal.IsVisible() {
+		var cmd tea.Cmd
+		m.modal, cmd = m.modal.Update(msg)
+		return m, cmd
+	}
 	switch msg := msg.(type) {
+	case saveCollectionMsg:
+		return m.performSaveCollection()
 	case tea.KeyMsg:
 		s := msg.String()
 		action := ""
@@ -252,7 +260,11 @@ func (m CardGameTabsModel) View() string {
 	help := fmt.Sprintf("%s: Settings • %s/%s: Switch tabs • %s/%s: Navigate • %s: Back • %s: Quit", settingsKey, prevTab, nextTab, navUp, navDown, backKey, quitKey)
 	b.WriteString(helpStyle.Render(help) + "\n")
 
-	return b.String()
+	content := b.String()
+	if m.modal.IsVisible() {
+		return content + "\n\n" + m.modal.View()
+	}
+	return content
 }
 
 func (m CardGameTabsModel) renderCollectionTab() string {
@@ -507,6 +519,34 @@ func (m CardGameTabsModel) handleSaveCollection() (CardGameTabsModel, tea.Cmd) {
 	if m.collectionService == nil || m.user == nil {
 		return m, nil
 	}
+	changeCount := 0
+	for _, delta := range m.tempQuantityChanges {
+		if delta != 0 {
+			changeCount++
+		}
+	}
+	if changeCount == 0 {
+		return m, nil
+	}
+	message := fmt.Sprintf("Save %d card quantity changes to your collection?", changeCount)
+	m.modal = NewModalModel(
+		"Confirm Save",
+		message,
+		func() tea.Cmd {
+			return func() tea.Msg {
+				return saveCollectionMsg{}
+			}
+		},
+		func() tea.Cmd {
+			return nil
+		},
+	)
+	return m, nil
+}
+
+type saveCollectionMsg struct{}
+
+func (m CardGameTabsModel) performSaveCollection() (CardGameTabsModel, tea.Cmd) {
 	updates := make(map[int64]int)
 	for cardID, tempDelta := range m.tempQuantityChanges {
 		dbQty := m.dbQuantities[cardID]
