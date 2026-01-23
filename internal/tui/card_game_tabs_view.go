@@ -1,14 +1,17 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/laiambryant/tui-cardman/internal/auth"
 	"github.com/laiambryant/tui-cardman/internal/model"
 	"github.com/laiambryant/tui-cardman/internal/runtimecfg"
+	"github.com/laiambryant/tui-cardman/internal/services/usercollection"
 )
 
 // Tab represents different tabs in the card game view
@@ -34,6 +37,8 @@ type CardGameTabsModel struct {
 	configManager       *runtimecfg.Manager
 	tempQuantityChanges map[int64]int
 	dbQuantities        map[int64]int
+	collectionService   usercollection.UserCollectionService
+	user                *auth.User
 }
 
 // NewCardGameTabsModel creates a new card game tabs model
@@ -141,6 +146,19 @@ func (m CardGameTabsModel) Update(msg tea.Msg) (CardGameTabsModel, tea.Cmd) {
 				m.cursor++
 			}
 			return m, nil
+		}
+
+		// Quantity management (only in Card Search tab)
+		if m.currentTab == TabCardSearch {
+			if action == "increment_quantity" {
+				return m.handleIncrementQuantity()
+			}
+			if action == "decrement_quantity" {
+				return m.handleDecrementQuantity()
+			}
+			if action == "save" {
+				return m.handleSaveCollection()
+			}
 		}
 	}
 
@@ -437,4 +455,73 @@ func collectionToRow(c model.UserCollection) table.Row {
 		Truncate(rarity, 12),
 		Truncate(cardNum, 8),
 	}
+}
+
+// handleIncrementQuantity increments the quantity of the selected card
+func (m CardGameTabsModel) handleIncrementQuantity() (CardGameTabsModel, tea.Cmd) {
+	if len(m.filteredCards) == 0 {
+		return m, nil
+	}
+	selectedRow := m.cardTable.Cursor()
+	if selectedRow >= len(m.filteredCards) {
+		return m, nil
+	}
+	card := m.filteredCards[selectedRow]
+	if m.tempQuantityChanges == nil {
+		m.tempQuantityChanges = make(map[int64]int)
+	}
+	m.tempQuantityChanges[card.ID]++
+	m.updateCardTable()
+	return m, nil
+}
+
+// handleDecrementQuantity decrements the quantity of the selected card
+func (m CardGameTabsModel) handleDecrementQuantity() (CardGameTabsModel, tea.Cmd) {
+	if len(m.filteredCards) == 0 {
+		return m, nil
+	}
+	selectedRow := m.cardTable.Cursor()
+	if selectedRow >= len(m.filteredCards) {
+		return m, nil
+	}
+	card := m.filteredCards[selectedRow]
+	dbQty := m.dbQuantities[card.ID]
+	tempDelta := m.tempQuantityChanges[card.ID]
+	totalQty := dbQty + tempDelta
+	if totalQty <= 0 {
+		return m, nil
+	}
+	if m.tempQuantityChanges == nil {
+		m.tempQuantityChanges = make(map[int64]int)
+	}
+	m.tempQuantityChanges[card.ID]--
+	m.updateCardTable()
+	return m, nil
+}
+
+// handleSaveCollection saves the temporary quantity changes to the database
+func (m CardGameTabsModel) handleSaveCollection() (CardGameTabsModel, tea.Cmd) {
+	if len(m.tempQuantityChanges) == 0 {
+		return m, nil
+	}
+	if m.collectionService == nil || m.user == nil {
+		return m, nil
+	}
+	updates := make(map[int64]int)
+	for cardID, tempDelta := range m.tempQuantityChanges {
+		dbQty := m.dbQuantities[cardID]
+		newQty := dbQty + tempDelta
+		updates[cardID] = newQty
+	}
+	ctx := context.Background()
+	err := m.collectionService.UpsertCollectionBatch(ctx, m.user.ID, updates)
+	if err != nil {
+		return m, nil
+	}
+	for cardID, newQty := range updates {
+		m.dbQuantities[cardID] = newQty
+	}
+	m.tempQuantityChanges = make(map[int64]int)
+	m.updateCardTable()
+	return m, nil
 }

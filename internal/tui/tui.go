@@ -299,6 +299,8 @@ func (a *dbAdapter) UpdateLastLogin(userID int64) error {
 // createCardGameTabsModel creates a card game tabs model with loaded data
 func (m *Model) createCardGameTabsModel(selectedGame *model.CardGame) (CardGameTabsModel, error) {
 	cardGameTabs := NewCardGameTabsModel(selectedGame, m.configManager)
+	cardGameTabs.collectionService = m.collectionService
+	cardGameTabs.user = m.user
 	cards, err := m.cardService.GetCardsByGameID(selectedGame.ID)
 	if err != nil {
 		return cardGameTabs, fmt.Errorf("failed to load cards: %w", err)
@@ -312,6 +314,12 @@ func (m *Model) createCardGameTabsModel(selectedGame *model.CardGame) (CardGameT
 		}
 		cardGameTabs.userCollections = collections
 		cardGameTabs.filteredCollection = collections
+		quantities, err := m.collectionService.GetAllQuantitiesForGame(m.user.ID, selectedGame.ID)
+		if err != nil {
+			slog.Error("failed to load quantities for game", "user_id", m.user.ID, "game_id", selectedGame.ID, "error", err)
+		} else {
+			cardGameTabs.dbQuantities = quantities
+		}
 	}
 	return cardGameTabs, nil
 }
