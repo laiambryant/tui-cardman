@@ -487,14 +487,20 @@ func collectionToRow(c model.UserCollection) table.Row {
 
 // handleIncrementQuantity increments the quantity of the selected card
 func (m CardGameTabsModel) handleIncrementQuantity() (CardGameTabsModel, tea.Cmd) {
-	if len(m.filteredCards) == 0 {
-		return m, nil
-	}
 	selectedRow := m.cardTable.Cursor()
-	if selectedRow >= len(m.filteredCards) {
-		return m, nil
+	showAll := m.searchInput.Value() == ""
+	var card model.Card
+	if showAll {
+		if selectedRow >= len(m.cards) {
+			return m, nil
+		}
+		card = m.cards[selectedRow]
+	} else {
+		if selectedRow >= len(m.filteredCards) {
+			return m, nil
+		}
+		card = m.filteredCards[selectedRow]
 	}
-	card := m.filteredCards[selectedRow]
 	if m.tempQuantityChanges == nil {
 		m.tempQuantityChanges = make(map[int64]int)
 	}
@@ -505,14 +511,20 @@ func (m CardGameTabsModel) handleIncrementQuantity() (CardGameTabsModel, tea.Cmd
 
 // handleDecrementQuantity decrements the quantity of the selected card
 func (m CardGameTabsModel) handleDecrementQuantity() (CardGameTabsModel, tea.Cmd) {
-	if len(m.filteredCards) == 0 {
-		return m, nil
-	}
 	selectedRow := m.cardTable.Cursor()
-	if selectedRow >= len(m.filteredCards) {
-		return m, nil
+	showAll := m.searchInput.Value() == ""
+	var card model.Card
+	if showAll {
+		if selectedRow >= len(m.cards) {
+			return m, nil
+		}
+		card = m.cards[selectedRow]
+	} else {
+		if selectedRow >= len(m.filteredCards) {
+			return m, nil
+		}
+		card = m.filteredCards[selectedRow]
 	}
-	card := m.filteredCards[selectedRow]
 	dbQty := m.dbQuantities[card.ID]
 	tempDelta := m.tempQuantityChanges[card.ID]
 	totalQty := dbQty + tempDelta

@@ -127,9 +127,10 @@ func (s *UserCollectionServiceImpl) scanUserCollections(rows *sql.Rows) ([]model
 		var card model.Card
 		var game model.CardGame
 		var acquiredDate, gameCreatedAt sql.NullTime
+		var notes sql.NullString
 		err := rows.Scan(
 			&collection.ID, &collection.UserID, &collection.CardID, &collection.Quantity, &collection.Condition,
-			&acquiredDate, &collection.Notes, &collection.CreatedAt, &collection.UpdatedAt,
+			&acquiredDate, &notes, &collection.CreatedAt, &collection.UpdatedAt,
 			&card.ID, &card.CardGameID, &card.Name, &card.Rarity,
 			&card.IsPlaceholder, &card.CreatedAt,
 			&game.ID, &game.Name, &gameCreatedAt,
@@ -141,6 +142,9 @@ func (s *UserCollectionServiceImpl) scanUserCollections(rows *sql.Rows) ([]model
 		// Handle nullable dates
 		if acquiredDate.Valid {
 			collection.AcquiredDate = acquiredDate.Time
+		}
+		if notes.Valid {
+			collection.Notes = notes.String
 		}
 		if gameCreatedAt.Valid {
 			game.CreatedAt = gameCreatedAt.Time
