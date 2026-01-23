@@ -27,6 +27,7 @@ type Card struct {
 	Artist        string    `json:"artist"`
 	UpdatedAt     time.Time `json:"updated_at"`
 	CardGame      *CardGame `json:"card_game,omitempty"`
+	Set           *Set      `json:"set,omitempty"`
 }
 
 // UserCollection represents a user's card collection entry
@@ -50,4 +51,16 @@ type ButtonConfiguration struct {
 	CreatedAt     time.Time  `json:"created_at"`
 	UpdatedAt     time.Time  `json:"updated_at"`
 	User          *auth.User `json:"user,omitempty"`
+}
+
+// Set represents a set of cards
+type Set struct {
+	ID           int64     `json:"id"`
+	APIID        string    `json:"api_id"`
+	Code         string    `json:"code"`
+	Name         string    `json:"name"`
+	PrintedTotal int       `json:"printed_total"`
+	Total        int       `json:"total"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
 }

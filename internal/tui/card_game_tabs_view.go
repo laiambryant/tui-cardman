@@ -104,6 +104,7 @@ func (m CardGameTabsModel) Update(msg tea.Msg) (CardGameTabsModel, tea.Cmd) {
 		// Tab navigation
 		if action == "nav_next_tab" {
 			m.currentTab = (m.currentTab + 1) % 3
+			m = m.updateTableForTab()
 			if m.currentTab == TabCardSearch || m.currentTab == TabUserSearch {
 				m.searchInput.Focus()
 			} else {
@@ -118,6 +119,7 @@ func (m CardGameTabsModel) Update(msg tea.Msg) (CardGameTabsModel, tea.Cmd) {
 			} else {
 				m.currentTab--
 			}
+			m = m.updateTableForTab()
 			if m.currentTab == TabCardSearch || m.currentTab == TabUserSearch {
 				m.searchInput.Focus()
 			} else {
@@ -128,7 +130,7 @@ func (m CardGameTabsModel) Update(msg tea.Msg) (CardGameTabsModel, tea.Cmd) {
 
 		// Up / down navigation (keep vim keys as fallbacks)
 		if action == "nav_up" || s == "k" {
-			if m.currentTab == TabCardSearch {
+			if m.currentTab == TabCardSearch || m.currentTab == TabUserSearch {
 				m.cardTable, _ = m.cardTable.Update(msg)
 				return m, nil
 			}
@@ -139,15 +141,13 @@ func (m CardGameTabsModel) Update(msg tea.Msg) (CardGameTabsModel, tea.Cmd) {
 		}
 
 		if action == "nav_down" || s == "j" {
-			if m.currentTab == TabCardSearch {
+			if m.currentTab == TabCardSearch || m.currentTab == TabUserSearch {
 				m.cardTable, _ = m.cardTable.Update(msg)
 				return m, nil
 			}
 			maxItems := 0
 			switch m.currentTab {
 			case TabCollection:
-				maxItems = len(m.filteredCollection)
-			case TabUserSearch:
 				maxItems = len(m.filteredCollection)
 			}
 			if m.cursor < maxItems-1 {
@@ -182,10 +182,17 @@ func (m CardGameTabsModel) Update(msg tea.Msg) (CardGameTabsModel, tea.Cmd) {
 			m.updateCardTable()
 		case TabUserSearch:
 			m.filteredCollection = m.filterUserCollection(m.searchInput.Value())
+			// Also update table rows for user search
+			var rows []table.Row
+			for _, collection := range m.filteredCollection {
+				rows = append(rows, collectionToRow(collection))
+			}
+			m.cardTable.SetRows(rows)
 		}
 
 		// Reset cursor when search changes
 		m.cursor = 0
+		m.cardTable.SetCursor(0)
 		return m, cmd
 	}
 
@@ -281,6 +288,39 @@ func (m CardGameTabsModel) View() string {
 		return content + "\n\n" + m.modal.View()
 	}
 	return content
+}
+
+func (m CardGameTabsModel) updateTableForTab() CardGameTabsModel {
+	// Clear rows first to avoid panic during column update if dimensions mismatch
+	m.cardTable.SetRows([]table.Row{})
+
+	if m.currentTab == TabCardSearch {
+		m.cardTable.SetColumns([]table.Column{
+			{Title: "Name", Width: 25},
+			{Title: "Expansion", Width: 15},
+			{Title: "Rarity", Width: 12},
+			{Title: "Card #", Width: 8},
+			{Title: "Quantity", Width: 8},
+		})
+		// Re-populate rows for Card Search
+		m.updateCardTable()
+	} else if m.currentTab == TabUserSearch {
+		m.cardTable.SetColumns([]table.Column{
+			{Title: "Name", Width: 25},
+			{Title: "Expansion", Width: 15},
+			{Title: "Rarity", Width: 12},
+			{Title: "Amount", Width: 8},
+		})
+		// Re-populate rows for User Search
+		var rows []table.Row
+		for _, collection := range m.filteredCollection {
+			rows = append(rows, collectionToRow(collection))
+		}
+		m.cardTable.SetRows(rows)
+	}
+	// Reset cursor to 0 when switching tabs
+	m.cardTable.SetCursor(0)
+	return m
 }
 
 func (m CardGameTabsModel) renderCollectionTab() string {
@@ -449,7 +489,9 @@ func (m *CardGameTabsModel) updateCardTable() {
 // cardToRow converts a Card into a table.Row with appropriate truncation and quantity.
 func cardToRow(card model.Card, dbQty, tempDelta int) table.Row {
 	setDisplay := ""
-	if card.SetID > 0 {
+	if card.Set != nil {
+		setDisplay = card.Set.Name
+	} else if card.SetID > 0 {
 		setDisplay = fmt.Sprintf("Set#%d", card.SetID)
 	}
 	totalQty := dbQty + tempDelta
@@ -467,21 +509,23 @@ func collectionToRow(c model.UserCollection) table.Row {
 	name := "Unknown Card"
 	setDisplay := ""
 	rarity := ""
-	cardNum := ""
+	qty := fmt.Sprintf("%d", c.Quantity)
+
 	if c.Card != nil {
 		name = c.Card.Name
-		if c.Card.SetID > 0 {
+		if c.Card.Set != nil {
+			setDisplay = c.Card.Set.Name
+		} else if c.Card.SetID > 0 {
 			setDisplay = fmt.Sprintf("Set#%d", c.Card.SetID)
 		}
 		rarity = c.Card.Rarity
-		cardNum = c.Card.Number
 	}
-	nameWithQty := FormatNameWithQty(name, c.Quantity)
+
 	return table.Row{
-		Truncate(nameWithQty, 25),
+		Truncate(name, 25),
 		Truncate(setDisplay, 15),
 		Truncate(rarity, 12),
-		Truncate(cardNum, 8),
+		qty,
 	}
 }
 
@@ -597,5 +641,14 @@ func (m CardGameTabsModel) performSaveCollection() (CardGameTabsModel, tea.Cmd) 
 	}
 	m.tempQuantityChanges = make(map[int64]int)
 	m.updateCardTable()
+
+	if m.selectedGame != nil {
+		collections, err := m.collectionService.GetUserCollectionByGameID(m.user.ID, m.selectedGame.ID)
+		if err == nil {
+			m.userCollections = collections
+			m.filteredCollection = m.filterUserCollection(m.searchInput.Value())
+		}
+	}
+
 	return m, nil
 }

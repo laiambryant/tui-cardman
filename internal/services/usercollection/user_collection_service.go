@@ -38,10 +38,12 @@ const (
 		       uc.acquired_date, uc.notes, uc.created_at, uc.updated_at,
 		       c.id, c.card_game_id, c.name, c.rarity, 
 					  c.is_placeholder, c.created_at,
-		       cg.id, cg.name, cg.created_at
+		       cg.id, cg.name, cg.created_at,
+		       s.id, s.name, s.code
 		FROM user_collections uc
 		JOIN cards c ON uc.card_id = c.id
 		JOIN card_games cg ON c.card_game_id = cg.id
+		LEFT JOIN sets s ON c.set_id = s.id
 		WHERE uc.user_id = ?
 		ORDER BY uc.created_at DESC
 	`
@@ -51,10 +53,12 @@ const (
 		       uc.acquired_date, uc.notes, uc.created_at, uc.updated_at,
 		       c.id, c.card_game_id, c.name, c.rarity, 
 		       c.is_placeholder, c.created_at,
-		       cg.id, cg.name, cg.created_at
+		       cg.id, cg.name, cg.created_at,
+		       s.id, s.name, s.code
 		FROM user_collections uc
 		JOIN cards c ON uc.card_id = c.id
 		JOIN card_games cg ON c.card_game_id = cg.id
+		LEFT JOIN sets s ON c.set_id = s.id
 		WHERE uc.user_id = ? AND c.card_game_id = ?
 		ORDER BY uc.created_at DESC
 	`
@@ -126,14 +130,21 @@ func (s *UserCollectionServiceImpl) scanUserCollections(rows *sql.Rows) ([]model
 		var collection model.UserCollection
 		var card model.Card
 		var game model.CardGame
+		var set model.Set // New set struct
+
 		var acquiredDate, gameCreatedAt sql.NullTime
 		var notes sql.NullString
+		var setID sql.NullInt64 // New nullable set fields
+		var setName sql.NullString
+		var setCode sql.NullString
+
 		err := rows.Scan(
 			&collection.ID, &collection.UserID, &collection.CardID, &collection.Quantity, &collection.Condition,
 			&acquiredDate, &notes, &collection.CreatedAt, &collection.UpdatedAt,
 			&card.ID, &card.CardGameID, &card.Name, &card.Rarity,
 			&card.IsPlaceholder, &card.CreatedAt,
 			&game.ID, &game.Name, &gameCreatedAt,
+			&setID, &setName, &setCode, // Scan new fields
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan user collection: %w", err)
@@ -148,6 +159,15 @@ func (s *UserCollectionServiceImpl) scanUserCollections(rows *sql.Rows) ([]model
 		}
 		if gameCreatedAt.Valid {
 			game.CreatedAt = gameCreatedAt.Time
+		}
+
+		// Handle set
+		if setID.Valid {
+			set.ID = setID.Int64
+			set.Name = setName.String
+			set.Code = setCode.String
+			card.Set = &set
+			card.SetID = set.ID
 		}
 
 		// Attach related data

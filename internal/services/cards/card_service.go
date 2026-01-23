@@ -33,9 +33,11 @@ const (
 	selectCardsByGameIDQuery = `
 		SELECT c.id, c.card_game_id, c.name, c.rarity, c.is_placeholder, c.created_at,
 		       c.api_id, c.set_id, c.number, c.artist, c.updated_at,
-		       cg.id, cg.name, cg.created_at
+		       cg.id, cg.name, cg.created_at,
+		       s.id, s.name, s.code
 		FROM cards c
 		JOIN card_games cg ON c.card_game_id = cg.id
+		LEFT JOIN sets s ON c.set_id = s.id
 		WHERE c.card_game_id = ?
 		ORDER BY c.name ASC
 	`
@@ -44,9 +46,11 @@ const (
 		SELECT c.id, c.card_game_id, c.name, c.rarity, 
 			c.is_placeholder, c.created_at,
 			c.api_id, c.set_id, c.number, c.artist, c.updated_at,
-			cg.id, cg.name, cg.created_at
+			cg.id, cg.name, cg.created_at,
+			s.id, s.name, s.code
 		FROM cards c
 		JOIN card_games cg ON c.card_game_id = cg.id
+		LEFT JOIN sets s ON c.set_id = s.id
 		ORDER BY cg.name ASC, c.name ASC
 	`
 
@@ -100,14 +104,22 @@ func (s *CardServiceImpl) scanCards(rows *sql.Rows) ([]model.Card, error) {
 	for rows.Next() {
 		var card model.Card
 		var game model.CardGame
+		var set model.Set // New set struct
+
 		var gameCreatedAt, updatedAt sql.NullTime
 		var apiID, number, artist sql.NullString
 		var setID sql.NullInt64
+
+		// Set fields
+		var sID sql.NullInt64
+		var sName, sCode sql.NullString
+
 		err := rows.Scan(
 			&card.ID, &card.CardGameID, &card.Name, &card.Rarity,
 			&card.IsPlaceholder, &card.CreatedAt,
 			&apiID, &setID, &number, &artist, &updatedAt,
 			&game.ID, &game.Name, &gameCreatedAt,
+			&sID, &sName, &sCode, // Scan new set fields
 		)
 		if err != nil {
 			slog.Error("failed to scan card", "error", err)
@@ -129,6 +141,19 @@ func (s *CardServiceImpl) scanCards(rows *sql.Rows) ([]model.Card, error) {
 		if setID.Valid {
 			card.SetID = setID.Int64
 		}
+
+		// Handle Set
+		if sID.Valid {
+			set.ID = sID.Int64
+			set.Name = sName.String
+			set.Code = sCode.String
+			card.Set = &set
+			// Ensure SetID matches if it wasn't valid (though it should be if join worked)
+			if card.SetID == 0 {
+				card.SetID = set.ID
+			}
+		}
+
 		// Attach card game data
 		card.CardGame = &game
 		cards = append(cards, card)
