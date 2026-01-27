@@ -30,7 +30,7 @@ func (m Model) mainView() string {
 
 func (m Model) renderMainMenuTabs() string {
 	tabStyle := blurredStyle.Copy().Padding(0, 2)
-	activeTabStyle := focusedStyle.Copy().Padding(0, 2).Bold(true)
+	activeTabStyle := titleStyle.Copy().Padding(0, 2)
 	var tabs []string
 	if m.mainMenuTab == 0 {
 		tabs = []string{
@@ -48,29 +48,16 @@ func (m Model) renderMainMenuTabs() string {
 
 func (m Model) renderCardGamesTab() string {
 	var b strings.Builder
-	b.WriteString(focusedStyle.Render("Select a card game:") + "\n\n")
+	b.WriteString(titleStyle.Render("Select a card game:") + "\n\n")
 	if len(m.cardGames) == 0 {
 		b.WriteString(errorStyle.Render("No card games found. Please run migrations.") + "\n")
 	} else {
-		selectedBoxStyle := lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("205")).
-			Padding(1, 2).
-			Width(40).
-			Align(lipgloss.Center).
-			Bold(true)
-		unselectedBoxStyle := lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("240")).
-			Padding(1, 2).
-			Width(40).
-			Align(lipgloss.Center)
 		for i, game := range m.cardGames {
 			var box string
 			if m.cursor == i {
-				box = selectedBoxStyle.Render("🎴 " + game.Name)
+				box = m.styleManager.GetBoxStyle(true).Render("🎴 " + game.Name)
 			} else {
-				box = unselectedBoxStyle.Render("🎴 " + game.Name)
+				box = m.styleManager.GetBoxStyle(false).Render("🎴 " + game.Name)
 			}
 			b.WriteString(box + "\n")
 		}
@@ -80,14 +67,8 @@ func (m Model) renderCardGamesTab() string {
 
 func (m Model) renderImportTab() string {
 	var b strings.Builder
-	b.WriteString(focusedStyle.Render("Switch to Import tab to manage card sets") + "\n\n")
-	infoBoxStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("240")).
-		Padding(1, 2).
-		Width(40).
-		Align(lipgloss.Center)
-	b.WriteString(infoBoxStyle.Render("Press Enter to open Import Manager") + "\n")
+	b.WriteString(titleStyle.Render("Switch to Import tab to manage card sets") + "\n\n")
+	b.WriteString(m.styleManager.GetPanelStyle().Render("Press Enter to open Import Manager") + "\n")
 	return b.String()
 }
 

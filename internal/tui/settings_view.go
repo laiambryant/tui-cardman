@@ -8,7 +8,6 @@ import (
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/laiambryant/tui-cardman/internal/runtimecfg"
 )
 
@@ -273,19 +272,19 @@ func (m SettingsModel) View() string {
 	if m.hasChanges {
 		title += " *"
 	}
-	b.WriteString(settingsTitleStyle.Render(title) + "\n\n")
+	b.WriteString(m.styleManager.GetTitleStyle().Render(title) + "\n\n")
 	tabs := []string{"Keybindings", "UI"}
 	var renderedTabs []string
 	for i, tab := range tabs {
 		if settingsSection(i) == m.section {
-			renderedTabs = append(renderedTabs, settingsFocusStyle.Render("[ "+tab+" ]"))
+			renderedTabs = append(renderedTabs, m.styleManager.GetTitleStyle().Render("[ "+tab+" ]"))
 		} else {
-			renderedTabs = append(renderedTabs, settingsBlurStyle.Render("  "+tab+"  "))
+			renderedTabs = append(renderedTabs, m.styleManager.GetBlurredStyle().Render("  "+tab+"  "))
 		}
 	}
 	b.WriteString(strings.Join(renderedTabs, " ") + "\n\n")
 	if m.errorMsg != "" {
-		b.WriteString(settingsErrorStyle.Render("⚠ "+m.errorMsg) + "\n\n")
+		b.WriteString(m.styleManager.GetErrorStyle().Render("⚠ "+m.errorMsg) + "\n\n")
 	}
 	switch m.section {
 	case sectionKeybindings:
@@ -351,12 +350,12 @@ func (m SettingsModel) renderKeybindingsSection() string {
 	var b strings.Builder
 
 	if m.editing {
-		b.WriteString(settingsFocusStyle.Render(fmt.Sprintf("Editing: %s", m.editingAction)) + "\n")
-		b.WriteString(settingsBlurStyle.Render("Press the key you want to bind...") + "\n")
+		b.WriteString(m.styleManager.GetTitleStyle().Render(fmt.Sprintf("Editing: %s", m.editingAction)) + "\n")
+		b.WriteString(m.styleManager.GetBlurredStyle().Render("Press the key you want to bind...") + "\n")
 		return b.String()
 	}
 	cfg := m.tempConfig
-	b.WriteString(settingsFocusStyle.Render("Action") + strings.Repeat(" ", 25) + settingsFocusStyle.Render("Key") + "\n")
+	b.WriteString(m.styleManager.GetTitleStyle().Render("Action") + strings.Repeat(" ", 25) + m.styleManager.GetTitleStyle().Render("Key") + "\n")
 	b.WriteString(strings.Repeat("─", 50) + "\n")
 	visibleStart := 0
 	visibleEnd := len(m.actions)
@@ -383,9 +382,9 @@ func (m SettingsModel) renderKeybindingsSection() string {
 			keyDisplay = "<unbound>"
 		}
 		if i == m.cursor {
-			b.WriteString(settingsFocusStyle.Render("> "+actionDisplay) + " " + settingsFocusStyle.Render(keyDisplay) + "\n")
+			b.WriteString(m.styleManager.GetTitleStyle().Render("> "+actionDisplay) + " " + m.styleManager.GetTitleStyle().Render(keyDisplay) + "\n")
 		} else {
-			b.WriteString(settingsBlurStyle.Render("  "+actionDisplay) + " " + m.styleManager.GetNoStyle().Render(keyDisplay) + "\n")
+			b.WriteString(m.styleManager.GetBlurredStyle().Render("  "+actionDisplay) + " " + m.styleManager.GetNoStyle().Render(keyDisplay) + "\n")
 		}
 	}
 	if len(m.actions) > maxVisible {
@@ -397,7 +396,7 @@ func (m SettingsModel) renderKeybindingsSection() string {
 func (m SettingsModel) renderUISection() string {
 	var b strings.Builder
 	cfg := m.tempConfig
-	b.WriteString(settingsFocusStyle.Render("UI Settings") + "\n\n")
+	b.WriteString(m.styleManager.GetTitleStyle().Render("UI Settings") + "\n\n")
 	themes := runtimecfg.GetColorSchemeNames()
 	bgStyles := []string{"none", "components", "full", "both"}
 	cursor := "→ "
@@ -422,7 +421,7 @@ func (m SettingsModel) renderUISection() string {
 	}
 	styleValue := cfg.UI.BackgroundStyle
 	if !cfg.UI.OpaqueBackground {
-		styleValue = settingsBlurStyle.Render(styleValue)
+		styleValue = m.styleManager.GetBlurredStyle().Render(styleValue)
 	}
 	b.WriteString(bgStyleDisplay + "Background Style: " + styleValue + "\n")
 	b.WriteString("\n")
@@ -470,10 +469,3 @@ func (m *SettingsModel) cancelChanges() {
 	m.tempConfig = copyConfig(m.originalConfig)
 	m.hasChanges = false
 }
-
-var (
-	settingsTitleStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("170"))
-	settingsFocusStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
-	settingsBlurStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-	settingsErrorStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
-)

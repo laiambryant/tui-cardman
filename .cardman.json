@@ -1,6 +1,8 @@
 {
   "keybindings": {
     "back": "q",
+    "decrement_quantity": "delete",
+    "increment_quantity": "+",
     "nav_down": "down",
     "nav_left": "left",
     "nav_next_tab": "tab",
@@ -9,6 +11,7 @@
     "nav_up": "up",
     "quit": "ctrl+c",
     "quit_alt": "esc",
+    "save": "ctrl+s",
     "search_clear": "ctrl+u",
     "search_focus": "/",
     "select": "enter",
@@ -21,6 +24,8 @@
   },
   "ui": {
     "compact_lists": false,
-    "color_scheme": "default"
+    "color_scheme": "light",
+    "opaque_background": false,
+    "background_style": "both"
   }
 }

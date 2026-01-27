@@ -91,7 +91,7 @@ func (m Model) loginView() string {
 	}
 	button := "[ Login ]"
 	if m.focusIndex == len(m.inputs) {
-		button = focusedStyle.Render("[ Login ]")
+		button = titleStyle.Render("[ Login ]")
 	}
 	b.WriteString(button + "\n\n")
 	// Build dynamic help string from config
@@ -122,7 +122,7 @@ func (m Model) loginView() string {
 	b.WriteString(helpStyle.Render("Don't have an account? Press Enter on the button below") + "\n")
 	registerBtn := "[ Register ]"
 	if m.focusIndex == len(m.inputs)+1 {
-		registerBtn = focusedStyle.Render("[ Register ]")
+		registerBtn = titleStyle.Render("[ Register ]")
 	}
 	b.WriteString(registerBtn + "\n")
 	return b.String()

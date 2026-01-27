@@ -8,19 +8,25 @@ import (
 
 var defaultStyleManager *StyleManager
 
+var (
+	focusedStyle lipgloss.Style
+	blurredStyle lipgloss.Style
+	noStyle      lipgloss.Style
+	helpStyle    lipgloss.Style
+	errorStyle   lipgloss.Style
+	titleStyle   lipgloss.Style
+)
+
 func init() {
 	scheme := runtimecfg.ColorSchemes["default"]
 	defaultStyleManager = NewStyleManager(scheme, false, "components")
+	focusedStyle = defaultStyleManager.GetFocusedStyle()
+	blurredStyle = defaultStyleManager.GetBlurredStyle()
+	noStyle = defaultStyleManager.GetNoStyle()
+	helpStyle = defaultStyleManager.GetHelpStyle()
+	errorStyle = defaultStyleManager.GetErrorStyle()
+	titleStyle = defaultStyleManager.GetTitleStyle()
 }
-
-var (
-	focusedStyle = func() lipgloss.Style { return defaultStyleManager.GetFocusedStyle() }()
-	blurredStyle = func() lipgloss.Style { return defaultStyleManager.GetBlurredStyle() }()
-	noStyle      = func() lipgloss.Style { return defaultStyleManager.GetNoStyle() }()
-	helpStyle    = func() lipgloss.Style { return defaultStyleManager.GetHelpStyle() }()
-	errorStyle   = func() lipgloss.Style { return defaultStyleManager.GetErrorStyle() }()
-	titleStyle   = func() lipgloss.Style { return defaultStyleManager.GetTitleStyle() }()
-)
 
 // StyleManager centralizes all TUI styling and applies themes
 type StyleManager struct {
@@ -85,6 +91,11 @@ func (sm *StyleManager) GetNoStyle() lipgloss.Style {
 	return sm.noStyle
 }
 
+// GetDisabledStyle returns the style for disabled elements
+func (sm *StyleManager) GetDisabledStyle() lipgloss.Style {
+	return lipgloss.NewStyle().Foreground(sm.scheme.Disabled).Strikethrough(true)
+}
+
 // GetBoxStyle returns a styled box with optional focus
 func (sm *StyleManager) GetBoxStyle(focused bool) lipgloss.Style {
 	borderColor := sm.scheme.Blurred
@@ -120,8 +131,8 @@ func (sm *StyleManager) GetTableStyles() table.Styles {
 		BorderBottom(true).
 		Bold(false)
 	s.Selected = s.Selected.
-		Foreground(lipgloss.Color("229")).
-		Background(lipgloss.Color("57")).
+		Foreground(sm.scheme.TableSelectedForeground).
+		Background(sm.scheme.TableSelectedBackground).
 		Bold(false)
 	return s
 }

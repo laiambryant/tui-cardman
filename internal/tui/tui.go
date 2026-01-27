@@ -351,7 +351,7 @@ func (a *dbAdapter) UpdateLastLogin(userID int64) error {
 
 // createCardGameTabsModel creates a card game tabs model with loaded data
 func (m *Model) createCardGameTabsModel(selectedGame *model.CardGame) (CardGameTabsModel, error) {
-	cardGameTabs := NewCardGameTabsModel(selectedGame, m.configManager)
+	cardGameTabs := NewCardGameTabsModel(selectedGame, m.configManager, m.styleManager)
 	cardGameTabs.collectionService = m.collectionService
 	cardGameTabs.user = m.user
 	cards, err := m.cardService.GetCardsByGameID(selectedGame.ID)
@@ -378,5 +378,5 @@ func (m *Model) createCardGameTabsModel(selectedGame *model.CardGame) (CardGameT
 }
 
 func (m *Model) createImportModel() (ImportModel, error) {
-	return NewImportModel(m.db, m.configManager, m.cardGames)
+	return NewImportModel(m.db, m.configManager, m.styleManager, m.cardGames)
 }

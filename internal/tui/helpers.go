@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/bubbles/table"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/laiambryant/tui-cardman/internal/runtimecfg"
 )
 
@@ -55,25 +54,13 @@ func FormatNameWithQty(name string, qty int) string {
 }
 
 // NewStyledTable creates a table with consistent styling
-func NewStyledTable(columns []table.Column, height int, focused bool) table.Model {
+func NewStyledTable(columns []table.Column, height int, focused bool, styleManager *StyleManager) table.Model {
 	t := table.New(
 		table.WithColumns(columns),
 		table.WithHeight(height),
 		table.WithFocused(focused),
 	)
-
-	// Apply consistent styling
-	s := table.DefaultStyles()
-	s.Header = s.Header.
-		BorderStyle(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color("240")).
-		BorderBottom(true).
-		Bold(false)
-	s.Selected = s.Selected.
-		Foreground(lipgloss.Color("229")).
-		Background(lipgloss.Color("57")).
-		Bold(false)
+	s := styleManager.GetTableStyles()
 	t.SetStyles(s)
-
 	return t
 }

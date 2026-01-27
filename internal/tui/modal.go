@@ -102,17 +102,21 @@ func (m ModalModel) renderModalBox() string {
 	messageStyle := m.styleManager.GetBlurredStyle().Align(lipgloss.Center)
 	buttonNoStyle := m.styleManager.GetBlurredStyle().
 		Border(lipgloss.RoundedBorder()).
+		BorderForeground(m.styleManager.scheme.Blurred).
 		Padding(0, 2)
 	buttonYesStyle := m.styleManager.GetBlurredStyle().
 		Border(lipgloss.RoundedBorder()).
+		BorderForeground(m.styleManager.scheme.Blurred).
 		Padding(0, 2)
 	buttonNoFocusedStyle := m.styleManager.GetFocusedStyle().
 		Bold(true).
 		Border(lipgloss.RoundedBorder()).
+		BorderForeground(m.styleManager.scheme.Focused).
 		Padding(0, 2)
 	buttonYesFocusedStyle := m.styleManager.GetFocusedStyle().
 		Bold(true).
 		Border(lipgloss.RoundedBorder()).
+		BorderForeground(m.styleManager.scheme.Focused).
 		Padding(0, 2)
 	b.WriteString(titleStyle.Render(m.title) + "\n\n")
 	b.WriteString(messageStyle.Render(m.message) + "\n\n")

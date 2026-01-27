@@ -59,7 +59,7 @@ func (m Model) localUserSetupView() string {
 	// Submit button
 	submitButton := "[ Create Profile ]"
 	if m.focusIndex == len(m.inputs) {
-		submitButton = focusedStyle.Render("[ Create Profile ]")
+		submitButton = titleStyle.Render("[ Create Profile ]")
 	} else {
 		submitButton = blurredStyle.Render(submitButton)
 	}

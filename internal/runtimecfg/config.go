@@ -24,43 +24,55 @@ type UIConfig struct {
 
 // ColorScheme defines a color palette for the TUI
 type ColorScheme struct {
-	Name       string
-	Focused    lipgloss.Color
-	Blurred    lipgloss.Color
-	Error      lipgloss.Color
-	Title      lipgloss.Color
-	Background lipgloss.Color
-	Foreground lipgloss.Color
+	Name                    string
+	Focused                 lipgloss.Color
+	Blurred                 lipgloss.Color
+	Error                   lipgloss.Color
+	Title                   lipgloss.Color
+	Background              lipgloss.Color
+	Foreground              lipgloss.Color
+	TableSelectedForeground lipgloss.Color
+	TableSelectedBackground lipgloss.Color
+	Disabled                lipgloss.Color
 }
 
 // ColorSchemes contains predefined color schemes
 var ColorSchemes = map[string]ColorScheme{
 	"default": {
-		Name:       "Default",
-		Focused:    lipgloss.Color("205"),
-		Blurred:    lipgloss.Color("240"),
-		Error:      lipgloss.Color("9"),
-		Title:      lipgloss.Color("170"),
-		Background: lipgloss.Color(""),
-		Foreground: lipgloss.Color(""),
+		Name:                    "Default",
+		Focused:                 lipgloss.Color("205"),
+		Blurred:                 lipgloss.Color("240"),
+		Error:                   lipgloss.Color("9"),
+		Title:                   lipgloss.Color("170"),
+		Background:              lipgloss.Color(""),
+		Foreground:              lipgloss.Color(""),
+		TableSelectedForeground: lipgloss.Color("229"),
+		TableSelectedBackground: lipgloss.Color("57"),
+		Disabled:                lipgloss.Color("240"),
 	},
 	"dark": {
-		Name:       "Dark",
-		Focused:    lipgloss.Color("15"),
-		Blurred:    lipgloss.Color("8"),
-		Error:      lipgloss.Color("1"),
-		Title:      lipgloss.Color("12"),
-		Background: lipgloss.Color("0"),
-		Foreground: lipgloss.Color("15"),
+		Name:                    "Dark",
+		Focused:                 lipgloss.Color("15"),
+		Blurred:                 lipgloss.Color("8"),
+		Error:                   lipgloss.Color("1"),
+		Title:                   lipgloss.Color("12"),
+		Background:              lipgloss.Color("0"),
+		Foreground:              lipgloss.Color("15"),
+		TableSelectedForeground: lipgloss.Color("15"),
+		TableSelectedBackground: lipgloss.Color("4"),
+		Disabled:                lipgloss.Color("8"),
 	},
 	"light": {
-		Name:       "Light",
-		Focused:    lipgloss.Color("4"),
-		Blurred:    lipgloss.Color("7"),
-		Error:      lipgloss.Color("1"),
-		Title:      lipgloss.Color("2"),
-		Background: lipgloss.Color("15"),
-		Foreground: lipgloss.Color("0"),
+		Name:                    "Light",
+		Focused:                 lipgloss.Color("4"),
+		Blurred:                 lipgloss.Color("7"),
+		Error:                   lipgloss.Color("1"),
+		Title:                   lipgloss.Color("2"),
+		Background:              lipgloss.Color("15"),
+		Foreground:              lipgloss.Color("0"),
+		TableSelectedForeground: lipgloss.Color("0"),
+		TableSelectedBackground: lipgloss.Color("6"),
+		Disabled:                lipgloss.Color("7"),
 	},
 }
 

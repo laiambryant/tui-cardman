@@ -35,6 +35,7 @@ type CardGameTabsModel struct {
 	cursor              int
 	cardTable           table.Model
 	configManager       *runtimecfg.Manager
+	styleManager        *StyleManager
 	tempQuantityChanges map[int64]int
 	dbQuantities        map[int64]int
 	collectionService   usercollection.UserCollectionService
@@ -43,7 +44,7 @@ type CardGameTabsModel struct {
 }
 
 // NewCardGameTabsModel creates a new card game tabs model
-func NewCardGameTabsModel(selectedGame *model.CardGame, cfg *runtimecfg.Manager) CardGameTabsModel {
+func NewCardGameTabsModel(selectedGame *model.CardGame, cfg *runtimecfg.Manager, styleManager *StyleManager) CardGameTabsModel {
 	searchInput := textinput.New()
 	searchInput.Placeholder = "Search cards..."
 	searchInput.Width = 30
@@ -57,7 +58,7 @@ func NewCardGameTabsModel(selectedGame *model.CardGame, cfg *runtimecfg.Manager)
 		{Title: "Quantity", Width: 8},
 	}
 
-	cardTable := NewStyledTable(columns, 10, true)
+	cardTable := NewStyledTable(columns, 10, true, styleManager)
 
 	return CardGameTabsModel{
 		selectedGame:        selectedGame,
@@ -66,6 +67,7 @@ func NewCardGameTabsModel(selectedGame *model.CardGame, cfg *runtimecfg.Manager)
 		cursor:              0,
 		cardTable:           cardTable,
 		configManager:       cfg,
+		styleManager:        styleManager,
 		tempQuantityChanges: make(map[int64]int),
 		dbQuantities:        make(map[int64]int),
 	}
@@ -142,7 +144,6 @@ func (m CardGameTabsModel) Update(msg tea.Msg) (CardGameTabsModel, tea.Cmd) {
 			}
 			return m, nil
 		}
-
 		if action == "nav_down" || s == "j" {
 			if m.currentTab == TabCardSearch || m.currentTab == TabUserSearch {
 				m.cardTable, _ = m.cardTable.Update(msg)
@@ -158,7 +159,6 @@ func (m CardGameTabsModel) Update(msg tea.Msg) (CardGameTabsModel, tea.Cmd) {
 			}
 			return m, nil
 		}
-
 		// Quantity management (only in Card Search tab)
 		if m.currentTab == TabCardSearch {
 			if action == "increment_quantity" {
@@ -172,33 +172,39 @@ func (m CardGameTabsModel) Update(msg tea.Msg) (CardGameTabsModel, tea.Cmd) {
 			}
 		}
 	}
-
-	// Update search input if in search tabs
+	// Update search input if in search tabs (but not for navigation keys)
 	if m.currentTab == TabCardSearch || m.currentTab == TabUserSearch {
-		var cmd tea.Cmd
-		m.searchInput, cmd = m.searchInput.Update(msg)
-
-		// Filter results based on search
-		switch m.currentTab {
-		case TabCardSearch:
-			m.filteredCards = m.filterCards(m.searchInput.Value())
-			m.updateCardTable()
-		case TabUserSearch:
-			m.filteredCollection = m.filterUserCollection(m.searchInput.Value())
-			// Also update table rows for user search
-			var rows []table.Row
-			for _, collection := range m.filteredCollection {
-				rows = append(rows, collectionToRow(collection))
+		if keyMsg, ok := msg.(tea.KeyMsg); ok {
+			s := keyMsg.String()
+			action := ""
+			if m.configManager != nil {
+				action = m.configManager.MatchAction(s)
 			}
-			m.cardTable.SetRows(rows)
+			// Don't pass navigation keys to search input
+			if action != "nav_up" && action != "nav_down" && s != "k" && s != "j" {
+				var cmd tea.Cmd
+				m.searchInput, cmd = m.searchInput.Update(msg)
+				// Filter results based on search
+				switch m.currentTab {
+				case TabCardSearch:
+					m.filteredCards = m.filterCards(m.searchInput.Value())
+					m.updateCardTable()
+				case TabUserSearch:
+					m.filteredCollection = m.filterUserCollection(m.searchInput.Value())
+					// Also update table rows for user search
+					var rows []table.Row
+					for _, collection := range m.filteredCollection {
+						rows = append(rows, collectionToRow(collection))
+					}
+					m.cardTable.SetRows(rows)
+				}
+				// Reset cursor when search changes
+				m.cursor = 0
+				m.cardTable.SetCursor(0)
+				return m, cmd
+			}
 		}
-
-		// Reset cursor when search changes
-		m.cursor = 0
-		m.cardTable.SetCursor(0)
-		return m, cmd
 	}
-
 	return m, nil
 }
 
@@ -216,7 +222,7 @@ func (m CardGameTabsModel) View() string {
 
 	for i, tab := range tabs {
 		if Tab(i) == m.currentTab {
-			tabStyles = append(tabStyles, focusedStyle.Render("[ "+tab+" ]"))
+			tabStyles = append(tabStyles, titleStyle.Render("[ "+tab+" ]"))
 		} else {
 			tabStyles = append(tabStyles, blurredStyle.Render("  "+tab+"  "))
 		}
@@ -295,9 +301,7 @@ func (m CardGameTabsModel) View() string {
 }
 
 func (m CardGameTabsModel) updateTableForTab() CardGameTabsModel {
-	// Clear rows first to avoid panic during column update if dimensions mismatch
 	m.cardTable.SetRows([]table.Row{})
-
 	if m.currentTab == TabCardSearch {
 		m.cardTable.SetColumns([]table.Column{
 			{Title: "Name", Width: 25},
@@ -306,7 +310,8 @@ func (m CardGameTabsModel) updateTableForTab() CardGameTabsModel {
 			{Title: "Card #", Width: 8},
 			{Title: "Quantity", Width: 8},
 		})
-		// Re-populate rows for Card Search
+		m.cardTable.SetStyles(m.styleManager.GetTableStyles())
+		m.cardTable.Focus()
 		m.updateCardTable()
 	} else if m.currentTab == TabUserSearch {
 		m.cardTable.SetColumns([]table.Column{
@@ -315,14 +320,14 @@ func (m CardGameTabsModel) updateTableForTab() CardGameTabsModel {
 			{Title: "Rarity", Width: 12},
 			{Title: "Amount", Width: 8},
 		})
-		// Re-populate rows for User Search
+		m.cardTable.SetStyles(m.styleManager.GetTableStyles())
+		m.cardTable.Focus()
 		var rows []table.Row
 		for _, collection := range m.filteredCollection {
 			rows = append(rows, collectionToRow(collection))
 		}
 		m.cardTable.SetRows(rows)
 	}
-	// Reset cursor to 0 when switching tabs
 	m.cardTable.SetCursor(0)
 	return m
 }
@@ -330,40 +335,33 @@ func (m CardGameTabsModel) updateTableForTab() CardGameTabsModel {
 func (m CardGameTabsModel) renderCollectionTab() string {
 	var b strings.Builder
 
-	b.WriteString(focusedStyle.Render("Your Collection Summary") + "\n\n")
+	b.WriteString(titleStyle.Render("Your Collection Summary") + "\n\n")
 
 	if len(m.filteredCollection) == 0 {
 		b.WriteString(blurredStyle.Render("No cards in your collection yet.") + "\n")
 		b.WriteString(blurredStyle.Render("Use Card Search to discover cards to add!") + "\n")
 	} else {
-		// Summary stats
 		totalCards := 0
 		for _, collection := range m.filteredCollection {
 			totalCards += collection.Quantity
 		}
-
 		b.WriteString(blurredStyle.Render("Total unique cards: ") +
-			focusedStyle.Render(fmt.Sprintf("%d", len(m.filteredCollection))) + "\n")
+			titleStyle.Render(fmt.Sprintf("%d", len(m.filteredCollection))) + "\n")
 		b.WriteString(blurredStyle.Render("Total cards: ") +
-			focusedStyle.Render(fmt.Sprintf("%d", totalCards)) + "\n\n")
-
-		// Collection list
-		b.WriteString(focusedStyle.Render("Recent additions:") + "\n")
+			titleStyle.Render(fmt.Sprintf("%d", totalCards)) + "\n\n")
+		b.WriteString(titleStyle.Render("Recent additions:") + "\n")
 		for i, collection := range m.filteredCollection {
-			if i >= 10 { // Show only first 10
+			if i >= 10 {
 				break
 			}
-
 			style := blurredStyle
 			if i == m.cursor {
-				style = focusedStyle
+				style = titleStyle
 			}
-
 			cardName := "Unknown Card"
 			if collection.Card != nil {
 				cardName = collection.Card.Name
 			}
-
 			line := style.Render(cardName + " x" + fmt.Sprintf("%d", collection.Quantity))
 			if collection.Condition != "" {
 				line += blurredStyle.Render(" (" + collection.Condition + ")")
@@ -377,12 +375,11 @@ func (m CardGameTabsModel) renderCollectionTab() string {
 
 func (m CardGameTabsModel) renderCardSearchTab() string {
 	var b strings.Builder
-	b.WriteString(focusedStyle.Render("Search All Cards") + "\n\n")
+	b.WriteString(titleStyle.Render("Search All Cards") + "\n\n")
 	b.WriteString(blurredStyle.Render("Search: ") + m.searchInput.View() + "\n\n")
 	showAll := m.searchInput.Value() == ""
 	var rows []table.Row
 	var any bool
-
 	if showAll {
 		for _, card := range m.cards {
 			dbQty := m.dbQuantities[card.ID]
@@ -398,7 +395,6 @@ func (m CardGameTabsModel) renderCardSearchTab() string {
 		}
 		any = len(rows) > 0
 	}
-
 	if !any {
 		if showAll {
 			b.WriteString(blurredStyle.Render("No cards available.") + "\n")
@@ -411,8 +407,7 @@ func (m CardGameTabsModel) renderCardSearchTab() string {
 		}
 		return b.String()
 	}
-
-	b.WriteString(focusedStyle.Render("Found cards:") + "\n")
+	b.WriteString(titleStyle.Render("Found cards:") + "\n")
 	m.cardTable.SetRows(rows)
 	b.WriteString(m.cardTable.View())
 	return b.String()
@@ -420,7 +415,7 @@ func (m CardGameTabsModel) renderCardSearchTab() string {
 
 func (m CardGameTabsModel) renderUserSearchTab() string {
 	var b strings.Builder
-	b.WriteString(focusedStyle.Render("Search Your Collection") + "\n\n")
+	b.WriteString(titleStyle.Render("Search Your Collection") + "\n\n")
 	b.WriteString(blurredStyle.Render("Search: ") + m.searchInput.View() + "\n\n")
 	if len(m.filteredCollection) == 0 {
 		if m.searchInput.Value() == "" {
@@ -429,7 +424,7 @@ func (m CardGameTabsModel) renderUserSearchTab() string {
 			b.WriteString(blurredStyle.Render("No cards in your collection match your search.") + "\n")
 		}
 	} else {
-		b.WriteString(focusedStyle.Render("Your matching cards:") + "\n")
+		b.WriteString(titleStyle.Render("Your matching cards:") + "\n")
 		var rows []table.Row
 		for _, collection := range m.filteredCollection {
 			rows = append(rows, collectionToRow(collection))
@@ -622,7 +617,7 @@ func (m CardGameTabsModel) handleSaveCollection() (CardGameTabsModel, tea.Cmd) {
 		func() tea.Cmd {
 			return nil
 		},
-		defaultStyleManager,
+		m.styleManager,
 	)
 	return m, nil
 }

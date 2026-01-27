@@ -45,6 +45,7 @@ type ImportModel struct {
 	actionCursor      int
 	focusOnActions    bool
 	configManager     *runtimecfg.Manager
+	styleManager      *StyleManager
 	db                *sql.DB
 	pokemonClient     *pokemontcg.Client
 	importService     *pokemontcg.ImportService
@@ -61,7 +62,7 @@ type ImportModel struct {
 	cardGames         []model.CardGame
 }
 
-func NewImportModel(db *sql.DB, cfg *runtimecfg.Manager, cardGames []model.CardGame) (ImportModel, error) {
+func NewImportModel(db *sql.DB, cfg *runtimecfg.Manager, styleManager *StyleManager, cardGames []model.CardGame) (ImportModel, error) {
 	searchInput := textinput.New()
 	searchInput.Placeholder = "Search sets..."
 	searchInput.Width = 30
@@ -85,6 +86,7 @@ func NewImportModel(db *sql.DB, cfg *runtimecfg.Manager, cardGames []model.CardG
 		actionCursor:     0,
 		focusOnActions:   false,
 		configManager:    cfg,
+		styleManager:     styleManager,
 		db:               db,
 		pokemonClient:    client,
 		importService:    importService,
