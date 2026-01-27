@@ -29,9 +29,11 @@ type fetchSetDetailsErrorMsg struct {
 	err error
 }
 
-type checkSetInCollectionSuccessMsg struct {
+type checkSetInDBMsg struct {
 	hasCollections bool
 }
+
+type checkSetNotInDBMsg struct{}
 
 type checkSetInCollectionErrorMsg struct {
 	err error

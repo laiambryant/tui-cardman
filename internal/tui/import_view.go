@@ -129,8 +129,13 @@ func (m ImportModel) Update(msg tea.Msg) (ImportModel, tea.Cmd) {
 	case fetchDatabaseSetsErrorMsg:
 		m.errorMsg = fmt.Sprintf("Failed to fetch database sets: %v", msg.err)
 		return m, nil
-	case checkSetInCollectionSuccessMsg:
+	case checkSetInDBMsg:
+		m.selectedSetInDB = true
 		m.selectedSetHasCol = msg.hasCollections
+		return m, nil
+	case checkSetNotInDBMsg:
+		m.selectedSetInDB = false
+		m.selectedSetHasCol = false
 		return m, nil
 	case checkSetInCollectionErrorMsg:
 		m.errorMsg = fmt.Sprintf("Failed to check set collections: %v", msg.err)
@@ -415,14 +420,12 @@ func (m ImportModel) checkSelectedSetInDB() tea.Cmd {
 		return nil
 	}
 	selectedSet := m.filteredSets[m.cursor]
-	m.selectedSetInDB = m.databaseSetIDs[selectedSet.ID]
-	if !m.selectedSetInDB {
-		m.selectedSetHasCol = false
-		return nil
-	}
 	return func() tea.Msg {
 		ctx := context.Background()
 		dbSetID, err := m.setService.GetSetIDByAPIID(ctx, selectedSet.ID)
+		if err == sql.ErrNoRows {
+			return checkSetNotInDBMsg{}
+		}
 		if err != nil {
 			return checkSetInCollectionErrorMsg{err}
 		}
@@ -430,7 +433,7 @@ func (m ImportModel) checkSelectedSetInDB() tea.Cmd {
 		if err != nil {
 			return checkSetInCollectionErrorMsg{err}
 		}
-		return checkSetInCollectionSuccessMsg{hasCollections}
+		return checkSetInDBMsg{hasCollections}
 	}
 }
 
