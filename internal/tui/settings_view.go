@@ -19,17 +19,25 @@ const (
 	sectionUI
 )
 
+const (
+	uiSettingTheme = iota
+	uiSettingOpaqueBackground
+	uiSettingBackgroundStyle
+)
+
 type saveConfirmedMsg struct{}
 type saveCancelledMsg struct{}
 
 type SettingsModel struct {
 	configManager  *runtimecfg.Manager
+	styleManager   *StyleManager
 	originalConfig *runtimecfg.RuntimeConfig
 	tempConfig     *runtimecfg.RuntimeConfig
 	hasChanges     bool
 	modal          ModalModel
 	section        settingsSection
 	cursor         int
+	uiCursor       int
 	actions        []string
 	editing        bool
 	editingAction  string
@@ -41,7 +49,7 @@ type SettingsModel struct {
 }
 
 // NewSettingsModel creates a new settings model
-func NewSettingsModel(configManager *runtimecfg.Manager) *SettingsModel {
+func NewSettingsModel(configManager *runtimecfg.Manager, styleManager *StyleManager) *SettingsModel {
 	cfg := configManager.Get()
 	actions := make([]string, 0, len(cfg.Keybindings))
 	for action := range cfg.Keybindings {
@@ -54,6 +62,7 @@ func NewSettingsModel(configManager *runtimecfg.Manager) *SettingsModel {
 	tempConfig := copyConfig(cfg)
 	model := &SettingsModel{
 		configManager:  configManager,
+		styleManager:   styleManager,
 		originalConfig: cfg,
 		tempConfig:     tempConfig,
 		hasChanges:     false,
@@ -61,6 +70,7 @@ func NewSettingsModel(configManager *runtimecfg.Manager) *SettingsModel {
 		actions:        actions,
 		input:          input,
 		cursor:         0,
+		uiCursor:       0,
 	}
 	model.modal = NewModalModel(
 		"Save Changes?",
@@ -75,6 +85,7 @@ func NewSettingsModel(configManager *runtimecfg.Manager) *SettingsModel {
 				return saveCancelledMsg{}
 			}
 		},
+		styleManager,
 	)
 	model.modal = model.modal.Hide()
 	return model
@@ -149,29 +160,51 @@ func (m SettingsModel) Update(msg tea.Msg) (SettingsModel, tea.Cmd) {
 			return m, nil
 		}
 		if action == "nav_up" || s == "k" {
-			if m.cursor > 0 {
-				m.cursor--
+			if m.section == sectionUI {
+				if m.uiCursor > 0 {
+					m.uiCursor--
+				}
+			} else {
+				if m.cursor > 0 {
+					m.cursor--
+				}
 			}
 			return m, nil
 		}
 		if action == "nav_down" || s == "j" {
-			maxCursor := len(m.actions) - 1
-			if m.cursor < maxCursor {
-				m.cursor++
+			if m.section == sectionUI {
+				if m.uiCursor < 2 {
+					m.uiCursor++
+				}
+			} else {
+				maxCursor := len(m.actions) - 1
+				if m.cursor < maxCursor {
+					m.cursor++
+				}
 			}
 			return m, nil
 		}
 		if action == "nav_left" || s == "h" {
-			if m.section > 0 {
-				m.section--
-				m.cursor = 0
+			if m.section == sectionUI {
+				m.handleUISettingChange(-1)
+			} else {
+				if m.section > 0 {
+					m.section--
+					m.cursor = 0
+					m.uiCursor = 0
+				}
 			}
 			return m, nil
 		}
 		if action == "nav_right" || s == "l" {
-			if m.section < sectionUI {
-				m.section++
-				m.cursor = 0
+			if m.section == sectionUI {
+				m.handleUISettingChange(1)
+			} else {
+				if m.section < sectionUI {
+					m.section++
+					m.cursor = 0
+					m.uiCursor = 0
+				}
 			}
 			return m, nil
 		}
@@ -180,12 +213,58 @@ func (m SettingsModel) Update(msg tea.Msg) (SettingsModel, tea.Cmd) {
 				m.editing = true
 				m.editingAction = m.actions[m.cursor]
 				m.errorMsg = ""
+			} else if m.section == sectionUI {
+				m.handleUISettingChange(1)
 			}
 			return m, nil
 		}
 	}
 
 	return m, nil
+}
+
+func (m *SettingsModel) handleUISettingChange(direction int) {
+	switch m.uiCursor {
+	case uiSettingTheme:
+		themes := runtimecfg.GetColorSchemeNames()
+		if len(themes) == 0 {
+			return
+		}
+		currentIndex := -1
+		for i, theme := range themes {
+			if theme == m.tempConfig.UI.ColorScheme {
+				currentIndex = i
+				break
+			}
+		}
+		if currentIndex == -1 {
+			currentIndex = 0
+		}
+		newIndex := (currentIndex + direction + len(themes)) % len(themes)
+		m.tempConfig.UI.ColorScheme = themes[newIndex]
+		m.hasChanges = true
+	case uiSettingOpaqueBackground:
+		m.tempConfig.UI.OpaqueBackground = !m.tempConfig.UI.OpaqueBackground
+		m.hasChanges = true
+	case uiSettingBackgroundStyle:
+		if !m.tempConfig.UI.OpaqueBackground {
+			return
+		}
+		styles := []string{"none", "components", "full", "both"}
+		currentIndex := -1
+		for i, style := range styles {
+			if style == m.tempConfig.UI.BackgroundStyle {
+				currentIndex = i
+				break
+			}
+		}
+		if currentIndex == -1 {
+			currentIndex = 1
+		}
+		newIndex := (currentIndex + direction + len(styles)) % len(styles)
+		m.tempConfig.UI.BackgroundStyle = styles[newIndex]
+		m.hasChanges = true
+	}
 }
 
 func (m SettingsModel) View() string {
@@ -222,7 +301,7 @@ func (m SettingsModel) View() string {
 				cancelKey = k
 			}
 		}
-		b.WriteString(helpStyle.Render(fmt.Sprintf("Press any key to bind (%s to cancel)", cancelKey)) + "\n")
+		b.WriteString(m.styleManager.GetHelpStyle().Render(fmt.Sprintf("Press any key to bind (%s to cancel)", cancelKey)) + "\n")
 	} else {
 		settingsKey := "F1"
 		navUp := "↑"
@@ -258,7 +337,7 @@ func (m SettingsModel) View() string {
 		if m.hasChanges {
 			help += " • Ctrl+S: Save"
 		}
-		b.WriteString(helpStyle.Render(help) + "\n")
+		b.WriteString(m.styleManager.GetHelpStyle().Render(help) + "\n")
 	}
 	content := b.String()
 	if m.modal.IsVisible() {
@@ -306,11 +385,11 @@ func (m SettingsModel) renderKeybindingsSection() string {
 		if i == m.cursor {
 			b.WriteString(settingsFocusStyle.Render("> "+actionDisplay) + " " + settingsFocusStyle.Render(keyDisplay) + "\n")
 		} else {
-			b.WriteString(settingsBlurStyle.Render("  "+actionDisplay) + " " + noStyle.Render(keyDisplay) + "\n")
+			b.WriteString(settingsBlurStyle.Render("  "+actionDisplay) + " " + m.styleManager.GetNoStyle().Render(keyDisplay) + "\n")
 		}
 	}
 	if len(m.actions) > maxVisible {
-		b.WriteString(blurredStyle.Render(fmt.Sprintf("\n  [Showing %d-%d of %d]", visibleStart+1, visibleEnd, len(m.actions))) + "\n")
+		b.WriteString(m.styleManager.GetBlurredStyle().Render(fmt.Sprintf("\n  [Showing %d-%d of %d]", visibleStart+1, visibleEnd, len(m.actions))) + "\n")
 	}
 	return b.String()
 }
@@ -319,10 +398,38 @@ func (m SettingsModel) renderUISection() string {
 	var b strings.Builder
 	cfg := m.tempConfig
 	b.WriteString(settingsFocusStyle.Render("UI Settings") + "\n\n")
-	b.WriteString(fmt.Sprintf("Compact Lists: %v\n", cfg.UI.CompactLists))
-	b.WriteString(fmt.Sprintf("Color Scheme: %s\n", cfg.UI.ColorScheme))
+	themes := runtimecfg.GetColorSchemeNames()
+	bgStyles := []string{"none", "components", "full", "both"}
+	cursor := "→ "
+	blank := "  "
+	themeDisplay := cursor
+	if m.uiCursor != uiSettingTheme {
+		themeDisplay = blank
+	}
+	b.WriteString(themeDisplay + "Theme: " + cfg.UI.ColorScheme + "\n")
+	bgDisplay := cursor
+	if m.uiCursor != uiSettingOpaqueBackground {
+		bgDisplay = blank
+	}
+	bgValue := "Off"
+	if cfg.UI.OpaqueBackground {
+		bgValue = "On"
+	}
+	b.WriteString(bgDisplay + "Opaque Background: " + bgValue + "\n")
+	bgStyleDisplay := cursor
+	if m.uiCursor != uiSettingBackgroundStyle {
+		bgStyleDisplay = blank
+	}
+	styleValue := cfg.UI.BackgroundStyle
+	if !cfg.UI.OpaqueBackground {
+		styleValue = settingsBlurStyle.Render(styleValue)
+	}
+	b.WriteString(bgStyleDisplay + "Background Style: " + styleValue + "\n")
 	b.WriteString("\n")
-	b.WriteString(settingsBlurStyle.Render("(UI settings editing coming soon)") + "\n")
+	b.WriteString(m.styleManager.GetBlurredStyle().Render("Available themes: "+strings.Join(themes, ", ")) + "\n")
+	b.WriteString(m.styleManager.GetBlurredStyle().Render("Background styles: "+strings.Join(bgStyles, ", ")) + "\n")
+	b.WriteString("\n")
+	b.WriteString(m.styleManager.GetHelpStyle().Render("↑/↓: Navigate • Enter/→/←: Change • Esc: Back") + "\n")
 	return b.String()
 }
 

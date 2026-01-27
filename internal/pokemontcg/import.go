@@ -99,7 +99,11 @@ func (s *ImportService) UpsertCard(ctx context.Context, card Card, setID int64) 
 	if err != nil {
 		return &FailedToBeginTransactionError{Err: err}
 	}
-	defer tx.Rollback()
+	defer func() {
+		if rollbackErr := tx.Rollback(); rollbackErr != nil && err == nil {
+			err = rollbackErr
+		}
+	}()
 	if err := s.upsertCardTx(ctx, tx, card, setID); err != nil {
 		return err
 	}
@@ -195,7 +199,11 @@ func (s *ImportService) ImportSet(ctx context.Context, set Set) (int, error) {
 	if err != nil {
 		return 0, &FailedToBeginTransactionError{Err: err}
 	}
-	defer tx.Rollback()
+	defer func() {
+		if rollbackErr := tx.Rollback(); rollbackErr != nil && err == nil {
+			err = rollbackErr
+		}
+	}()
 
 	cardsImported := 0
 	page := 1

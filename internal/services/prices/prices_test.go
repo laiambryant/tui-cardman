@@ -65,7 +65,11 @@ func TestTCGPlayerInsertPrice(t *testing.T) {
 	// Begin transaction
 	tx, err := db.Begin()
 	require.NoError(t, err)
-	defer tx.Rollback()
+	defer func() {
+		if rollbackErr := tx.Rollback(); rollbackErr != nil && err == nil {
+			err = rollbackErr
+		}
+	}()
 
 	// Insert price
 	err = service.InsertPrice(context.Background(), tx, cardID, "normal",
@@ -103,7 +107,11 @@ func TestTCGPlayerInsertPrice_NullHandling(t *testing.T) {
 
 	tx, err := db.Begin()
 	require.NoError(t, err)
-	defer tx.Rollback()
+	defer func() {
+		if rollbackErr := tx.Rollback(); rollbackErr != nil && err == nil {
+			err = rollbackErr
+		}
+	}()
 
 	// Insert price with zero values (should be NULL)
 	err = service.InsertPrice(context.Background(), tx, cardID, "foil",
@@ -157,7 +165,11 @@ func TestTCGPlayerDeletePrices(t *testing.T) {
 	// Delete prices
 	tx, err = db.Begin()
 	require.NoError(t, err)
-	defer tx.Rollback()
+	defer func() {
+		if rollbackErr := tx.Rollback(); rollbackErr != nil && err == nil {
+			err = rollbackErr
+		}
+	}()
 
 	err = service.DeletePrices(context.Background(), tx, cardID)
 	require.NoError(t, err)
@@ -190,7 +202,11 @@ func TestCardMarketInsertPrice(t *testing.T) {
 
 	tx, err := db.Begin()
 	require.NoError(t, err)
-	defer tx.Rollback()
+	defer func() {
+		if rollbackErr := tx.Rollback(); rollbackErr != nil && err == nil {
+			err = rollbackErr
+		}
+	}()
 
 	// Insert price
 	err = service.InsertPrice(context.Background(), tx, cardID,
@@ -228,7 +244,11 @@ func TestCardMarketInsertPrice_NullHandling(t *testing.T) {
 
 	tx, err := db.Begin()
 	require.NoError(t, err)
-	defer tx.Rollback()
+	defer func() {
+		if rollbackErr := tx.Rollback(); rollbackErr != nil && err == nil {
+			err = rollbackErr
+		}
+	}()
 
 	// Insert price with zero values (should be NULL)
 	err = service.InsertPrice(context.Background(), tx, cardID,
@@ -272,7 +292,11 @@ func TestCardMarketDeletePrices(t *testing.T) {
 	// Delete price
 	tx, err = db.Begin()
 	require.NoError(t, err)
-	defer tx.Rollback()
+	defer func() {
+		if rollbackErr := tx.Rollback(); rollbackErr != nil && err == nil {
+			err = rollbackErr
+		}
+	}()
 
 	err = service.DeletePrices(context.Background(), tx, cardID)
 	require.NoError(t, err)
@@ -295,7 +319,11 @@ func TestTCGPlayerInsertPrice_ContextCancellation(t *testing.T) {
 
 	tx, err := db.Begin()
 	require.NoError(t, err)
-	defer tx.Rollback()
+	defer func() {
+		if rollbackErr := tx.Rollback(); rollbackErr != nil && err == nil {
+			err = rollbackErr
+		}
+	}()
 
 	// Create cancelled context
 	ctx, cancel := context.WithCancel(context.Background())
@@ -318,7 +346,11 @@ func TestTCGPlayerDeletePrices_NonExistentCard(t *testing.T) {
 
 	tx, err := db.Begin()
 	require.NoError(t, err)
-	defer tx.Rollback()
+	defer func() {
+		if rollbackErr := tx.Rollback(); rollbackErr != nil && err == nil {
+			err = rollbackErr
+		}
+	}()
 
 	// Delete prices for non-existent card (should succeed - deletes 0 rows)
 	err = service.DeletePrices(context.Background(), tx, 99999)
@@ -389,7 +421,11 @@ func TestCardMarketInsertPrice_ContextCancellation(t *testing.T) {
 
 	tx, err := db.Begin()
 	require.NoError(t, err)
-	defer tx.Rollback()
+	defer func() {
+		if rollbackErr := tx.Rollback(); rollbackErr != nil && err == nil {
+			err = rollbackErr
+		}
+	}()
 
 	// Create cancelled context
 	ctx, cancel := context.WithCancel(context.Background())
@@ -411,7 +447,11 @@ func TestCardMarketDeletePrices_NonExistentCard(t *testing.T) {
 
 	tx, err := db.Begin()
 	require.NoError(t, err)
-	defer tx.Rollback()
+	defer func() {
+		if rollbackErr := tx.Rollback(); rollbackErr != nil && err == nil {
+			err = rollbackErr
+		}
+	}()
 
 	// Delete prices for non-existent card (should succeed - deletes 0 rows)
 	err = service.DeletePrices(context.Background(), tx, 99999)
@@ -459,7 +499,11 @@ func TestCardMarketInsertPrice_BothNullPrices(t *testing.T) {
 
 	tx, err := db.Begin()
 	require.NoError(t, err)
-	defer tx.Rollback()
+	defer func() {
+		if rollbackErr := tx.Rollback(); rollbackErr != nil && err == nil {
+			err = rollbackErr
+		}
+	}()
 
 	// Insert price with both values as zero (both NULL)
 	err = service.InsertPrice(context.Background(), tx, cardID,

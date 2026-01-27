@@ -79,3 +79,46 @@ type KeyBoundToMultipleActionsError struct {
 func (e *KeyBoundToMultipleActionsError) Error() string {
 	return fmt.Sprintf("key '%s' is bound to both '%s' and '%s'", e.Key, e.ExistingAction, e.NewAction)
 }
+
+type ThemeDirectoryNotFoundError struct {
+	Path string
+}
+
+func (e *ThemeDirectoryNotFoundError) Error() string {
+	return fmt.Sprintf("theme directory not found: %s", e.Path)
+}
+
+type FailedToReadThemeFileError struct {
+	Path string
+	Err  error
+}
+
+func (e *FailedToReadThemeFileError) Error() string {
+	return fmt.Sprintf("failed to read theme file %s: %v", e.Path, e.Err)
+}
+
+func (e *FailedToReadThemeFileError) Unwrap() error {
+	return e.Err
+}
+
+type FailedToParseThemeFileError struct {
+	Path string
+	Err  error
+}
+
+func (e *FailedToParseThemeFileError) Error() string {
+	return fmt.Sprintf("failed to parse theme file %s: %v", e.Path, e.Err)
+}
+
+func (e *FailedToParseThemeFileError) Unwrap() error {
+	return e.Err
+}
+
+type InvalidThemeFormatError struct {
+	Path  string
+	Field string
+}
+
+func (e *InvalidThemeFormatError) Error() string {
+	return fmt.Sprintf("invalid theme format in %s: missing or invalid field '%s'", e.Path, e.Field)
+}

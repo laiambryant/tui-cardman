@@ -255,7 +255,11 @@ func TestUpsertCard_Insert(t *testing.T) {
 	// Begin transaction
 	tx, err := db.BeginTx(ctx, nil)
 	require.NoError(t, err)
-	defer tx.Rollback()
+	defer func() {
+		if rollbackErr := tx.Rollback(); rollbackErr != nil && err == nil {
+			err = rollbackErr
+		}
+	}()
 
 	// Insert a new card
 	cardID, err := service.UpsertCard(ctx, tx, "base1-25", setID1, "25", "Pikachu", "Common", "Atsuko Nishida", gameID1)
@@ -385,7 +389,11 @@ func TestUpsertCard_MultipleCards(t *testing.T) {
 
 	tx, err := db.BeginTx(ctx, nil)
 	require.NoError(t, err)
-	defer tx.Rollback()
+	defer func() {
+		if rollbackErr := tx.Rollback(); rollbackErr != nil && err == nil {
+			err = rollbackErr
+		}
+	}()
 
 	var cardIDs []int64
 
@@ -424,7 +432,11 @@ func TestUpsertCard_EmptyStrings(t *testing.T) {
 
 	tx, err := db.BeginTx(ctx, nil)
 	require.NoError(t, err)
-	defer tx.Rollback()
+	defer func() {
+		if rollbackErr := tx.Rollback(); rollbackErr != nil && err == nil {
+			err = rollbackErr
+		}
+	}()
 
 	// Insert card with empty strings
 	cardID, err := service.UpsertCard(ctx, tx, "empty-test", setID1, "", "Empty Test", "", "", gameID1)
@@ -707,7 +719,11 @@ func TestUpsertCard_ContextCancellation(t *testing.T) {
 	// BeginTx itself may succeed even with cancelled context
 	tx, err := db.BeginTx(context.Background(), nil)
 	require.NoError(t, err)
-	defer tx.Rollback()
+	defer func() {
+		if rollbackErr := tx.Rollback(); rollbackErr != nil && err == nil {
+			err = rollbackErr
+		}
+	}()
 
 	// Upsert should fail with cancelled context
 	_, err = service.UpsertCard(ctx, tx, "cancelled", setID1, "1", "Cancelled", "Common", "Artist", gameID1)

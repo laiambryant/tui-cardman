@@ -7,7 +7,6 @@ import (
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/laiambryant/tui-cardman/internal/auth"
 	"github.com/laiambryant/tui-cardman/internal/model"
 	"github.com/laiambryant/tui-cardman/internal/runtimecfg"
@@ -41,6 +40,7 @@ type Model struct {
 	db                *sql.DB
 	user              *auth.User
 	configManager     *runtimecfg.Manager
+	styleManager      *StyleManager
 	inputs            []textinput.Model
 	focusIndex        int
 	errorMsg          string
@@ -51,16 +51,9 @@ type Model struct {
 	settingsModel     *SettingsModel
 	mainMenuTab       int
 	importModel       *ImportModel
+	width             int
+	height            int
 }
-
-var (
-	focusedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
-	blurredStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-	noStyle      = lipgloss.NewStyle()
-	helpStyle    = blurredStyle
-	errorStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
-	titleStyle   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("170"))
-)
 
 func NewModel(db *sql.DB, isSSHMode bool) (*Model, error) {
 	configPath := runtimecfg.GetConfigPath()
@@ -68,6 +61,9 @@ func NewModel(db *sql.DB, isSSHMode bool) (*Model, error) {
 	if err != nil {
 		return nil, &FailedToInitializeConfigManagerError{Err: err}
 	}
+	cfg := configManager.Get()
+	scheme := runtimecfg.GetColorScheme(cfg.UI.ColorScheme)
+	styleManager := NewStyleManager(scheme, cfg.UI.OpaqueBackground, cfg.UI.BackgroundStyle)
 	userService, cardGameService, cardService, collectionService, authSvc := initServices(db)
 	cardGames, err := cardGameService.GetAllCardGames()
 	if err != nil {
@@ -82,11 +78,13 @@ func NewModel(db *sql.DB, isSSHMode bool) (*Model, error) {
 		db:                db,
 		isSSHMode:         isSSHMode,
 		configManager:     configManager,
+		styleManager:      styleManager,
 		inputs:            make([]textinput.Model, 2),
 		cardGames:         cardGames,
 		cursor:            0,
 		mainMenuTab:       0,
 	}
+	configManager.Subscribe(m.onConfigChange)
 	if isSSHMode {
 		m.screen = ScreenLogin
 		m.initLoginInputs()
@@ -123,6 +121,11 @@ func initServices(db *sql.DB) (user.UserService, cardgame.CardGameService, card.
 	return userService, cardGameService, cardService, collectionService, authSvc
 }
 
+func (m *Model) onConfigChange(cfg *runtimecfg.RuntimeConfig) {
+	scheme := runtimecfg.GetColorScheme(cfg.UI.ColorScheme)
+	m.styleManager.UpdateTheme(scheme, cfg.UI.OpaqueBackground, cfg.UI.BackgroundStyle)
+}
+
 func (m Model) Init() tea.Cmd {
 	return textinput.Blink
 }
@@ -136,7 +139,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			action = m.configManager.MatchAction(s)
 		}
 		if action == "settings" && m.screen != ScreenSettings {
-			m.settingsModel = NewSettingsModel(m.configManager)
+			m.settingsModel = NewSettingsModel(m.configManager, m.styleManager)
 			m.screen = ScreenSettings
 			return m, m.settingsModel.Init()
 		}
@@ -165,12 +168,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				for i := 0; i <= len(m.inputs)-1; i++ {
 					if i == m.focusIndex {
 						cmds[i] = m.inputs[i].Focus()
-						m.inputs[i].Prompt = focusedStyle.Render("> ")
-						m.inputs[i].TextStyle = focusedStyle
+						m.inputs[i].Prompt = m.styleManager.GetFocusedStyle().Render("> ")
+						m.inputs[i].TextStyle = m.styleManager.GetFocusedStyle()
 					} else {
 						m.inputs[i].Blur()
-						m.inputs[i].Prompt = blurredStyle.Render("> ")
-						m.inputs[i].TextStyle = noStyle
+						m.inputs[i].Prompt = m.styleManager.GetBlurredStyle().Render("> ")
+						m.inputs[i].TextStyle = m.styleManager.GetNoStyle()
 					}
 				}
 				return m, tea.Batch(cmds...)

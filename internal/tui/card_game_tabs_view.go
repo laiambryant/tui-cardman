@@ -622,6 +622,7 @@ func (m CardGameTabsModel) handleSaveCollection() (CardGameTabsModel, tea.Cmd) {
 		func() tea.Cmd {
 			return nil
 		},
+		defaultStyleManager,
 	)
 	return m, nil
 }

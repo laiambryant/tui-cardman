@@ -3,9 +3,10 @@ package sets
 import (
 	"context"
 	"database/sql"
-	"github.com/laiambryant/tui-cardman/internal/logging"
 	"log/slog"
 	"time"
+
+	"github.com/laiambryant/tui-cardman/internal/logging"
 )
 
 // SetService defines the interface for set-related operations
@@ -63,7 +64,11 @@ func (s *SetServiceImpl) UpsertSet(ctx context.Context, apiID, code, name string
 		slog.Error("failed to begin transaction for upsert set", "api_id", apiID, "error", err)
 		return 0, &FailedToBeginTransactionError{Err: err}
 	}
-	defer tx.Rollback()
+	defer func() {
+		if rollbackErr := tx.Rollback(); rollbackErr != nil && err == nil {
+			err = rollbackErr
+		}
+	}()
 
 	slog.Debug("query row (tx)", "query", logging.SanitizeQuery(selectSetIDQuery), "args", []any{apiID})
 	var setID int64

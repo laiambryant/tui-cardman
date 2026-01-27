@@ -18,17 +18,19 @@ type ModalModel struct {
 	width             int
 	height            int
 	backgroundContent string
+	styleManager      *StyleManager
 }
 
-func NewModalModel(title, message string, onConfirm, onCancel func() tea.Cmd) ModalModel {
+func NewModalModel(title, message string, onConfirm, onCancel func() tea.Cmd, styleManager *StyleManager) ModalModel {
 	return ModalModel{
-		title:     title,
-		message:   message,
-		onConfirm: onConfirm,
-		onCancel:  onCancel,
-		confirmed: false,
-		selected:  0,
-		visible:   true,
+		title:        title,
+		message:      message,
+		onConfirm:    onConfirm,
+		onCancel:     onCancel,
+		confirmed:    false,
+		selected:     0,
+		visible:      true,
+		styleManager: styleManager,
 	}
 }
 
@@ -95,33 +97,20 @@ func (m ModalModel) View() string {
 
 func (m ModalModel) renderModalBox() string {
 	var b strings.Builder
-	modalStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("170")).
-		Padding(1, 2).
-		Width(50)
-	titleStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("170")).
-		Align(lipgloss.Center)
-	messageStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240")).
-		Align(lipgloss.Center)
-	buttonNoStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240")).
+	modalStyle := m.styleManager.GetModalStyle()
+	titleStyle := m.styleManager.GetTitleStyle().Align(lipgloss.Center)
+	messageStyle := m.styleManager.GetBlurredStyle().Align(lipgloss.Center)
+	buttonNoStyle := m.styleManager.GetBlurredStyle().
 		Border(lipgloss.RoundedBorder()).
 		Padding(0, 2)
-	buttonYesStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240")).
+	buttonYesStyle := m.styleManager.GetBlurredStyle().
 		Border(lipgloss.RoundedBorder()).
 		Padding(0, 2)
-	buttonNoFocusedStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("205")).
+	buttonNoFocusedStyle := m.styleManager.GetFocusedStyle().
 		Bold(true).
 		Border(lipgloss.RoundedBorder()).
 		Padding(0, 2)
-	buttonYesFocusedStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("205")).
+	buttonYesFocusedStyle := m.styleManager.GetFocusedStyle().
 		Bold(true).
 		Border(lipgloss.RoundedBorder()).
 		Padding(0, 2)
@@ -147,8 +136,7 @@ func (m ModalModel) renderOverlay() string {
 	}
 	lines := strings.Split(m.backgroundContent, "\n")
 	var overlayLines []string
-	shadeStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240"))
+	shadeStyle := m.styleManager.GetBlurredStyle()
 	for _, line := range lines {
 		plainLine := stripANSI(line)
 		shadedLine := strings.Repeat("░", len(plainLine))

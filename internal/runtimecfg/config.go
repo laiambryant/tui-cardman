@@ -16,8 +16,10 @@ type RuntimeConfig struct {
 
 // UIConfig holds UI-related settings
 type UIConfig struct {
-	CompactLists bool   `json:"compact_lists"`
-	ColorScheme  string `json:"color_scheme"`
+	CompactLists     bool   `json:"compact_lists"`
+	ColorScheme      string `json:"color_scheme"`
+	OpaqueBackground bool   `json:"opaque_background"`
+	BackgroundStyle  string `json:"background_style"`
 }
 
 // ColorScheme defines a color palette for the TUI
@@ -64,16 +66,27 @@ var ColorSchemes = map[string]ColorScheme{
 
 // GetColorScheme returns a color scheme by name, or default if not found
 func GetColorScheme(name string) ColorScheme {
-	if scheme, exists := ColorSchemes[name]; exists {
+	allSchemes := GetAllColorSchemes()
+	if scheme, exists := allSchemes[name]; exists {
 		return scheme
 	}
-	return ColorSchemes["default"]
+	return allSchemes["default"]
+}
+
+// GetAllColorSchemes returns all color schemes (hardcoded + loaded from files)
+func GetAllColorSchemes() map[string]ColorScheme {
+	loaded, err := LoadThemesFromDirectory(GetThemesPath())
+	if err != nil {
+		return ColorSchemes
+	}
+	return MergeThemes(ColorSchemes, loaded)
 }
 
 // GetColorSchemeNames returns all available color scheme names
 func GetColorSchemeNames() []string {
-	names := make([]string, 0, len(ColorSchemes))
-	for name := range ColorSchemes {
+	allSchemes := GetAllColorSchemes()
+	names := make([]string, 0, len(allSchemes))
+	for name := range allSchemes {
 		names = append(names, name)
 	}
 	return names
@@ -115,8 +128,10 @@ func Default() *RuntimeConfig {
 			"decrement_quantity": "delete",
 		},
 		UI: UIConfig{
-			CompactLists: false,
-			ColorScheme:  "default",
+			CompactLists:     false,
+			ColorScheme:      "default",
+			OpaqueBackground: false,
+			BackgroundStyle:  "components",
 		},
 	}
 }
@@ -135,11 +150,12 @@ func Load(path string) (*RuntimeConfig, error) {
 		return nil, &FailedToParseConfigFileError{Err: err}
 	}
 	defaults := Default()
-	initializeKeybindings(cfg, defaults)
+	initializeKeybindings(&cfg, defaults)
+	initializeUISettings(&cfg, defaults)
 	return &cfg, nil
 }
 
-func initializeKeybindings(cfg RuntimeConfig, defaults *RuntimeConfig) {
+func initializeKeybindings(cfg *RuntimeConfig, defaults *RuntimeConfig) {
 	if cfg.Keybindings == nil {
 		cfg.Keybindings = defaults.Keybindings
 	} else {
@@ -148,6 +164,15 @@ func initializeKeybindings(cfg RuntimeConfig, defaults *RuntimeConfig) {
 				cfg.Keybindings[action] = key
 			}
 		}
+	}
+}
+
+func initializeUISettings(cfg *RuntimeConfig, defaults *RuntimeConfig) {
+	if cfg.UI.ColorScheme == "" {
+		cfg.UI.ColorScheme = defaults.UI.ColorScheme
+	}
+	if cfg.UI.BackgroundStyle == "" {
+		cfg.UI.BackgroundStyle = defaults.UI.BackgroundStyle
 	}
 }
 

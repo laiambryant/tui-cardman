@@ -151,23 +151,23 @@ func importCardsPerCardTransaction(ctx context.Context, s *ImportService, cards 
 }
 
 // importCardsPerSetTransaction simulates the new approach (one transaction per set)
-func importCardsPerSetTransaction(ctx context.Context, s *ImportService, cards []Card, setID int64) error {
+func importCardsPerSetTransaction(ctx context.Context, s *ImportService, cards []Card, setID int64) (err error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback()
-
+	defer func() {
+		err = tx.Rollback()
+	}()
 	for _, card := range cards {
 		if err := s.upsertCardTx(ctx, tx, card, setID); err != nil {
 			return err
 		}
 	}
-
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
-	return nil
+	return err
 }
 
 // BenchmarkImportPerCardTransaction benchmarks the old approach

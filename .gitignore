@@ -40,3 +40,10 @@ output.log
 cardman
 AGENTS.md
 *PLAN.md
+
+# Ignore custom themes except defaults
+themes/*
+!themes/default.json
+!themes/dark.json
+!themes/light.json
+!themes/README.md
