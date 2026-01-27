@@ -4,9 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log/slog"
-	"strings"
-
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/laiambryant/tui-cardman/internal/config"
@@ -17,6 +14,8 @@ import (
 	"github.com/laiambryant/tui-cardman/internal/services/importruns"
 	"github.com/laiambryant/tui-cardman/internal/services/prices"
 	"github.com/laiambryant/tui-cardman/internal/services/sets"
+	"log/slog"
+	"strings"
 )
 
 type ActionType int
@@ -449,15 +448,7 @@ func (m ImportModel) importSetCmd(setID string) tea.Cmd {
 func (m ImportModel) deleteSetCmd(setID string) tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
-		_, err := m.db.ExecContext(ctx,
-			"DELETE FROM cards WHERE set_id IN (SELECT id FROM sets WHERE api_id = ?)",
-			setID)
-		if err != nil {
-			return deleteSetErrorMsg{setID, err}
-		}
-		_, err = m.db.ExecContext(ctx,
-			"DELETE FROM sets WHERE api_id = ?",
-			setID)
+		err := m.importService.DeleteSetByAPIID(ctx, setID)
 		if err != nil {
 			return deleteSetErrorMsg{setID, err}
 		}

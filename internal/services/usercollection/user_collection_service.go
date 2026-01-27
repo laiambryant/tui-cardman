@@ -6,6 +6,7 @@ import (
 	"log/slog"
 
 	"github.com/laiambryant/tui-cardman/internal/db"
+	"github.com/laiambryant/tui-cardman/internal/logging"
 	"github.com/laiambryant/tui-cardman/internal/model"
 )
 
@@ -207,7 +208,7 @@ func (s *UserCollectionServiceImpl) CreateSampleCollectionData(userID int64) err
 			(user_id, card_id, quantity, condition, acquired_date, notes)
 			VALUES (?, ?, ?, ?, date('2024-01-15'), ?)
 		`
-		slog.Debug("exec", "query", query, "args", []any{userID, data.cardID, data.quantity, data.condition, data.notes})
+		slog.Debug("exec", "query", logging.SanitizeQuery(query), "args", []any{userID, data.cardID, data.quantity, data.condition, data.notes})
 		_, err := s.db.Exec(query, userID, data.cardID, data.quantity, data.condition, data.notes)
 		if err != nil {
 			slog.Error("failed to create sample collection data", "user_id", userID, "card_id", data.cardID, "error", err)

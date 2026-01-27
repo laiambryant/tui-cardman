@@ -3,6 +3,7 @@ package sets
 import (
 	"context"
 	"database/sql"
+	"github.com/laiambryant/tui-cardman/internal/logging"
 	"log/slog"
 	"time"
 )
@@ -45,6 +46,7 @@ const (
 
 // GetSetIDByAPIID retrieves the database ID for a set by its API ID
 func (s *SetServiceImpl) GetSetIDByAPIID(ctx context.Context, apiID string) (int64, error) {
+	slog.Debug("query row", "query", logging.SanitizeQuery(selectSetIDQuery), "args", []any{apiID})
 	var setID int64
 	err := s.db.QueryRowContext(ctx, selectSetIDQuery, apiID).Scan(&setID)
 	if err != nil {
@@ -63,9 +65,11 @@ func (s *SetServiceImpl) UpsertSet(ctx context.Context, apiID, code, name string
 	}
 	defer tx.Rollback()
 
+	slog.Debug("query row (tx)", "query", logging.SanitizeQuery(selectSetIDQuery), "args", []any{apiID})
 	var setID int64
 	err = tx.QueryRowContext(ctx, selectSetIDQuery, apiID).Scan(&setID)
 	if err == sql.ErrNoRows {
+		slog.Debug("exec (tx)", "query", logging.SanitizeQuery(insertSetQuery), "args", []any{apiID, code, name, printedTotal, total, time.Now()})
 		result, err := tx.ExecContext(ctx, insertSetQuery,
 			apiID, code, name, printedTotal, total,
 			time.Now())
@@ -82,6 +86,7 @@ func (s *SetServiceImpl) UpsertSet(ctx context.Context, apiID, code, name string
 		slog.Error("failed to query set during upsert", "api_id", apiID, "error", err)
 		return 0, &FailedToQuerySetError{Err: err}
 	} else {
+		slog.Debug("exec (tx)", "query", logging.SanitizeQuery(updateSetQuery), "args", []any{code, name, printedTotal, total, time.Now(), setID})
 		_, err = tx.ExecContext(ctx, updateSetQuery,
 			code, name, printedTotal, total,
 			time.Now(), setID)
@@ -100,6 +105,7 @@ func (s *SetServiceImpl) UpsertSet(ctx context.Context, apiID, code, name string
 
 // GetAllSetAPIIDs retrieves all set API IDs from the database
 func (s *SetServiceImpl) GetAllSetAPIIDs(ctx context.Context) ([]string, error) {
+	slog.Debug("query", "query", logging.SanitizeQuery(selectAllSetAPIIDsQuery), "args", []any{})
 	rows, err := s.db.QueryContext(ctx, selectAllSetAPIIDsQuery)
 	if err != nil {
 		slog.Error("failed to query existing sets", "error", err)
@@ -127,6 +133,7 @@ func (s *SetServiceImpl) GetAllSetAPIIDs(ctx context.Context) ([]string, error) 
 
 // SetHasUserCollections checks if any user has cards from this set in their collection
 func (s *SetServiceImpl) SetHasUserCollections(ctx context.Context, setID int64) (bool, error) {
+	slog.Debug("query row", "query", logging.SanitizeQuery(checkSetHasUserCollectionsQuery), "args", []any{setID})
 	var hasCollections bool
 	err := s.db.QueryRowContext(ctx, checkSetHasUserCollectionsQuery, setID).Scan(&hasCollections)
 	if err == sql.ErrNoRows {

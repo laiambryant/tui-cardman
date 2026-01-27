@@ -167,3 +167,29 @@ func (e *FailedToFetchCardError) Error() string {
 func (e *FailedToFetchCardError) Unwrap() error {
 	return e.Err
 }
+
+type FailedToDeleteSetCardsError struct {
+	SetAPIID string
+	Err      error
+}
+
+func (e *FailedToDeleteSetCardsError) Error() string {
+	return fmt.Sprintf("failed to delete cards for set %s: %v", e.SetAPIID, e.Err)
+}
+
+func (e *FailedToDeleteSetCardsError) Unwrap() error {
+	return e.Err
+}
+
+type FailedToDeleteSetError struct {
+	SetAPIID string
+	Err      error
+}
+
+func (e *FailedToDeleteSetError) Error() string {
+	return fmt.Sprintf("failed to delete set %s: %v", e.SetAPIID, e.Err)
+}
+
+func (e *FailedToDeleteSetError) Unwrap() error {
+	return e.Err
+}

@@ -72,19 +72,16 @@ func WithTransaction(ctx context.Context, db *sql.DB, fn func(*sql.Tx) error) er
 		slog.Error("failed to begin transaction", "error", err)
 		return &FailedToBeginTransactionError{Err: err}
 	}
-
 	if err := fn(tx); err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
 			slog.Error("failed to rollback transaction", "error", rbErr, "original_error", err)
 		}
 		return err
 	}
-
 	if err := tx.Commit(); err != nil {
 		slog.Error("failed to commit transaction", "error", err)
 		return &FailedToCommitTransactionError{Err: err}
 	}
-
 	return nil
 }
 

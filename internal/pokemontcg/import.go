@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/laiambryant/tui-cardman/internal/logging"
 	card "github.com/laiambryant/tui-cardman/internal/services/cards"
 	"github.com/laiambryant/tui-cardman/internal/services/importruns"
 	"github.com/laiambryant/tui-cardman/internal/services/prices"
@@ -56,8 +57,10 @@ func NewImportService(
 }
 
 func (s *ImportService) initPokemonGameID(ctx context.Context) error {
+	query := "SELECT id FROM card_games WHERE name = ?"
+	slog.Debug("query row", "query", logging.SanitizeQuery(query), "args", []any{"Pokemon"})
 	var gameID int64
-	err := s.db.QueryRowContext(ctx, "SELECT id FROM card_games WHERE name = ?", "Pokemon").Scan(&gameID)
+	err := s.db.QueryRowContext(ctx, query, "Pokemon").Scan(&gameID)
 	if err != nil {
 		return &FailedToGetPokemonCardGameIDError{Err: err}
 	}
@@ -377,4 +380,29 @@ func (s *ImportService) findRequestedSets(allSets []Set, setIDs []string) ([]Set
 		}
 	}
 	return setsToImport, notFound
+}
+
+func (s *ImportService) DeleteSetByAPIID(ctx context.Context, setAPIID string) error {
+	dbSetID, err := s.setService.GetSetIDByAPIID(ctx, setAPIID)
+	if err == sql.ErrNoRows {
+		s.logger.Debug("set not found in database, nothing to delete", "api_id", setAPIID)
+		return nil
+	}
+	if err != nil {
+		return &FailedToDeleteSetError{SetAPIID: setAPIID, Err: err}
+	}
+	deleteCardsQuery := "DELETE FROM cards WHERE set_id = ?"
+	slog.Debug("exec", "query", logging.SanitizeQuery(deleteCardsQuery), "args", []any{dbSetID})
+	_, err = s.db.ExecContext(ctx, deleteCardsQuery, dbSetID)
+	if err != nil {
+		return &FailedToDeleteSetCardsError{SetAPIID: setAPIID, Err: err}
+	}
+	deleteSetQuery := "DELETE FROM sets WHERE id = ?"
+	slog.Debug("exec", "query", logging.SanitizeQuery(deleteSetQuery), "args", []any{dbSetID})
+	_, err = s.db.ExecContext(ctx, deleteSetQuery, dbSetID)
+	if err != nil {
+		return &FailedToDeleteSetError{SetAPIID: setAPIID, Err: err}
+	}
+	s.logger.Info("deleted set from database", "api_id", setAPIID, "db_id", dbSetID)
+	return nil
 }
