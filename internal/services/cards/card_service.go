@@ -3,7 +3,6 @@ package card
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"log/slog"
 	"time"
 
@@ -65,7 +64,7 @@ const (
 func (s *CardServiceImpl) GetCardsByGameID(gameID int64) ([]model.Card, error) {
 	rows, err := db.Query(s.db, selectCardsByGameIDQuery, gameID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query cards by game ID: %w", err)
+		return nil, &FailedToQueryCardsByGameIDError{Err: err}
 	}
 	defer rows.Close()
 	cards, err := s.scanCards(rows)
@@ -81,7 +80,7 @@ func (s *CardServiceImpl) GetCardsByGameID(gameID int64) ([]model.Card, error) {
 func (s *CardServiceImpl) GetAllCards() ([]model.Card, error) {
 	rows, err := db.Query(s.db, selectAllCardsQuery)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query all cards: %w", err)
+		return nil, &FailedToQueryAllCardsError{Err: err}
 	}
 	defer rows.Close()
 
@@ -111,7 +110,7 @@ func (s *CardServiceImpl) scanCards(rows *sql.Rows) ([]model.Card, error) {
 		)
 		if err != nil {
 			slog.Error("failed to scan card", "error", err)
-			return nil, fmt.Errorf("failed to scan card: %w", err)
+			return nil, &FailedToScanCardError{Err: err}
 		}
 		if gameCreatedAt.Valid {
 			game.CreatedAt = gameCreatedAt.Time
@@ -135,7 +134,7 @@ func (s *CardServiceImpl) scanCards(rows *sql.Rows) ([]model.Card, error) {
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating cards: %w", err)
+		return nil, &ErrorIteratingCardsError{Err: err}
 	}
 
 	return cards, nil
@@ -165,24 +164,24 @@ func (s *CardServiceImpl) UpsertCard(ctx context.Context, tx *sql.Tx, apiID stri
 		result, err := db.ExecContextTx(ctx, tx, insertCardQuery, apiID, setID, number, name, rarity, artist, cardGameID, time.Now())
 		if err != nil {
 			slog.Error("failed to insert card", "api_id", apiID, "name", name, "error", err)
-			return 0, fmt.Errorf("failed to insert card: %w", err)
+			return 0, &FailedToInsertCardError{Err: err}
 		}
 		cardID, err = result.LastInsertId()
 		if err != nil {
 			slog.Error("failed to get last insert id for card", "api_id", apiID, "name", name, "error", err)
-			return 0, fmt.Errorf("failed to get card ID: %w", err)
+			return 0, &FailedToGetCardIDError{Err: err}
 		}
 		slog.Debug("inserted new card", "api_id", apiID, "name", name, "card_id", cardID)
 		return cardID, nil
 	}
 	if err != nil {
 		slog.Error("failed to query card during upsert", "api_id", apiID, "error", err)
-		return 0, fmt.Errorf("failed to query card: %w", err)
+		return 0, &FailedToQueryCardError{Err: err}
 	}
 
 	if _, err := db.ExecContextTx(ctx, tx, updateCardQuery, setID, number, name, rarity, artist, time.Now(), cardID); err != nil {
 		slog.Error("failed to update card", "api_id", apiID, "name", name, "card_id", cardID, "error", err)
-		return 0, fmt.Errorf("failed to update card: %w", err)
+		return 0, &FailedToUpdateCardError{Err: err}
 	}
 	slog.Debug("updated existing card", "api_id", apiID, "name", name, "card_id", cardID)
 	return cardID, nil

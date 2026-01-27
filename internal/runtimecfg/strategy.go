@@ -3,7 +3,6 @@ package runtimecfg
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"log/slog"
 	"os"
 
@@ -34,14 +33,14 @@ func NewLocalStrategy(configPath string) *LocalStrategy {
 func (s *LocalStrategy) Load() (*RuntimeConfig, error) {
 	cfg, err := Load(s.configPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load local config: %w", err)
+		return nil, &FailedToSaveConfigError{err}
 	}
 	return cfg, nil
 }
 
 func (s *LocalStrategy) Save(config *RuntimeConfig) error {
 	if err := Save(config, s.configPath); err != nil {
-		return fmt.Errorf("failed to save local config: %w", err)
+		return &FailedToSaveConfigError{err}
 	}
 	return nil
 }
@@ -80,8 +79,6 @@ func NewRemoteStrategy(service ButtonConfigService, userID int64, defaultConfig 
 		userID:        userID,
 		defaultConfig: defaultConfig,
 	}
-
-	// Attempt migration if local config exists and service is available
 	if service != nil && localPath != "" {
 		if _, err := os.Stat(localPath); err == nil {
 			ctx := context.Background()
@@ -90,7 +87,6 @@ func NewRemoteStrategy(service ButtonConfigService, userID int64, defaultConfig 
 			}
 		}
 	}
-
 	return strategy
 }
 
@@ -105,15 +101,18 @@ func (s *RemoteStrategy) Load() (*RuntimeConfig, error) {
 		slog.Debug("no database configuration found, using default", "user_id", s.userID, "error", err)
 		return s.defaultConfig, nil
 	}
-
-	// Parse the JSON configuration string
 	var dbConfig RuntimeConfig
 	if err := json.Unmarshal([]byte(buttonConfig.Configuration), &dbConfig); err != nil {
 		slog.Error("failed to unmarshal database configuration", "user_id", s.userID, "error", err)
 		return s.defaultConfig, nil
 	}
+	populateKeybindings(dbConfig, s)
+	s.hasUnsavedChanges = false
+	slog.Info("loaded configuration from database", "user_id", s.userID)
+	return &dbConfig, nil
+}
 
-	// Merge with defaults to ensure all keybindings are present
+func populateKeybindings(dbConfig RuntimeConfig, s *RemoteStrategy) {
 	if dbConfig.Keybindings == nil {
 		dbConfig.Keybindings = s.defaultConfig.Keybindings
 	} else {
@@ -123,20 +122,15 @@ func (s *RemoteStrategy) Load() (*RuntimeConfig, error) {
 			}
 		}
 	}
-
-	s.hasUnsavedChanges = false
-	slog.Info("loaded configuration from database", "user_id", s.userID)
-	return &dbConfig, nil
 }
 
 func (s *RemoteStrategy) Save(config *RuntimeConfig) error {
 	if s.service == nil {
-		return fmt.Errorf("no remote service available")
+		return &NoRemoteServiceAvailable{}
 	}
 	slog.Info("saving configuration to database", "user_id", s.userID)
-	err := s.service.Save(context.Background(), s.userID, config)
-	if err != nil {
-		return fmt.Errorf("failed to save to database: %w", err)
+	if err := s.service.Save(context.Background(), s.userID, config); err != nil {
+		return &FailedToSaveConfigError{err}
 	}
 	s.hasUnsavedChanges = false
 	slog.Info("configuration saved to database", "user_id", s.userID)

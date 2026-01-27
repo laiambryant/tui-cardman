@@ -3,7 +3,6 @@ package prices
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"log/slog"
 	"time"
 
@@ -37,7 +36,7 @@ const (
 func (s *CardMarketPriceServiceImpl) DeletePrices(ctx context.Context, tx *sql.Tx, cardID int64) error {
 	if _, err := db.ExecContextTx(ctx, tx, deletePricesCardMarketQuery, cardID); err != nil {
 		slog.Error("failed to delete CardMarket prices", "card_id", cardID, "error", err)
-		return fmt.Errorf("failed to delete CardMarket prices: %w", err)
+		return &FailedToDeleteCardMarketPricesError{Err: err}
 	}
 	return nil
 }
@@ -47,7 +46,7 @@ func (s *CardMarketPriceServiceImpl) InsertPrice(ctx context.Context, tx *sql.Tx
 	if _, err := db.ExecContextTx(ctx, tx, insertPricesCardMarketQuery, cardID,
 		nullFloat64(avgPrice), nullFloat64(trendPrice), url, time.Now()); err != nil {
 		slog.Error("failed to insert CardMarket price", "card_id", cardID, "error", err)
-		return fmt.Errorf("failed to insert CardMarket price: %w", err)
+		return &FailedToInsertCardMarketPriceError{Err: err}
 	}
 	return nil
 }

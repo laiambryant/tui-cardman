@@ -1,8 +1,8 @@
 package runtimecfg
 
 import (
-	"fmt"
 	"maps"
+	"slices"
 	"sync"
 )
 
@@ -23,12 +23,11 @@ func NewManager(isLocal bool, configPath string, service ButtonConfigService, us
 	var strategy ButtonStrategy
 	var config *RuntimeConfig
 	var err error
-
 	if isLocal {
 		strategy = NewLocalStrategy(configPath)
 		config, err = strategy.Load()
 		if err != nil {
-			return nil, fmt.Errorf("failed to load local config: %w", err)
+			return nil, LocalConfigLoadError{err}
 		}
 	} else {
 		config = Default()
@@ -72,7 +71,7 @@ func (m *Manager) Set(cfg *RuntimeConfig) error {
 		sub(cfg)
 	}
 	if err := m.strategy.Save(cfg); err != nil {
-		return fmt.Errorf("failed to save config: %w", err)
+		return FailedToSaveConfigError{err}
 	}
 	return nil
 }
@@ -101,7 +100,6 @@ func (m *Manager) MatchAction(keyPress string, actions ...string) string {
 	if len(actions) > 0 {
 		return m.matchAmongActions(keyPress, actions)
 	}
-	// Use reverse index for O(1) lookup
 	if action, exists := m.keyToAction[keyPress]; exists {
 		return action
 	}
@@ -109,27 +107,22 @@ func (m *Manager) MatchAction(keyPress string, actions ...string) string {
 }
 
 func (m *Manager) matchAmongActions(keyPress string, actions []string) string {
-	// First try the reverse index
 	if action, exists := m.keyToAction[keyPress]; exists {
-		// Verify it's in the allowed actions list
-		for _, allowed := range actions {
-			if action == allowed {
-				return action
-			}
+		if slices.Contains(actions, action) {
+			return action
 		}
 	}
 	return ""
 }
 
-// validateKeybindings checks for empty and duplicate key bindings
 func (m *Manager) validateKeybindings(bindings map[string]string) error {
 	seen := make(map[string]string)
 	for action, key := range bindings {
 		if key == "" {
-			return fmt.Errorf("action '%s' is not bound to any key", action)
+			return &ActionNotBoundToAnyKeyError{Action: action}
 		}
 		if existingAction, exists := seen[key]; exists {
-			return fmt.Errorf("key '%s' is bound to both '%s' and '%s'", key, existingAction, action)
+			return &KeyBoundToMultipleActionsError{Key: key, ExistingAction: existingAction, NewAction: action}
 		}
 		seen[key] = action
 	}
@@ -187,7 +180,6 @@ func (m *Manager) IsUserMode() bool {
 	return isRemote
 }
 
-// buildKeyToActionMap creates a reverse index from key to action
 func buildKeyToActionMap(keybindings map[string]string) map[string]string {
 	keyToAction := make(map[string]string, len(keybindings))
 	for action, key := range keybindings {

@@ -3,7 +3,6 @@ package prices
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"log/slog"
 	"time"
 
@@ -38,7 +37,7 @@ const (
 func (s *TCGPlayerPriceServiceImpl) DeletePrices(ctx context.Context, tx *sql.Tx, cardID int64) error {
 	if _, err := db.ExecContextTx(ctx, tx, deletePricesTCGQuery, cardID); err != nil {
 		slog.Error("failed to delete TCGPlayer prices", "card_id", cardID, "error", err)
-		return fmt.Errorf("failed to delete TCGPlayer prices: %w", err)
+		return &FailedToDeleteTCGPlayerPricesError{Err: err}
 	}
 	return nil
 }
@@ -50,7 +49,7 @@ func (s *TCGPlayerPriceServiceImpl) InsertPrice(ctx context.Context, tx *sql.Tx,
 		nullFloat64(market), nullFloat64(directLow),
 		url, updatedAt, time.Now()); err != nil {
 		slog.Error("failed to insert TCGPlayer price", "card_id", cardID, "price_type", priceType, "error", err)
-		return fmt.Errorf("failed to insert TCGPlayer price: %w", err)
+		return &FailedToInsertTCGPlayerPriceError{Err: err}
 	}
 	return nil
 }

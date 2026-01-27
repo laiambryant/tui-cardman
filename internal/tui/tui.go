@@ -63,12 +63,12 @@ func NewModel(db *sql.DB, isSSHMode bool) (*Model, error) {
 	configPath := runtimecfg.GetConfigPath()
 	configManager, err := runtimecfg.NewManager(true, configPath, nil, 0)
 	if err != nil {
-		return nil, fmt.Errorf("failed to initialize config manager: %w", err)
+		return nil, &FailedToInitializeConfigManagerError{Err: err}
 	}
 	userService, cardGameService, cardService, collectionService, authSvc := initServices(db)
 	cardGames, err := cardGameService.GetAllCardGames()
 	if err != nil {
-		return nil, fmt.Errorf("failed to load card games: %w", err)
+		return nil, &FailedToLoadCardGamesError{Err: err}
 	}
 	m := &Model{
 		authService:       authSvc,
@@ -89,7 +89,7 @@ func NewModel(db *sql.DB, isSSHMode bool) (*Model, error) {
 	} else {
 		hasUsers, err := userService.HasUsers()
 		if err != nil {
-			return nil, fmt.Errorf("failed to check for existing users: %w", err)
+			return nil, &FailedToCheckForExistingUsersError{Err: err}
 		}
 		if !hasUsers {
 			m.screen = ScreenLocalUserSetup
@@ -97,7 +97,7 @@ func NewModel(db *sql.DB, isSSHMode bool) (*Model, error) {
 		} else {
 			firstUser, err := userService.GetFirstUser()
 			if err != nil {
-				return nil, fmt.Errorf("failed to get first user for local mode: %w", err)
+				return nil, &FailedToGetFirstUserForLocalModeError{Err: err}
 			}
 			m.user = firstUser
 			err = userService.UpdateLastLogin(firstUser.ID)
@@ -301,14 +301,14 @@ func (m *Model) createCardGameTabsModel(selectedGame *model.CardGame) (CardGameT
 	cardGameTabs := NewCardGameTabsModel(selectedGame, m.configManager)
 	cards, err := m.cardService.GetCardsByGameID(selectedGame.ID)
 	if err != nil {
-		return cardGameTabs, fmt.Errorf("failed to load cards: %w", err)
+		return cardGameTabs, &FailedToLoadCardsError{Err: err}
 	}
 	cardGameTabs.cards = cards
 	cardGameTabs.filteredCards = cards
 	if m.user != nil {
 		collections, err := m.collectionService.GetUserCollectionByGameID(m.user.ID, selectedGame.ID)
 		if err != nil {
-			return cardGameTabs, fmt.Errorf("failed to load user collection: %w", err)
+			return cardGameTabs, &FailedToLoadUserCollectionError{Err: err}
 		}
 		cardGameTabs.userCollections = collections
 		cardGameTabs.filteredCollection = collections

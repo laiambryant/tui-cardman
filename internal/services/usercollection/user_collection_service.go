@@ -2,7 +2,6 @@ package usercollection
 
 import (
 	"database/sql"
-	"fmt"
 	"log/slog"
 
 	"github.com/laiambryant/tui-cardman/internal/db"
@@ -58,7 +57,7 @@ const (
 func (s *UserCollectionServiceImpl) GetUserCollectionByUserID(userID int64) ([]model.UserCollection, error) {
 	rows, err := db.Query(s.db, selectUserCollectionByUserIDQuery, userID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query user collection: %w", err)
+		return nil, &FailedToQueryUserCollectionError{Err: err}
 	}
 	defer rows.Close()
 
@@ -75,7 +74,7 @@ func (s *UserCollectionServiceImpl) GetUserCollectionByUserID(userID int64) ([]m
 func (s *UserCollectionServiceImpl) GetUserCollectionByGameID(userID, gameID int64) ([]model.UserCollection, error) {
 	rows, err := db.Query(s.db, selectUserCollectionByGameIDQuery, userID, gameID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query user collection by game: %w", err)
+		return nil, &FailedToQueryUserCollectionByGameError{Err: err}
 	}
 	defer rows.Close()
 
@@ -104,7 +103,7 @@ func (s *UserCollectionServiceImpl) scanUserCollections(rows *sql.Rows) ([]model
 			&game.ID, &game.Name, &gameCreatedAt,
 		)
 		if err != nil {
-			return nil, fmt.Errorf("failed to scan user collection: %w", err)
+			return nil, &FailedToScanUserCollectionError{Err: err}
 		}
 
 		// Handle nullable dates
@@ -123,7 +122,7 @@ func (s *UserCollectionServiceImpl) scanUserCollections(rows *sql.Rows) ([]model
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating user collections: %w", err)
+		return nil, &ErrorIteratingUserCollectionsError{Err: err}
 	}
 
 	return collections, nil
@@ -157,7 +156,7 @@ func (s *UserCollectionServiceImpl) CreateSampleCollectionData(userID int64) err
 		_, err := s.db.Exec(query, userID, data.cardID, data.quantity, data.condition, data.notes)
 		if err != nil {
 			slog.Error("failed to create sample collection data", "user_id", userID, "card_id", data.cardID, "error", err)
-			return fmt.Errorf("failed to create sample collection data: %w", err)
+			return &FailedToCreateSampleCollectionDataError{Err: err}
 		}
 	}
 

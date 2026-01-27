@@ -155,7 +155,7 @@ func setupTestDBWithPokemon(t *testing.T) *sql.DB {
 }
 
 // Helper to create import service with real services
-func createTestImportService(t *testing.T, db *sql.DB) *ImportService {
+func createTestImportService(db *sql.DB) *ImportService {
 	client := NewClient("") // Use real client with no API key
 	logger := slog.Default()
 
@@ -174,7 +174,7 @@ func TestNewImportService(t *testing.T) {
 		db := setupTestDBWithPokemon(t)
 		defer testutil.CleanupTestDB(t, db)
 
-		service := createTestImportService(t, db)
+		service := createTestImportService(db)
 
 		require.NotNil(t, service)
 		assert.Equal(t, db, service.db)
@@ -214,7 +214,7 @@ func TestImportService_GetExistingSetAPIIDs(t *testing.T) {
 		_, err = db.Exec("INSERT INTO sets (api_id, name, code, printed_total, total) VALUES ('fossil', 'Fossil', 'FO', 62, 62)")
 		require.NoError(t, err)
 
-		service := createTestImportService(t, db)
+		service := createTestImportService(db)
 
 		existingSets, err := service.GetExistingSetAPIIDs(context.Background())
 
@@ -229,7 +229,7 @@ func TestImportService_GetExistingSetAPIIDs(t *testing.T) {
 		db := setupTestDBWithPokemon(t)
 		defer testutil.CleanupTestDB(t, db)
 
-		service := createTestImportService(t, db)
+		service := createTestImportService(db)
 
 		existingSets, err := service.GetExistingSetAPIIDs(context.Background())
 
@@ -249,7 +249,7 @@ func TestImportService_FilterNewSets(t *testing.T) {
 		_, err = db.Exec("INSERT INTO sets (api_id, name, code, printed_total, total) VALUES ('fossil', 'Fossil', 'FO', 62, 62)")
 		require.NoError(t, err)
 
-		service := createTestImportService(t, db)
+		service := createTestImportService(db)
 
 		allSets := []Set{
 			{ID: "base1", Name: "Base Set"},
@@ -275,7 +275,7 @@ func TestImportService_FilterNewSets(t *testing.T) {
 		_, err = db.Exec("INSERT INTO sets (api_id, name, code, printed_total, total) VALUES ('base2', 'Base Set 2', 'B2', 130, 130)")
 		require.NoError(t, err)
 
-		service := createTestImportService(t, db)
+		service := createTestImportService(db)
 
 		allSets := []Set{
 			{ID: "base1", Name: "Base Set"},
@@ -292,7 +292,7 @@ func TestImportService_FilterNewSets(t *testing.T) {
 		db := setupTestDBWithPokemon(t)
 		defer testutil.CleanupTestDB(t, db)
 
-		service := createTestImportService(t, db)
+		service := createTestImportService(db)
 
 		allSets := []Set{
 			{ID: "base1", Name: "Base Set"},
@@ -311,7 +311,7 @@ func TestImportService_FindRequestedSets(t *testing.T) {
 		db := setupTestDBWithPokemon(t)
 		defer testutil.CleanupTestDB(t, db)
 
-		service := createTestImportService(t, db)
+		service := createTestImportService(db)
 
 		allSets := []Set{
 			{ID: "base1", Name: "Base Set"},
@@ -335,7 +335,7 @@ func TestImportService_FindRequestedSets(t *testing.T) {
 		db := setupTestDBWithPokemon(t)
 		defer testutil.CleanupTestDB(t, db)
 
-		service := createTestImportService(t, db)
+		service := createTestImportService(db)
 
 		allSets := []Set{
 			{ID: "base1", Name: "Base Set"},
@@ -354,7 +354,7 @@ func TestImportService_FindRequestedSets(t *testing.T) {
 		db := setupTestDBWithPokemon(t)
 		defer testutil.CleanupTestDB(t, db)
 
-		service := createTestImportService(t, db)
+		service := createTestImportService(db)
 
 		allSets := []Set{
 			{ID: "base1", Name: "Base Set"},
@@ -374,7 +374,7 @@ func TestImportService_BuildImportNotes(t *testing.T) {
 		db := setupTestDBWithPokemon(t)
 		defer testutil.CleanupTestDB(t, db)
 
-		service := createTestImportService(t, db)
+		service := createTestImportService(db)
 
 		status, notes := service.buildImportNotes(5, 250, 0)
 
@@ -387,7 +387,7 @@ func TestImportService_BuildImportNotes(t *testing.T) {
 		db := setupTestDBWithPokemon(t)
 		defer testutil.CleanupTestDB(t, db)
 
-		service := createTestImportService(t, db)
+		service := createTestImportService(db)
 
 		status, notes := service.buildImportNotes(5, 250, 3)
 
@@ -400,7 +400,7 @@ func TestImportService_BuildImportNotes(t *testing.T) {
 		db := setupTestDBWithPokemon(t)
 		defer testutil.CleanupTestDB(t, db)
 
-		service := createTestImportService(t, db)
+		service := createTestImportService(db)
 
 		status, notes := service.buildImportNotes(5, 250, 0, "Extra information")
 
@@ -413,7 +413,7 @@ func TestImportService_BuildImportNotes(t *testing.T) {
 		db := setupTestDBWithPokemon(t)
 		defer testutil.CleanupTestDB(t, db)
 
-		service := createTestImportService(t, db)
+		service := createTestImportService(db)
 
 		status, notes := service.buildImportNotes(2, 100, 0, "")
 
@@ -429,7 +429,7 @@ func TestImportService_UpsertSet(t *testing.T) {
 		db := setupTestDBWithPokemon(t)
 		defer testutil.CleanupTestDB(t, db)
 
-		service := createTestImportService(t, db)
+		service := createTestImportService(db)
 
 		set := Set{
 			ID:           "base1",
@@ -455,7 +455,7 @@ func TestImportService_UpsertSet(t *testing.T) {
 		db := setupTestDBWithPokemon(t)
 		defer testutil.CleanupTestDB(t, db)
 
-		service := createTestImportService(t, db)
+		service := createTestImportService(db)
 
 		// Insert initial set
 		set1 := Set{
@@ -497,7 +497,7 @@ func TestImportService_CreateAndUpdateImportRun(t *testing.T) {
 		db := setupTestDBWithPokemon(t)
 		defer testutil.CleanupTestDB(t, db)
 
-		service := createTestImportService(t, db)
+		service := createTestImportService(db)
 
 		runID, err := service.CreateImportRun(context.Background(), "import-full")
 
@@ -516,7 +516,7 @@ func TestImportService_CreateAndUpdateImportRun(t *testing.T) {
 		db := setupTestDBWithPokemon(t)
 		defer testutil.CleanupTestDB(t, db)
 
-		service := createTestImportService(t, db)
+		service := createTestImportService(db)
 
 		// Create run
 		runID, err := service.CreateImportRun(context.Background(), "import-updates")

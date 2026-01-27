@@ -748,9 +748,10 @@ func TestScanCards_IsPlaceholderField(t *testing.T) {
 	// Find each card
 	var placeholderCard, normalCard *model.Card
 	for i := range cards {
-		if cards[i].Name == "Placeholder Card" {
+		switch cards[i].Name {
+		case "Placeholder Card":
 			placeholderCard = &cards[i]
-		} else if cards[i].Name == "Normal Card" {
+		case "Normal Card":
 			normalCard = &cards[i]
 		}
 	}

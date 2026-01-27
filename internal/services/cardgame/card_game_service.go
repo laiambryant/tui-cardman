@@ -2,7 +2,6 @@ package cardgame
 
 import (
 	"database/sql"
-	"fmt"
 	"log/slog"
 
 	"github.com/laiambryant/tui-cardman/internal/db"
@@ -36,7 +35,7 @@ const (
 func (s *CardGameServiceImpl) GetAllCardGames() ([]model.CardGame, error) {
 	rows, err := db.Query(s.db, selectAllCardGamesQuery)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query card games: %w", err)
+		return nil, &FailedToQueryCardGamesError{Err: err}
 	}
 	defer rows.Close()
 
@@ -45,14 +44,14 @@ func (s *CardGameServiceImpl) GetAllCardGames() ([]model.CardGame, error) {
 		var game model.CardGame
 		if err := rows.Scan(&game.ID, &game.Name, &game.CreatedAt); err != nil {
 			slog.Error("failed to scan card game", "error", err)
-			return nil, fmt.Errorf("failed to scan card game: %w", err)
+			return nil, &FailedToScanCardGameError{Err: err}
 		}
 		games = append(games, game)
 	}
 
 	if err = rows.Err(); err != nil {
 		slog.Error("error iterating card games", "error", err)
-		return nil, fmt.Errorf("error iterating card games: %w", err)
+		return nil, &ErrorIteratingCardGamesError{Err: err}
 	}
 
 	slog.Debug("retrieved all card games", "count", len(games))
