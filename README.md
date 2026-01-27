@@ -140,6 +140,7 @@ make import-full       # Import all Pokemon TCG data
 make import-updates    # Import only new sets
 make list-sets         # List available sets from the API
 make clean             # Remove build artifacts
+make clean-all         # Remove build artifacts, database, and logs
 make install           # Install binary to GOPATH/bin
 make run               # Build and run (serve)
 ```

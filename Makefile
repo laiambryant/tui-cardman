@@ -1,4 +1,4 @@
-.PHONY: help build build-fast clean test test-coverage test-bench fmt vet lint lint-install tidy migrate serve serve-ssh import-full import-updates list-sets install deps all check run
+.PHONY: help build build-fast clean clean-all test test-coverage test-bench fmt vet lint lint-install tidy migrate serve serve-ssh import-full import-updates list-sets install deps all check run
 
 BINARY_NAME=cardman
 BINARY_EXT=.exe
@@ -15,6 +15,7 @@ help:
 	@echo "  make build          - Build the application (CGO_ENABLED=1)"
 	@echo "  make build-fast     - Fast build without optimizations"
 	@echo "  make clean          - Remove build artifacts"
+	@echo "  make clean-all      - Remove build artifacts, database, and logs"
 	@echo "  make test           - Run all tests"
 	@echo "  make test-coverage  - Run tests with coverage report"
 	@echo "  make test-bench     - Run all benchmarks"
@@ -46,6 +47,11 @@ build-fast:
 clean:
 	@if exist $(BINARY_NAME)$(BINARY_EXT) del /Q $(BINARY_NAME)$(BINARY_EXT)
 	@echo Cleaned build artifacts
+
+clean-all: clean
+	@if exist cardman.db del /Q cardman.db
+	@if exist output.log del /Q output.log
+	@echo Cleaned all artifacts, database, and logs
 
 test:
 	go test ./...
