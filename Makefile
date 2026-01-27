@@ -1,4 +1,4 @@
-.PHONY: help build build-fast clean test test-coverage test-bench fmt vet lint tidy migrate serve serve-ssh import-full import-updates list-sets install deps all check run
+.PHONY: help build build-fast clean test test-coverage test-bench fmt vet lint lint-install tidy migrate serve serve-ssh import-full import-updates list-sets install deps all check run
 
 BINARY_NAME=cardman
 BINARY_EXT=.exe
@@ -21,6 +21,7 @@ help:
 	@echo "  make fmt            - Format code"
 	@echo "  make vet            - Run go vet"
 	@echo "  make lint           - Run linter (golangci-lint)"
+	@echo "  make lint-install   - Install golangci-lint"
 	@echo "  make tidy           - Tidy dependencies"
 	@echo "  make check          - Run fmt, vet, and test"
 	@echo "  make all            - Build, test, and check everything"
@@ -63,6 +64,9 @@ vet:
 
 lint:
 	@where golangci-lint >nul 2>&1 && golangci-lint run || echo golangci-lint not found, skipping
+
+lint-install:
+	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 
 tidy:
 	go mod tidy
