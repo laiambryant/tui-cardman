@@ -2,7 +2,6 @@ package db
 
 import (
 	"database/sql"
-	"fmt"
 	"log/slog"
 	"time"
 
@@ -42,14 +41,12 @@ func CreateUser(db *sql.DB, req auth.RegisterRequest, passwordHash string) (*aut
 	slog.Debug("exec query", "query", logging.SanitizeQuery(query), "args", []any{req.Name, req.Surname, req.Email, passwordHash, now, now})
 	result, err := db.Exec(query, req.Name, req.Surname, req.Email, passwordHash, now, now)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create user: %w", err)
+		return nil, &FailedToCreateUserError{Err: err}
 	}
-
 	id, err := result.LastInsertId()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get user id: %w", err)
+		return nil, &FailedToGetUserIDError{Err: err}
 	}
-
 	return &auth.User{
 		ID:           id,
 		Name:         req.Name,
@@ -67,7 +64,6 @@ func GetUserByEmail(db *sql.DB, email string) (*auth.User, error) {
 	query := selectUserByEmailQuery
 	var user auth.User
 	var lastLogin sql.NullTime
-
 	slog.Debug("query row", "query", logging.SanitizeQuery(query), "args", []any{email})
 	err := db.QueryRow(query, email).Scan(
 		&user.ID,
@@ -82,15 +78,13 @@ func GetUserByEmail(db *sql.DB, email string) (*auth.User, error) {
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("user not found")
+			return nil, &UserNotFoundError{}
 		}
-		return nil, fmt.Errorf("failed to get user: %w", err)
+		return nil, &FailedToGetUserError{Err: err}
 	}
-
 	if lastLogin.Valid {
 		user.LastLogin = &lastLogin.Time
 	}
-
 	return &user, nil
 }
 
@@ -100,7 +94,7 @@ func UpdateLastLogin(db *sql.DB, userID int64) error {
 	slog.Debug("exec query", "query", logging.SanitizeQuery(updateLastLoginQuery), "args", args)
 	_, err := db.Exec(updateLastLoginQuery, time.Now(), userID)
 	if err != nil {
-		return fmt.Errorf("failed to update last login: %w", err)
+		return &FailedToUpdateLastLoginError{Err: err}
 	}
 	return nil
 }

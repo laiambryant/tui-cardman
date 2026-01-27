@@ -2,7 +2,6 @@ package runtimecfg
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
 
@@ -129,13 +128,18 @@ func Load(path string) (*RuntimeConfig, error) {
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read config file: %w", err)
+		return nil, &FailedToReadConfigFileError{Err: err}
 	}
 	var cfg RuntimeConfig
 	if err := json.Unmarshal(data, &cfg); err != nil {
-		return nil, fmt.Errorf("failed to parse config file: %w", err)
+		return nil, &FailedToParseConfigFileError{Err: err}
 	}
 	defaults := Default()
+	initializeKeybindings(cfg, defaults)
+	return &cfg, nil
+}
+
+func initializeKeybindings(cfg RuntimeConfig, defaults *RuntimeConfig) {
 	if cfg.Keybindings == nil {
 		cfg.Keybindings = defaults.Keybindings
 	} else {
@@ -145,34 +149,30 @@ func Load(path string) (*RuntimeConfig, error) {
 			}
 		}
 	}
-	return &cfg, nil
 }
 
 // Save writes configuration to a file path
 func Save(cfg *RuntimeConfig, path string) error {
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0755); err != nil {
-		return fmt.Errorf("failed to create config directory: %w", err)
+		return &FailedToCreateConfigDirectoryError{Err: err}
 	}
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
-		return fmt.Errorf("failed to marshal config: %w", err)
+		return &FailedToMarshalConfigError{Err: err}
 	}
 
 	if err := os.WriteFile(path, data, 0644); err != nil {
-		return fmt.Errorf("failed to write config file: %w", err)
+		return &FailedToWriteConfigFileError{Err: err}
 	}
 
 	return nil
 }
 
-// GetConfigPath returns the path to the config file
-// Respects CARDMAN_CONFIG env var, otherwise uses default
+// GetConfigPath returns the path to the config file. Respects CARDMAN_CONFIG env var, otherwise uses default
 func GetConfigPath() string {
 	if path := os.Getenv("CARDMAN_CONFIG"); path != "" {
 		return path
 	}
-
-	// Use current directory by default
 	return ".cardman.json"
 }

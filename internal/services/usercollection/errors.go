@@ -2,68 +2,62 @@ package usercollection
 
 import "fmt"
 
-type FailedToGetQuantityError struct {
+type FailedToQueryUserCollectionError struct {
 	Err error
 }
 
-func (e *FailedToGetQuantityError) Error() string {
-	return fmt.Sprintf("failed to get card quantity: %v", e.Err)
+func (e *FailedToQueryUserCollectionError) Error() string {
+	return fmt.Sprintf("failed to query user collection: %v", e.Err)
 }
-func (e *FailedToGetQuantityError) Unwrap() error {
+
+func (e *FailedToQueryUserCollectionError) Unwrap() error {
 	return e.Err
 }
 
-type FailedToIncrementQuantityError struct {
+type FailedToQueryUserCollectionByGameError struct {
 	Err error
 }
 
-func (e *FailedToIncrementQuantityError) Error() string {
-	return fmt.Sprintf("failed to increment card quantity: %v", e.Err)
+func (e *FailedToQueryUserCollectionByGameError) Error() string {
+	return fmt.Sprintf("failed to query user collection by game: %v", e.Err)
 }
-func (e *FailedToIncrementQuantityError) Unwrap() error {
+
+func (e *FailedToQueryUserCollectionByGameError) Unwrap() error {
 	return e.Err
 }
 
-type FailedToDecrementQuantityError struct {
+type FailedToScanUserCollectionError struct {
 	Err error
 }
 
-func (e *FailedToDecrementQuantityError) Error() string {
-	return fmt.Sprintf("failed to decrement card quantity: %v", e.Err)
+func (e *FailedToScanUserCollectionError) Error() string {
+	return fmt.Sprintf("failed to scan user collection: %v", e.Err)
 }
-func (e *FailedToDecrementQuantityError) Unwrap() error {
+
+func (e *FailedToScanUserCollectionError) Unwrap() error {
 	return e.Err
 }
 
-type FailedToUpsertCollectionError struct {
+type ErrorIteratingUserCollectionsError struct {
 	Err error
 }
 
-func (e *FailedToUpsertCollectionError) Error() string {
-	return fmt.Sprintf("failed to upsert collection: %v", e.Err)
+func (e *ErrorIteratingUserCollectionsError) Error() string {
+	return fmt.Sprintf("error iterating user collections: %v", e.Err)
 }
-func (e *FailedToUpsertCollectionError) Unwrap() error {
+
+func (e *ErrorIteratingUserCollectionsError) Unwrap() error {
 	return e.Err
 }
 
-type FailedToBeginTransactionError struct {
+type FailedToCreateSampleCollectionDataError struct {
 	Err error
 }
 
-func (e *FailedToBeginTransactionError) Error() string {
-	return fmt.Sprintf("failed to begin transaction: %v", e.Err)
-}
-func (e *FailedToBeginTransactionError) Unwrap() error {
-	return e.Err
+func (e *FailedToCreateSampleCollectionDataError) Error() string {
+	return fmt.Sprintf("failed to create sample collection data: %v", e.Err)
 }
 
-type FailedToCommitTransactionError struct {
-	Err error
-}
-
-func (e *FailedToCommitTransactionError) Error() string {
-	return fmt.Sprintf("failed to commit transaction: %v", e.Err)
-}
-func (e *FailedToCommitTransactionError) Unwrap() error {
+func (e *FailedToCreateSampleCollectionDataError) Unwrap() error {
 	return e.Err
 }

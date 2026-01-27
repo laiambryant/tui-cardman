@@ -11,7 +11,7 @@ import (
 // ValidateEmail checks if email format is valid
 func ValidateEmail(email string) error {
 	if email == "" {
-		return fmt.Errorf("email is required")
+		return &EmailRequiredError{}
 	}
 	emailRegex := regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
 	if !emailRegex.MatchString(email) {

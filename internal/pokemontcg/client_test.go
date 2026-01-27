@@ -273,9 +273,7 @@ func TestRateLimitedHTTPClient(t *testing.T) {
 	t.Run("Rate limiter enforces delay", func(t *testing.T) {
 		limiter := rate.NewLimiter(rate.Every(100*time.Millisecond), 1)
 		client := &rateLimitedHTTPClient{
-			client:  nil, // We won't actually make requests
 			limiter: limiter,
-			apiKey:  "test-key",
 		}
 
 		ctx := context.Background()
@@ -302,9 +300,7 @@ func TestRateLimitedHTTPClient(t *testing.T) {
 	t.Run("Context cancellation stops rate limiter", func(t *testing.T) {
 		limiter := rate.NewLimiter(rate.Every(5*time.Second), 1)
 		client := &rateLimitedHTTPClient{
-			client:  nil,
 			limiter: limiter,
-			apiKey:  "",
 		}
 
 		// Consume the first token
