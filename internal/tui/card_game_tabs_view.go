@@ -82,6 +82,9 @@ func (m CardGameTabsModel) Update(msg tea.Msg) (CardGameTabsModel, tea.Cmd) {
 		return m, cmd
 	}
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.modal = m.modal.SetDimensions(msg.Width, msg.Height)
+		return m, nil
 	case saveCollectionMsg:
 		return m.performSaveCollection()
 	case tea.KeyMsg:
@@ -285,7 +288,8 @@ func (m CardGameTabsModel) View() string {
 
 	content := b.String()
 	if m.modal.IsVisible() {
-		return content + "\n\n" + m.modal.View()
+		m.modal = m.modal.SetBackgroundContent(content)
+		return m.modal.View()
 	}
 	return content
 }

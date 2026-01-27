@@ -19,21 +19,25 @@ const (
 	sectionUI
 )
 
-// SettingsModel represents the settings view
+type saveConfirmedMsg struct{}
+type saveCancelledMsg struct{}
+
 type SettingsModel struct {
 	configManager  *runtimecfg.Manager
 	originalConfig *runtimecfg.RuntimeConfig
 	tempConfig     *runtimecfg.RuntimeConfig
 	hasChanges     bool
-	confirmSave    bool
+	modal          ModalModel
 	section        settingsSection
 	cursor         int
-	actions        []string // Sorted list of actions for keybinding section
+	actions        []string
 	editing        bool
 	editingAction  string
 	input          textinput.Model
 	errorMsg       string
 	shouldClose    bool
+	width          int
+	height         int
 }
 
 // NewSettingsModel creates a new settings model
@@ -44,25 +48,36 @@ func NewSettingsModel(configManager *runtimecfg.Manager) *SettingsModel {
 		actions = append(actions, action)
 	}
 	sort.Strings(actions)
-
 	input := textinput.New()
 	input.Placeholder = "Press a key..."
 	input.Width = 30
-
-	// Create a copy of the config for temporary editing
 	tempConfig := copyConfig(cfg)
-
-	return &SettingsModel{
+	model := &SettingsModel{
 		configManager:  configManager,
 		originalConfig: cfg,
 		tempConfig:     tempConfig,
 		hasChanges:     false,
-		confirmSave:    false,
 		section:        sectionKeybindings,
 		actions:        actions,
 		input:          input,
 		cursor:         0,
 	}
+	model.modal = NewModalModel(
+		"Save Changes?",
+		"You have unsaved changes. Save before closing?",
+		func() tea.Cmd {
+			return func() tea.Msg {
+				return saveConfirmedMsg{}
+			}
+		},
+		func() tea.Cmd {
+			return func() tea.Msg {
+				return saveCancelledMsg{}
+			}
+		},
+	)
+	model.modal = model.modal.Hide()
+	return model
 }
 
 func (m SettingsModel) Init() tea.Cmd {
@@ -70,27 +85,30 @@ func (m SettingsModel) Init() tea.Cmd {
 }
 
 func (m SettingsModel) Update(msg tea.Msg) (SettingsModel, tea.Cmd) {
+	if m.modal.IsVisible() {
+		var cmd tea.Cmd
+		m.modal, cmd = m.modal.Update(msg)
+		return m, cmd
+	}
 	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		if m.confirmSave {
-			s := msg.String()
-			if s == "y" || s == "Y" {
-				err := m.confirmSaveChanges()
-				if err != nil {
-					m.errorMsg = fmt.Sprintf("Failed to save: %v", err)
-					m.confirmSave = false
-					return m, nil
-				}
-				m.shouldClose = true
-				return m, nil
-			}
-			if s == "n" || s == "N" || s == "esc" {
-				m.cancelChanges()
-				m.shouldClose = true
-				return m, nil
-			}
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+		m.modal = m.modal.SetDimensions(msg.Width, msg.Height)
+		return m, nil
+	case saveConfirmedMsg:
+		err := m.confirmSaveChanges()
+		if err != nil {
+			m.errorMsg = fmt.Sprintf("Failed to save: %v", err)
 			return m, nil
 		}
+		m.shouldClose = true
+		return m, nil
+	case saveCancelledMsg:
+		m.cancelChanges()
+		m.shouldClose = true
+		return m, nil
+	case tea.KeyMsg:
 		if m.editing {
 			s := msg.String()
 			action := ""
@@ -103,7 +121,6 @@ func (m SettingsModel) Update(msg tea.Msg) (SettingsModel, tea.Cmd) {
 				m.errorMsg = ""
 				return m, nil
 			}
-			// Update temporary config instead of manager directly
 			if m.tempConfig.Keybindings == nil {
 				m.tempConfig.Keybindings = make(map[string]string)
 			}
@@ -188,13 +205,6 @@ func (m SettingsModel) View() string {
 		}
 	}
 	b.WriteString(strings.Join(renderedTabs, " ") + "\n\n")
-	if m.confirmSave {
-		b.WriteString(settingsFocusStyle.Render("Save Changes?") + "\n\n")
-		b.WriteString(settingsBlurStyle.Render("You have unsaved changes. Save before closing?") + "\n\n")
-		b.WriteString(settingsFocusStyle.Render("Y") + settingsBlurStyle.Render(" - Yes, save changes") + "\n")
-		b.WriteString(settingsFocusStyle.Render("N") + settingsBlurStyle.Render(" - No, discard changes") + "\n")
-		return b.String()
-	}
 	if m.errorMsg != "" {
 		b.WriteString(settingsErrorStyle.Render("⚠ "+m.errorMsg) + "\n\n")
 	}
@@ -250,7 +260,12 @@ func (m SettingsModel) View() string {
 		}
 		b.WriteString(helpStyle.Render(help) + "\n")
 	}
-	return b.String()
+	content := b.String()
+	if m.modal.IsVisible() {
+		m.modal = m.modal.SetBackgroundContent(content)
+		return m.modal.View()
+	}
+	return content
 }
 
 func (m SettingsModel) renderKeybindingsSection() string {
@@ -326,31 +341,27 @@ func copyConfig(cfg *runtimecfg.RuntimeConfig) *runtimecfg.RuntimeConfig {
 	return copy
 }
 
-// initiateSave shows the save confirmation dialog
 func (m *SettingsModel) initiateSave() {
 	if m.hasChanges {
-		m.confirmSave = true
+		m.modal = m.modal.Show()
+	} else {
+		m.shouldClose = true
 	}
 }
 
-// confirmSaveChanges saves the temporary configuration to the manager
 func (m *SettingsModel) confirmSaveChanges() error {
 	err := m.configManager.Set(m.tempConfig)
 	if err != nil {
 		return &FailedToSaveConfigurationError{Err: err}
 	}
-
 	m.originalConfig = copyConfig(m.tempConfig)
 	m.hasChanges = false
-	m.confirmSave = false
 	return nil
 }
 
-// cancelChanges reverts to the original configuration
 func (m *SettingsModel) cancelChanges() {
 	m.tempConfig = copyConfig(m.originalConfig)
 	m.hasChanges = false
-	m.confirmSave = false
 }
 
 var (
