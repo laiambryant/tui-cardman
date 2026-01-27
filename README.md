@@ -9,6 +9,14 @@ This project uses [go-sqlite3](https://github.com/mattn/go-sqlite3), which is a 
 1. A C compiler (GCC or similar)
 2. The `CGO_ENABLED=1` environment variable
 
+### Using Make (Recommended)
+
+```bash
+make build
+```
+
+### Manual Build
+
 ```bash
 CGO_ENABLED=1 go build -o cardman ./cmd/main.go
 ```
@@ -43,7 +51,8 @@ Get your API key or use the public TCGDex endpoints at <https://tcgdex.dev/>:
 Run migrations to set up the database schema:
 
 ```bash
-./cardman migrate
+make migrate
+# or manually: ./cardman migrate
 ```
 
 ## Importing Pokemon TCG Data
@@ -55,7 +64,8 @@ The application provides commands for importing card data from the TCGDex API (P
 Import all Pokemon TCG sets and cards (initial setup) via TCGDex:
 
 ```bash
-./cardman import-full
+make import-full
+# or manually: ./cardman import-full
 ```
 
 This will:
@@ -72,7 +82,8 @@ This will:
 Import only new sets that don't exist in your database (via TCGDex):
 
 ```bash
-./cardman import-updates
+make import-updates
+# or manually: ./cardman import-updates
 ```
 
 This will:
@@ -106,6 +117,34 @@ The import process stores:
 - **Import Runs**: History and status of all import operations
 
 ## Available Commands
+
+### Using Make
+
+```bash
+make help              # Show all available commands
+make build             # Build the application
+make test              # Run all tests
+make test-coverage     # Run tests with coverage
+make test-bench        # Run benchmarks
+make fmt               # Format code
+make vet               # Run go vet
+make lint              # Run golangci-lint
+make lint-install      # Install golangci-lint
+make tidy              # Tidy dependencies
+make check             # Run fmt, vet, and test
+make all               # Full build pipeline (tidy, check, build)
+make migrate           # Run database migrations
+make serve             # Start the TUI server
+make serve-ssh         # Start the SSH server
+make import-full       # Import all Pokemon TCG data
+make import-updates    # Import only new sets
+make list-sets         # List available sets from the API
+make clean             # Remove build artifacts
+make install           # Install binary to GOPATH/bin
+make run               # Build and run (serve)
+```
+
+### Manual Commands
 
 ```bash
 ./cardman migrate          # Run database migrations
