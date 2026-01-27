@@ -27,6 +27,7 @@ const (
 	ScreenCardGameTabs
 	ScreenLocalUserSetup
 	ScreenSettings
+	ScreenImport
 )
 
 // Model is the main application model
@@ -48,6 +49,8 @@ type Model struct {
 	cursor            int
 	cardGameTabs      CardGameTabsModel
 	settingsModel     *SettingsModel
+	mainMenuTab       int
+	importModel       *ImportModel
 }
 
 var (
@@ -82,6 +85,7 @@ func NewModel(db *sql.DB, isSSHMode bool) (*Model, error) {
 		inputs:            make([]textinput.Model, 2),
 		cardGames:         cardGames,
 		cursor:            0,
+		mainMenuTab:       0,
 	}
 	if isSSHMode {
 		m.screen = ScreenLogin
@@ -171,13 +175,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				return m, tea.Batch(cmds...)
 			case ScreenMain:
-				if action == "nav_up" || s == "up" || s == "shift+tab" {
-					if m.cursor > 0 {
-						m.cursor--
-					}
-				} else if action == "nav_down" || s == "down" || s == "tab" {
-					if m.cursor < len(m.cardGames)-1 {
-						m.cursor++
+				if action == "nav_next_tab" || (s == "tab" && m.mainMenuTab == 1) {
+					m.mainMenuTab = (m.mainMenuTab + 1) % 2
+					return m, nil
+				}
+				if action == "nav_prev_tab" || s == "shift+tab" {
+					m.mainMenuTab = (m.mainMenuTab - 1 + 2) % 2
+					return m, nil
+				}
+				if m.mainMenuTab == 0 {
+					if action == "nav_up" || s == "up" {
+						if m.cursor > 0 {
+							m.cursor--
+						}
+					} else if action == "nav_down" || s == "down" || s == "tab" {
+						if m.cursor < len(m.cardGames)-1 {
+							m.cursor++
+						}
 					}
 				}
 				return m, nil
@@ -208,18 +222,31 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m.handleLocalUserSetup()
 				}
 			case ScreenMain:
-				if len(m.cardGames) > 0 && m.cursor < len(m.cardGames) {
-					selectedGame := &m.cardGames[m.cursor]
-					cardGameTabs, err := m.createCardGameTabsModel(selectedGame)
+				if m.mainMenuTab == 0 {
+					if len(m.cardGames) > 0 && m.cursor < len(m.cardGames) {
+						selectedGame := &m.cardGames[m.cursor]
+						cardGameTabs, err := m.createCardGameTabsModel(selectedGame)
+						if err != nil {
+							slog.Error("failed to create card game tabs model", "error", err)
+							m.errorMsg = fmt.Sprintf("Failed to load card game: %v", err)
+							return m, nil
+						}
+						m.cardGameTabs = cardGameTabs
+						m.screen = ScreenCardGameTabs
+						m.errorMsg = ""
+						return m, m.cardGameTabs.Init()
+					}
+				} else if m.mainMenuTab == 1 {
+					importModel, err := m.createImportModel()
 					if err != nil {
-						slog.Error("failed to create card game tabs model", "error", err)
-						m.errorMsg = fmt.Sprintf("Failed to load card game: %v", err)
+						slog.Error("failed to create import model", "error", err)
+						m.errorMsg = fmt.Sprintf("Failed to load import screen: %v", err)
 						return m, nil
 					}
-					m.cardGameTabs = cardGameTabs
-					m.screen = ScreenCardGameTabs
+					m.importModel = &importModel
+					m.screen = ScreenImport
 					m.errorMsg = ""
-					return m, m.cardGameTabs.Init()
+					return m, m.importModel.Init()
 				}
 			}
 		}
@@ -249,6 +276,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, cmd
+	case ScreenImport:
+		if m.importModel != nil {
+			var cmd tea.Cmd
+			*m.importModel, cmd = m.importModel.Update(msg)
+			if keyMsg, ok := msg.(tea.KeyMsg); ok {
+				action := ""
+				if m.configManager != nil {
+					action = m.configManager.MatchAction(keyMsg.String())
+				}
+				if action == "back" || action == "quit_alt" || keyMsg.String() == "q" || keyMsg.String() == "esc" {
+					if !m.importModel.isImporting {
+						m.screen = ScreenMain
+						return m, nil
+					}
+				}
+			}
+			return m, cmd
+		}
 	}
 	return m, nil
 }
@@ -275,6 +320,11 @@ func (m Model) View() string {
 		return m.settingsModel.View()
 	case ScreenCardGameTabs:
 		return m.cardGameTabs.View()
+	case ScreenImport:
+		if m.importModel != nil {
+			return m.importModel.View()
+		}
+		return ""
 	default:
 		return ""
 	}
@@ -322,4 +372,8 @@ func (m *Model) createCardGameTabsModel(selectedGame *model.CardGame) (CardGameT
 		}
 	}
 	return cardGameTabs, nil
+}
+
+func (m *Model) createImportModel() (ImportModel, error) {
+	return NewImportModel(m.db, m.configManager, m.cardGames)
 }

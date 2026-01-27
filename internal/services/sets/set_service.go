@@ -12,6 +12,7 @@ type SetService interface {
 	GetSetIDByAPIID(ctx context.Context, apiID string) (int64, error)
 	UpsertSet(ctx context.Context, apiID, code, name string, printedTotal, total int) (int64, error)
 	GetAllSetAPIIDs(ctx context.Context) ([]string, error)
+	SetHasUserCollections(ctx context.Context, setID int64) (bool, error)
 }
 
 // SetServiceImpl implements the SetService interface
@@ -36,6 +37,12 @@ const (
 	    WHERE id = ?`
 
 	selectAllSetAPIIDsQuery = `SELECT api_id FROM sets`
+
+	checkSetHasUserCollectionsQuery = `SELECT EXISTS(
+		SELECT 1 FROM user_collection uc
+		JOIN cards c ON uc.card_id = c.id
+		WHERE c.set_id = ?
+	)`
 )
 
 // GetSetIDByAPIID retrieves the database ID for a set by its API ID
@@ -118,4 +125,15 @@ func (s *SetServiceImpl) GetAllSetAPIIDs(ctx context.Context) ([]string, error) 
 	}
 
 	return apiIDs, nil
+}
+
+// SetHasUserCollections checks if any user has cards from this set in their collection
+func (s *SetServiceImpl) SetHasUserCollections(ctx context.Context, setID int64) (bool, error) {
+	var hasCollections bool
+	err := s.db.QueryRowContext(ctx, checkSetHasUserCollectionsQuery, setID).Scan(&hasCollections)
+	if err != nil {
+		slog.Error("failed to check if set has user collections", "set_id", setID, "error", err)
+		return false, &FailedToCheckSetCollectionsError{Err: err}
+	}
+	return hasCollections, nil
 }

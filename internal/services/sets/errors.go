@@ -109,3 +109,15 @@ func (e *ErrorIteratingSetsError) Error() string {
 func (e *ErrorIteratingSetsError) Unwrap() error {
 	return e.Err
 }
+
+type FailedToCheckSetCollectionsError struct {
+	Err error
+}
+
+func (e *FailedToCheckSetCollectionsError) Error() string {
+	return fmt.Sprintf("failed to check set collections: %v", e.Err)
+}
+
+func (e *FailedToCheckSetCollectionsError) Unwrap() error {
+	return e.Err
+}
