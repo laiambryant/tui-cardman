@@ -61,3 +61,51 @@ func (e *FailedToCreateSampleCollectionDataError) Error() string {
 func (e *FailedToCreateSampleCollectionDataError) Unwrap() error {
 	return e.Err
 }
+
+type FailedToGetQuantityError struct {
+	Err error
+}
+
+func (e *FailedToGetQuantityError) Error() string {
+	return fmt.Sprintf("failed to get quantity: %v", e.Err)
+}
+
+func (e *FailedToGetQuantityError) Unwrap() error {
+	return e.Err
+}
+
+type FailedToIncrementQuantityError struct {
+	Err error
+}
+
+func (e *FailedToIncrementQuantityError) Error() string {
+	return fmt.Sprintf("failed to increment quantity: %v", e.Err)
+}
+
+func (e *FailedToIncrementQuantityError) Unwrap() error {
+	return e.Err
+}
+
+type FailedToDecrementQuantityError struct {
+	Err error
+}
+
+func (e *FailedToDecrementQuantityError) Error() string {
+	return fmt.Sprintf("failed to decrement quantity: %v", e.Err)
+}
+
+func (e *FailedToDecrementQuantityError) Unwrap() error {
+	return e.Err
+}
+
+type FailedToUpsertCollectionError struct {
+	Err error
+}
+
+func (e *FailedToUpsertCollectionError) Error() string {
+	return fmt.Sprintf("failed to upsert collection: %v", e.Err)
+}
+
+func (e *FailedToUpsertCollectionError) Unwrap() error {
+	return e.Err
+}
