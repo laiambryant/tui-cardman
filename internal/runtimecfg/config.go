@@ -46,8 +46,8 @@ var ColorSchemes = map[string]ColorScheme{
 		Title:                   lipgloss.Color("170"),
 		Background:              lipgloss.Color(""),
 		Foreground:              lipgloss.Color(""),
-		TableSelectedForeground: lipgloss.Color("229"),
-		TableSelectedBackground: lipgloss.Color("57"),
+		TableSelectedForeground: lipgloss.Color(""),
+		TableSelectedBackground: lipgloss.Color(""),
 		Disabled:                lipgloss.Color("240"),
 	},
 	"dark": {
@@ -58,8 +58,8 @@ var ColorSchemes = map[string]ColorScheme{
 		Title:                   lipgloss.Color("12"),
 		Background:              lipgloss.Color("0"),
 		Foreground:              lipgloss.Color("15"),
-		TableSelectedForeground: lipgloss.Color("15"),
-		TableSelectedBackground: lipgloss.Color("4"),
+		TableSelectedForeground: lipgloss.Color(""),
+		TableSelectedBackground: lipgloss.Color(""),
 		Disabled:                lipgloss.Color("8"),
 	},
 	"light": {
@@ -70,8 +70,8 @@ var ColorSchemes = map[string]ColorScheme{
 		Title:                   lipgloss.Color("2"),
 		Background:              lipgloss.Color("15"),
 		Foreground:              lipgloss.Color("0"),
-		TableSelectedForeground: lipgloss.Color("0"),
-		TableSelectedBackground: lipgloss.Color("6"),
+		TableSelectedForeground: lipgloss.Color(""),
+		TableSelectedBackground: lipgloss.Color(""),
 		Disabled:                lipgloss.Color("7"),
 	},
 }

@@ -129,12 +129,50 @@ func (sm *StyleManager) GetTableStyles() table.Styles {
 		BorderStyle(lipgloss.NormalBorder()).
 		BorderForeground(sm.scheme.Blurred).
 		BorderBottom(true).
-		Bold(false)
+		Bold(true).
+		Align(lipgloss.Center)
+	selectedForeground, selectedBackground := sm.getTableSelectionColors()
 	s.Selected = s.Selected.
-		Foreground(sm.scheme.TableSelectedForeground).
-		Background(sm.scheme.TableSelectedBackground).
+		Foreground(selectedForeground).
+		Background(selectedBackground).
 		Bold(false)
 	return s
+}
+
+// GetSettingsSelectedStyle returns the style for selected settings items
+func (sm *StyleManager) GetSettingsSelectedStyle() lipgloss.Style {
+	selectedForeground, selectedBackground := sm.getTableSelectionColors()
+	return lipgloss.NewStyle().
+		Foreground(selectedForeground).
+		Background(selectedBackground).
+		Bold(false)
+}
+
+func (sm *StyleManager) getTableSelectionColors() (lipgloss.Color, lipgloss.Color) {
+	foreground := sm.scheme.TableSelectedForeground
+	background := sm.scheme.TableSelectedBackground
+	if foreground == "" {
+		if sm.scheme.Foreground != "" {
+			foreground = sm.scheme.Foreground
+		} else {
+			foreground = sm.scheme.Focused
+		}
+	}
+	if background == "" {
+		if sm.scheme.Focused != "" {
+			background = sm.scheme.Focused
+		} else {
+			background = sm.scheme.Title
+		}
+	}
+	return foreground, background
+}
+
+// GetTableBaseStyle returns the style for the table container
+func (sm *StyleManager) GetTableBaseStyle() lipgloss.Style {
+	return lipgloss.NewStyle().
+		BorderStyle(lipgloss.NormalBorder()).
+		BorderForeground(sm.scheme.Blurred)
 }
 
 // GetPanelStyle returns a styled panel
@@ -182,7 +220,7 @@ func (sm *StyleManager) applyBackground(style lipgloss.Style, component string) 
 	return style.Background(sm.scheme.Background).Foreground(sm.scheme.Foreground)
 }
 
-func (sm *StyleManager) shouldApplyComponentBackground(component string) bool {
+func (sm *StyleManager) shouldApplyComponentBackground(_ string) bool {
 	if !sm.opaqueBackground {
 		return false
 	}

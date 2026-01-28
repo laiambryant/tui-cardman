@@ -49,13 +49,12 @@ func NewCardGameTabsModel(selectedGame *model.CardGame, cfg *runtimecfg.Manager,
 	searchInput.Placeholder = "Search cards..."
 	searchInput.Width = 30
 
-	// Initialize table
+	// Initialize table with Collection Tab columns (default tab)
 	columns := []table.Column{
 		{Title: "Name", Width: 25},
 		{Title: "Expansion", Width: 15},
 		{Title: "Rarity", Width: 12},
-		{Title: "Card #", Width: 8},
-		{Title: "Quantity", Width: 8},
+		{Title: "Amount", Width: 8},
 	}
 
 	cardTable := NewStyledTable(columns, 10, true, styleManager)
@@ -135,27 +134,16 @@ func (m CardGameTabsModel) Update(msg tea.Msg) (CardGameTabsModel, tea.Cmd) {
 
 		// Up / down navigation (keep vim keys as fallbacks)
 		if action == "nav_up" || s == "k" {
-			if m.currentTab == TabCardSearch || m.currentTab == TabUserSearch {
+			if m.currentTab == TabCardSearch || m.currentTab == TabUserSearch || m.currentTab == TabCollection {
 				m.cardTable, _ = m.cardTable.Update(msg)
 				return m, nil
-			}
-			if m.cursor > 0 {
-				m.cursor--
 			}
 			return m, nil
 		}
 		if action == "nav_down" || s == "j" {
-			if m.currentTab == TabCardSearch || m.currentTab == TabUserSearch {
+			if m.currentTab == TabCardSearch || m.currentTab == TabUserSearch || m.currentTab == TabCollection {
 				m.cardTable, _ = m.cardTable.Update(msg)
 				return m, nil
-			}
-			maxItems := 0
-			switch m.currentTab {
-			case TabCollection:
-				maxItems = len(m.filteredCollection)
-			}
-			if m.cursor < maxItems-1 {
-				m.cursor++
 			}
 			return m, nil
 		}
@@ -302,7 +290,8 @@ func (m CardGameTabsModel) View() string {
 
 func (m CardGameTabsModel) updateTableForTab() CardGameTabsModel {
 	m.cardTable.SetRows([]table.Row{})
-	if m.currentTab == TabCardSearch {
+	switch m.currentTab {
+	case TabCardSearch:
 		m.cardTable.SetColumns([]table.Column{
 			{Title: "Name", Width: 25},
 			{Title: "Expansion", Width: 15},
@@ -313,7 +302,21 @@ func (m CardGameTabsModel) updateTableForTab() CardGameTabsModel {
 		m.cardTable.SetStyles(m.styleManager.GetTableStyles())
 		m.cardTable.Focus()
 		m.updateCardTable()
-	} else if m.currentTab == TabUserSearch {
+	case TabUserSearch:
+		m.cardTable.SetColumns([]table.Column{
+			{Title: "Name", Width: 25},
+			{Title: "Expansion", Width: 15},
+			{Title: "Rarity", Width: 12},
+			{Title: "Amount", Width: 8},
+		})
+		m.cardTable.SetStyles(m.styleManager.GetTableStyles())
+		m.cardTable.Focus()
+		var rows []table.Row
+		for _, collection := range m.filteredCollection {
+			rows = append(rows, collectionToRow(collection))
+		}
+		m.cardTable.SetRows(rows)
+	case TabCollection:
 		m.cardTable.SetColumns([]table.Column{
 			{Title: "Name", Width: 25},
 			{Title: "Expansion", Width: 15},
@@ -332,6 +335,7 @@ func (m CardGameTabsModel) updateTableForTab() CardGameTabsModel {
 	return m
 }
 
+// renderCollectionTab now uses a table instead of a list
 func (m CardGameTabsModel) renderCollectionTab() string {
 	var b strings.Builder
 
@@ -340,35 +344,27 @@ func (m CardGameTabsModel) renderCollectionTab() string {
 	if len(m.filteredCollection) == 0 {
 		b.WriteString(blurredStyle.Render("No cards in your collection yet.") + "\n")
 		b.WriteString(blurredStyle.Render("Use Card Search to discover cards to add!") + "\n")
-	} else {
-		totalCards := 0
-		for _, collection := range m.filteredCollection {
-			totalCards += collection.Quantity
-		}
-		b.WriteString(blurredStyle.Render("Total unique cards: ") +
-			titleStyle.Render(fmt.Sprintf("%d", len(m.filteredCollection))) + "\n")
-		b.WriteString(blurredStyle.Render("Total cards: ") +
-			titleStyle.Render(fmt.Sprintf("%d", totalCards)) + "\n\n")
-		b.WriteString(titleStyle.Render("Recent additions:") + "\n")
-		for i, collection := range m.filteredCollection {
-			if i >= 10 {
-				break
-			}
-			style := blurredStyle
-			if i == m.cursor {
-				style = titleStyle
-			}
-			cardName := "Unknown Card"
-			if collection.Card != nil {
-				cardName = collection.Card.Name
-			}
-			line := style.Render(cardName + " x" + fmt.Sprintf("%d", collection.Quantity))
-			if collection.Condition != "" {
-				line += blurredStyle.Render(" (" + collection.Condition + ")")
-			}
-			b.WriteString(line + "\n")
-		}
+		return b.String()
 	}
+
+	totalCards := 0
+	for _, collection := range m.filteredCollection {
+		totalCards += collection.Quantity
+	}
+	b.WriteString(blurredStyle.Render("Total unique cards: ") +
+		titleStyle.Render(fmt.Sprintf("%d", len(m.filteredCollection))) + "\n")
+	b.WriteString(blurredStyle.Render("Total cards: ") +
+		titleStyle.Render(fmt.Sprintf("%d", totalCards)) + "\n\n")
+
+	b.WriteString(titleStyle.Render("Recent additions:") + "\n")
+
+	// Update table with collection data
+	var rows []table.Row
+	for _, collection := range m.filteredCollection {
+		rows = append(rows, collectionToRow(collection))
+	}
+	m.cardTable.SetRows(rows)
+	b.WriteString(m.styleManager.GetTableBaseStyle().Render(m.cardTable.View()))
 
 	return b.String()
 }
@@ -409,7 +405,7 @@ func (m CardGameTabsModel) renderCardSearchTab() string {
 	}
 	b.WriteString(titleStyle.Render("Found cards:") + "\n")
 	m.cardTable.SetRows(rows)
-	b.WriteString(m.cardTable.View())
+	b.WriteString(m.styleManager.GetTableBaseStyle().Render(m.cardTable.View()))
 	return b.String()
 }
 
@@ -430,7 +426,7 @@ func (m CardGameTabsModel) renderUserSearchTab() string {
 			rows = append(rows, collectionToRow(collection))
 		}
 		m.cardTable.SetRows(rows)
-		b.WriteString(m.cardTable.View())
+		b.WriteString(m.styleManager.GetTableBaseStyle().Render(m.cardTable.View()))
 	}
 	return b.String()
 }

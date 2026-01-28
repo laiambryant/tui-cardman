@@ -382,7 +382,7 @@ func (m SettingsModel) renderKeybindingsSection() string {
 			keyDisplay = "<unbound>"
 		}
 		if i == m.cursor {
-			b.WriteString(m.styleManager.GetTitleStyle().Render("> "+actionDisplay) + " " + m.styleManager.GetTitleStyle().Render(keyDisplay) + "\n")
+			b.WriteString(m.styleManager.GetSettingsSelectedStyle().Render("> "+actionDisplay+" "+keyDisplay) + "\n")
 		} else {
 			b.WriteString(m.styleManager.GetBlurredStyle().Render("  "+actionDisplay) + " " + m.styleManager.GetNoStyle().Render(keyDisplay) + "\n")
 		}
@@ -405,7 +405,12 @@ func (m SettingsModel) renderUISection() string {
 	if m.uiCursor != uiSettingTheme {
 		themeDisplay = blank
 	}
-	b.WriteString(themeDisplay + "Theme: " + cfg.UI.ColorScheme + "\n")
+	line := themeDisplay + "Theme: " + cfg.UI.ColorScheme
+	if m.uiCursor == uiSettingTheme {
+		b.WriteString(m.styleManager.GetSettingsSelectedStyle().Render(line) + "\n")
+	} else {
+		b.WriteString(line + "\n")
+	}
 	bgDisplay := cursor
 	if m.uiCursor != uiSettingOpaqueBackground {
 		bgDisplay = blank
@@ -414,7 +419,12 @@ func (m SettingsModel) renderUISection() string {
 	if cfg.UI.OpaqueBackground {
 		bgValue = "On"
 	}
-	b.WriteString(bgDisplay + "Opaque Background: " + bgValue + "\n")
+	line = bgDisplay + "Opaque Background: " + bgValue
+	if m.uiCursor == uiSettingOpaqueBackground {
+		b.WriteString(m.styleManager.GetSettingsSelectedStyle().Render(line) + "\n")
+	} else {
+		b.WriteString(line + "\n")
+	}
 	bgStyleDisplay := cursor
 	if m.uiCursor != uiSettingBackgroundStyle {
 		bgStyleDisplay = blank
@@ -423,7 +433,12 @@ func (m SettingsModel) renderUISection() string {
 	if !cfg.UI.OpaqueBackground {
 		styleValue = m.styleManager.GetBlurredStyle().Render(styleValue)
 	}
-	b.WriteString(bgStyleDisplay + "Background Style: " + styleValue + "\n")
+	line = bgStyleDisplay + "Background Style: " + styleValue
+	if m.uiCursor == uiSettingBackgroundStyle {
+		b.WriteString(m.styleManager.GetSettingsSelectedStyle().Render(line) + "\n")
+	} else {
+		b.WriteString(line + "\n")
+	}
 	b.WriteString("\n")
 	b.WriteString(m.styleManager.GetBlurredStyle().Render("Available themes: "+strings.Join(themes, ", ")) + "\n")
 	b.WriteString(m.styleManager.GetBlurredStyle().Render("Background styles: "+strings.Join(bgStyles, ", ")) + "\n")

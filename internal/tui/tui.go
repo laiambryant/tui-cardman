@@ -225,7 +225,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m.handleLocalUserSetup()
 				}
 			case ScreenMain:
-				if m.mainMenuTab == 0 {
+				switch m.mainMenuTab {
+				case 0:
 					if len(m.cardGames) > 0 && m.cursor < len(m.cardGames) {
 						selectedGame := &m.cardGames[m.cursor]
 						cardGameTabs, err := m.createCardGameTabsModel(selectedGame)
@@ -239,7 +240,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.errorMsg = ""
 						return m, m.cardGameTabs.Init()
 					}
-				} else if m.mainMenuTab == 1 {
+				case 1:
 					importModel, err := m.createImportModel()
 					if err != nil {
 						slog.Error("failed to create import model", "error", err)

@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"github.com/laiambryant/tui-cardman/internal/model"
 	"github.com/laiambryant/tui-cardman/internal/pokemontcg"
 )
 
@@ -18,14 +17,6 @@ type fetchDatabaseSetsSuccessMsg struct {
 }
 
 type fetchDatabaseSetsErrorMsg struct {
-	err error
-}
-
-type fetchSetDetailsSuccessMsg struct {
-	set *model.Set
-}
-
-type fetchSetDetailsErrorMsg struct {
 	err error
 }
 
