@@ -1,10 +1,21 @@
 .PHONY: help build build-fast clean clean-all test test-coverage test-bench fmt vet lint lint-install tidy migrate serve serve-ssh import-full import-updates list-sets install deps all check run
 
 BINARY_NAME=cardman
-BINARY_EXT=.exe
 BUILD_DIR=.
 CMD_DIR=./cmd
 MAIN_FILE=$(CMD_DIR)/main.go
+
+ifeq ($(OS),Windows_NT)
+	BINARY_EXT=.exe
+	RUNBIN=.\\$(BINARY_NAME)$(BINARY_EXT)
+	RM_CMD=del /Q
+	NULLDEV=NUL
+else
+	BINARY_EXT=
+	RUNBIN=./$(BINARY_NAME)$(BINARY_EXT)
+	RM_CMD=rm -f
+	NULLDEV=/dev/null
+endif
 
 export CGO_ENABLED=1
 
@@ -44,14 +55,24 @@ $(BINARY_NAME)$(BINARY_EXT):
 build-fast:
 	go build -o $(BINARY_NAME)$(BINARY_EXT) $(CMD_DIR)
 
+ifeq ($(OS),Windows_NT)
 clean:
-	@if exist $(BINARY_NAME)$(BINARY_EXT) del /Q $(BINARY_NAME)$(BINARY_EXT)
+	-@if exist $(BINARY_NAME)$(BINARY_EXT) $(RM_CMD) $(BINARY_NAME)$(BINARY_EXT)
 	@echo Cleaned build artifacts
 
 clean-all: clean
-	@if exist cardman.db del /Q cardman.db
-	@if exist output.log del /Q output.log
+	-@if exist cardman.db $(RM_CMD) cardman.db
+	-@if exist output.log $(RM_CMD) output.log
 	@echo Cleaned all artifacts, database, and logs
+else
+clean:
+	-@$(RM_CMD) $(BINARY_NAME)$(BINARY_EXT)
+	@echo Cleaned build artifacts
+
+clean-all: clean
+	-@$(RM_CMD) cardman.db output.log
+	@echo Cleaned all artifacts, database, and logs
+endif
 
 test:
 	go test ./...
@@ -69,7 +90,7 @@ vet:
 	go vet ./...
 
 lint:
-	@where golangci-lint >nul 2>&1 && golangci-lint run || echo golangci-lint not found, skipping
+	@command -v golangci-lint >/dev/null 2>&1 && golangci-lint run || echo golangci-lint not found, skipping
 
 lint-install:
 	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
@@ -84,23 +105,24 @@ check: fmt vet test
 
 all: tidy check build
 
+
 migrate: build
-	.\$(BINARY_NAME)$(BINARY_EXT) migrate
+	$(RUNBIN) migrate
 
 serve: build
-	.\$(BINARY_NAME)$(BINARY_EXT) serve
+	$(RUNBIN) serve
 
 serve-ssh: build
-	.\$(BINARY_NAME)$(BINARY_EXT) serve-ssh
+	$(RUNBIN) serve-ssh
 
 import-full: build
-	.\$(BINARY_NAME)$(BINARY_EXT) import-full
+	$(RUNBIN) import-full
 
 import-updates: build
-	.\$(BINARY_NAME)$(BINARY_EXT) import-updates
+	$(RUNBIN) import-updates
 
 list-sets: build
-	.\$(BINARY_NAME)$(BINARY_EXT) list-sets
+	$(RUNBIN) list-sets
 
 install:
 	go install $(CMD_DIR)
