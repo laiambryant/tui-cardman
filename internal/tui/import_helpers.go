@@ -54,22 +54,22 @@ func splitImportPanelWidths(contentWidth int) (int, int) {
 	// We need spacing between panels: 1 char
 	const panelOverhead = 6 // border + padding per panel
 	const spacing = 1
-	
+
 	if contentWidth < 20 {
 		return max(contentWidth/2, 10), max(contentWidth/2, 10)
 	}
-	
+
 	// Total overhead: 2 panels worth of overhead + spacing
 	totalOverhead := (panelOverhead * 2) + spacing
 	available := contentWidth - totalOverhead
-	
+
 	if available < 10 {
 		return 15, 15
 	}
-	
+
 	left := available * 3 / 5
 	right := available - left
-	
+
 	return left, right
 }
 
@@ -97,17 +97,17 @@ func (m ImportModel) renderImportBody() string {
 		return b.String()
 	}
 	b.WriteString(m.renderSearchInput() + "\n\n")
-	
+
 	// Calculate available width for the two panels
 	contentWidth := m.width - frameBorderSize - framePaddingX*2
 	if contentWidth < 0 {
 		contentWidth = 0
 	}
 	listWidth, actionsWidth := splitImportPanelWidths(contentWidth)
-	
+
 	leftPanel := m.renderSetsListPanel(listWidth)
 	rightPanel := m.renderActionsPanelContent(actionsWidth)
-	
+
 	mainContent := lipgloss.JoinHorizontal(
 		lipgloss.Top,
 		leftPanel,
@@ -155,13 +155,13 @@ func (m ImportModel) renderSetsListPanel(width int) string {
 		itemsPerPage := 15 // Reasonable default
 		b.WriteString(m.renderSetsListContent(itemsPerPage))
 	}
-	
+
 	panelStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(m.styleManager.scheme.Blurred).
 		Padding(1, 2).
 		MaxWidth(width)
-	
+
 	return panelStyle.Render(b.String())
 }
 func (m ImportModel) renderEmptySetsList() string {
@@ -196,13 +196,13 @@ func (m ImportModel) renderActionsPanelContent(width int) string {
 		b.WriteString(m.renderSelectedSetInfo())
 	}
 	b.WriteString(m.renderActionsList())
-	
+
 	panelStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(m.styleManager.scheme.Blurred).
 		Padding(1, 2).
 		MaxWidth(width)
-	
+
 	return panelStyle.Render(b.String())
 }
 func (m ImportModel) renderSelectedSetInfo() string {
