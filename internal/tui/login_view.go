@@ -60,18 +60,29 @@ func (m *Model) handleLogin() (tea.Model, tea.Cmd) {
 }
 
 func (m Model) loginView() string {
+	header := titleStyle.Render("CardMan - Login")
+	body := m.renderLoginBody()
+	footer := m.renderLoginFooter()
+	return renderFramedView(header, body, footer, m.width, m.height, m.styleManager)
+}
+
+func (m Model) renderLoginBody() string {
 	var b strings.Builder
-	b.WriteString(RenderTitle("CardMan - Login"))
 	b.WriteString(RenderConditionalLabel(true, "Email:") + "\n")
-	b.WriteString(m.inputs[0].View() + "\n\n")
+	b.WriteString(m.inputs[0].View() + "\n")
 	b.WriteString(RenderConditionalLabel(false, "Password:") + "\n")
-	b.WriteString(m.inputs[1].View() + "\n\n")
+	b.WriteString(m.inputs[1].View())
 	if m.errorMsg != "" {
-		b.WriteString(errorStyle.Render("Error: "+m.errorMsg) + "\n\n")
+		b.WriteString("\n" + errorStyle.Render("Error: "+m.errorMsg))
 	}
-	b.WriteString(m.renderButton(m.focusIndex == len(m.inputs), "[ Login ]") + "\n\n")
-	b.WriteString(helpStyle.Render(m.buildAuthViewHelpText()) + "\n")
+	b.WriteString("\n" + m.renderButton(m.focusIndex == len(m.inputs), "[ Login ]"))
+	return b.String()
+}
+
+func (m Model) renderLoginFooter() string {
+	var b strings.Builder
 	b.WriteString(helpStyle.Render("Don't have an account? Press Enter on the button below") + "\n")
 	b.WriteString(m.renderButton(m.focusIndex == len(m.inputs)+1, "[ Register ]") + "\n")
+	b.WriteString(helpStyle.Render(m.buildAuthViewHelpText()))
 	return b.String()
 }

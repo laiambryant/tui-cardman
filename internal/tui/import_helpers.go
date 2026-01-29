@@ -23,9 +23,9 @@ func getCursorPrefix(isCursor bool) string {
 }
 func getSetStatusIcon(isImported bool) string {
 	if isImported {
-		return "✓"
+		return "[x]"
 	}
-	return "○"
+	return "[ ]"
 }
 func calculatePaginationRange(cursor int, totalItems int, itemsPerPage int) (int, int) {
 	start := cursor - itemsPerPage/2
@@ -49,30 +49,74 @@ func renderStyledLine(style lipgloss.Style, format string, args ...interface{}) 
 	return style.Render(fmt.Sprintf(format, args...)) + "\n"
 }
 
+func splitImportPanelWidths(contentWidth int) (int, int) {
+	spacing := 2
+	if contentWidth <= spacing {
+		return max(contentWidth, 0), 0
+	}
+	available := contentWidth - spacing
+	left := available * 3 / 5
+	right := available - left
+	if left < 20 {
+		left = min(20, available)
+		right = available - left
+	}
+	if right < 12 {
+		right = max(available-left, 0)
+	}
+	return left, right
+}
+
 func (m ImportModel) renderImportView() string {
+	header := m.renderImportHeader()
+	footer := m.renderImportFooter()
+	layout := calculateFrameLayout(lipgloss.Height(header), lipgloss.Height(footer), m.width, m.height)
+	body := m.renderImportBody(layout.ContentWidth, layout.BodyContentHeight)
+	return renderFramedViewWithLayout(header, body, footer, layout, m.styleManager)
+}
+
+func (m ImportModel) renderImportHeader() string {
 	var b strings.Builder
-	b.WriteString(titleStyle.Render("CardMan - Import Pokemon TCG Sets") + "\n\n")
-	b.WriteString(m.renderCardGameSelector() + "\n\n")
+	b.WriteString(titleStyle.Render("CardMan - Import Pokemon TCG Sets") + "\n")
+	b.WriteString(m.renderCardGameSelector())
+	return b.String()
+}
+
+func (m ImportModel) renderImportBody(contentWidth, contentHeight int) string {
+	var b strings.Builder
 	if m.isLoading {
-		b.WriteString(focusedStyle.Render(m.loadingMsg) + "\n")
+		b.WriteString(focusedStyle.Render(m.loadingMsg))
 		return b.String()
 	}
-	b.WriteString(m.renderSearchInput() + "\n\n")
+	b.WriteString(m.renderSearchInput())
+	if contentHeight > 0 {
+		b.WriteString("\n")
+	}
+	panelHeight := contentHeight - 1
+	if panelHeight < 3 {
+		panelHeight = 3
+	}
+	listWidth, actionsWidth := splitImportPanelWidths(contentWidth)
 	mainContent := lipgloss.JoinHorizontal(
 		lipgloss.Top,
-		m.renderSetsList(),
+		m.renderSetsList(listWidth, panelHeight),
 		"  ",
-		m.renderActionsPanel(),
+		m.renderActionsPanel(actionsWidth, panelHeight),
 	)
-	b.WriteString(mainContent + "\n\n")
-	b.WriteString(m.renderStatusBar() + "\n")
-	b.WriteString(m.renderHelp() + "\n")
+	b.WriteString(mainContent)
+	return b.String()
+}
+
+func (m ImportModel) renderImportFooter() string {
+	var b strings.Builder
 	if m.errorMsg != "" {
-		b.WriteString("\n" + errorStyle.Render(m.errorMsg) + "\n")
+		b.WriteString(errorStyle.Render("Error: "+m.errorMsg) + "\n")
 	}
 	if m.statusMsg != "" {
-		b.WriteString("\n" + focusedStyle.Render(m.statusMsg) + "\n")
+		b.WriteString(focusedStyle.Render(m.statusMsg) + "\n")
 	}
+	b.WriteString(m.renderStatusBar() + "\n")
+	b.WriteString(m.renderHelp())
 	return b.String()
 }
 
@@ -87,14 +131,16 @@ func (m ImportModel) renderSearchInput() string {
 	return label + m.searchInput.View()
 }
 
-func (m ImportModel) renderSetsList() string {
-	listStyle := m.createPanelStyle(50, 20, m.styleManager.scheme.Blurred)
+func (m ImportModel) renderSetsList(width, height int) string {
+	listStyle := m.createPanelStyle(width, height, m.styleManager.scheme.Blurred)
 	var b strings.Builder
-	b.WriteString(titleStyle.Render("Sets") + "\n\n")
+	contentHeight := max(height-4, 1)
+	itemsPerPage := max(contentHeight-2, 1)
+	b.WriteString(titleStyle.Render("Sets") + "\n")
 	if len(m.filteredSets) == 0 {
 		b.WriteString(m.renderEmptySetsList())
 	} else {
-		b.WriteString(m.renderSetsListContent())
+		b.WriteString(m.renderSetsListContent(itemsPerPage))
 	}
 	return listStyle.Render(b.String())
 }
@@ -104,9 +150,9 @@ func (m ImportModel) renderEmptySetsList() string {
 	}
 	return blurredStyle.Render("No sets found")
 }
-func (m ImportModel) renderSetsListContent() string {
+func (m ImportModel) renderSetsListContent(itemsPerPage int) string {
 	var b strings.Builder
-	start, end := calculatePaginationRange(m.cursor, len(m.filteredSets), 16)
+	start, end := calculatePaginationRange(m.cursor, len(m.filteredSets), itemsPerPage)
 	for i := start; i < end; i++ {
 		b.WriteString(m.renderSetListItem(i))
 	}
@@ -123,11 +169,12 @@ func (m ImportModel) renderSetListItem(index int) string {
 	return blurredStyle.Render(line) + "\n"
 }
 
-func (m ImportModel) renderActionsPanel() string {
-	panelStyle := m.createPanelStyle(40, 20, m.styleManager.scheme.Blurred)
+func (m ImportModel) renderActionsPanel(width, height int) string {
+	panelStyle := m.createPanelStyle(width, height, m.styleManager.scheme.Blurred)
 	var b strings.Builder
-	b.WriteString(titleStyle.Render("Actions") + "\n\n")
-	if len(m.filteredSets) > 0 && m.cursor < len(m.filteredSets) {
+	contentHeight := max(height-4, 1)
+	b.WriteString(titleStyle.Render("Actions") + "\n")
+	if len(m.filteredSets) > 0 && m.cursor < len(m.filteredSets) && contentHeight > 6 {
 		b.WriteString(m.renderSelectedSetInfo())
 	}
 	b.WriteString(m.renderActionsList())
@@ -193,18 +240,28 @@ func (m ImportModel) renderHelp() string {
 }
 
 func (m ImportModel) renderImportProgress() string {
-	var b strings.Builder
-	b.WriteString(titleStyle.Render("Importing Sets...") + "\n\n")
-	progressStyle := m.createProgressPanelStyle()
-	b.WriteString(progressStyle.Render(m.renderProgressContent()))
-	return b.String()
+	header := titleStyle.Render("Importing Sets...")
+	footer := helpStyle.Render("Press Ctrl+C to cancel")
+	layout := calculateFrameLayout(lipgloss.Height(header), lipgloss.Height(footer), m.width, m.height)
+	body := m.renderImportProgressBody(layout.ContentWidth, layout.BodyContentHeight)
+	return renderFramedViewWithLayout(header, body, footer, layout, m.styleManager)
 }
-func (m ImportModel) createProgressPanelStyle() lipgloss.Style {
+
+func (m ImportModel) renderImportProgressBody(contentWidth, contentHeight int) string {
+	progressStyle := m.createProgressPanelStyle(contentWidth)
+	panel := progressStyle.Render(m.renderProgressContent())
+	return lipgloss.Place(contentWidth, contentHeight, lipgloss.Center, lipgloss.Center, panel)
+}
+func (m ImportModel) createProgressPanelStyle(contentWidth int) lipgloss.Style {
+	panelWidth := 60
+	if contentWidth > 0 {
+		panelWidth = min(60, contentWidth)
+	}
 	return lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(m.styleManager.scheme.Focused).
 		Padding(2, 4).
-		Width(60).
+		Width(panelWidth).
 		Align(lipgloss.Center)
 }
 func (m ImportModel) renderProgressContent() string {
@@ -215,7 +272,6 @@ func (m ImportModel) renderProgressContent() string {
 	} else {
 		content.WriteString(blurredStyle.Render("Processing...") + "\n\n")
 	}
-	content.WriteString("\n" + helpStyle.Render("Press Ctrl+C to cancel"))
 	return content.String()
 }
 func (m ImportModel) renderCurrentSetStatus() string {

@@ -20,27 +20,39 @@ func (m *Model) initLocalUserSetupInputs() {
 
 func (m Model) renderSubmitButton(label string) string {
 	if m.focusIndex == len(m.inputs) {
-		return titleStyle.Render(label) + "\n\n"
+		return titleStyle.Render(label)
 	}
-	return blurredStyle.Render(label) + "\n\n"
+	return blurredStyle.Render(label)
 }
 
 func (m Model) localUserSetupView() string {
+	header := titleStyle.Render("Welcome to CardMan!")
+	body := m.renderLocalUserSetupBody()
+	footer := m.renderLocalUserSetupFooter()
+	return renderFramedView(header, body, footer, m.width, m.height, m.styleManager)
+}
+
+func (m Model) renderLocalUserSetupBody() string {
 	var b strings.Builder
-	b.WriteString(RenderTitle("🎴 Welcome to CardMan!"))
 	b.WriteString(focusedStyle.Render("Let's set up your local profile to get started.") + "\n")
-	b.WriteString(blurredStyle.Render("This will be used to manage your card collections.") + "\n\n")
+	b.WriteString(blurredStyle.Render("This will be used to manage your card collections.") + "\n")
 	if m.errorMsg != "" {
-		b.WriteString(errorStyle.Render("Error: "+m.errorMsg) + "\n\n")
+		b.WriteString(errorStyle.Render("Error: "+m.errorMsg) + "\n")
 	}
 	fields := []string{"First Name:", "Last Name:", "Email:"}
 	for i := range m.inputs {
 		b.WriteString(fields[i] + "\n")
-		b.WriteString(m.inputs[i].View() + "\n\n")
+		b.WriteString(m.inputs[i].View())
+		if i < len(m.inputs)-1 {
+			b.WriteString("\n")
+		}
 	}
-	b.WriteString(m.renderSubmitButton("[ Create Profile ]"))
-	b.WriteString(helpStyle.Render(m.buildLocalSetupHelpText()) + "\n")
+	b.WriteString("\n" + m.renderSubmitButton("[ Create Profile ]"))
 	return b.String()
+}
+
+func (m Model) renderLocalUserSetupFooter() string {
+	return helpStyle.Render(m.buildLocalSetupHelpText())
 }
 
 func (m Model) buildLocalSetupHelpText() string {

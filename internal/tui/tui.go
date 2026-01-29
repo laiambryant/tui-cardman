@@ -276,6 +276,9 @@ func (m *Model) selectImport() (tea.Model, tea.Cmd) {
 func (m *Model) handleSettingsKey(action string) (tea.Model, tea.Cmd) {
 	if action == "settings" && m.screen != ScreenSettings {
 		m.settingsModel = NewSettingsModel(m.configManager, m.styleManager)
+		m.settingsModel.width = m.width
+		m.settingsModel.height = m.height
+		m.settingsModel.modal = m.settingsModel.modal.SetDimensions(m.width, m.height)
 		m.screen = ScreenSettings
 		return m, m.settingsModel.Init()
 	}
@@ -299,6 +302,10 @@ func (m Model) Init() tea.Cmd {
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+		return m.handleScreenUpdates(msg)
 	case tea.KeyMsg:
 		s := msg.String()
 		action := m.getAction(s)
@@ -475,6 +482,9 @@ func (a *dbAdapter) UpdateLastLogin(userID int64) error {
 // createCardGameTabsModel creates a card game tabs model with loaded data
 func (m *Model) createCardGameTabsModel(selectedGame *model.CardGame) (CardGameTabsModel, error) {
 	cardGameTabs := NewCardGameTabsModel(selectedGame, m.configManager, m.styleManager)
+	cardGameTabs.width = m.width
+	cardGameTabs.height = m.height
+	cardGameTabs.modal = cardGameTabs.modal.SetDimensions(m.width, m.height)
 	cardGameTabs.collectionService = m.collectionService
 	cardGameTabs.user = m.user
 	cards, err := m.cardService.GetCardsByGameID(selectedGame.ID)
@@ -501,5 +511,11 @@ func (m *Model) createCardGameTabsModel(selectedGame *model.CardGame) (CardGameT
 }
 
 func (m *Model) createImportModel() (ImportModel, error) {
-	return NewImportModel(m.db, m.configManager, m.styleManager, m.cardGames)
+	importModel, err := NewImportModel(m.db, m.configManager, m.styleManager, m.cardGames)
+	if err != nil {
+		return ImportModel{}, err
+	}
+	importModel.width = m.width
+	importModel.height = m.height
+	return importModel, nil
 }

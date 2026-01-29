@@ -8,23 +8,37 @@ import (
 )
 
 func (m Model) mainView() string {
+	header := m.renderMainHeader()
+	footer := m.renderMainFooter()
+	layout := calculateFrameLayout(lipgloss.Height(header), lipgloss.Height(footer), m.width, m.height)
+	body := m.renderMainBody()
+	return renderFramedViewWithLayout(header, body, footer, layout, m.styleManager)
+}
+
+func (m Model) renderMainHeader() string {
 	var b strings.Builder
 	if m.user != nil {
-		b.WriteString(titleStyle.Render(fmt.Sprintf("CardMan - Welcome, %s %s!", m.user.Name, m.user.Surname)) + "\n\n")
+		b.WriteString(titleStyle.Render(fmt.Sprintf("CardMan - Welcome, %s %s!", m.user.Name, m.user.Surname)) + "\n")
 	} else {
-		b.WriteString(titleStyle.Render("CardMan - Card Management TUI") + "\n\n")
+		b.WriteString(titleStyle.Render("CardMan - Card Management TUI") + "\n")
 	}
-	b.WriteString(m.renderMainMenuTabs() + "\n\n")
+	b.WriteString(m.renderMainMenuTabs())
+	return b.String()
+}
+
+func (m Model) renderMainBody() string {
 	if m.mainMenuTab == 0 {
-		b.WriteString(m.renderCardGamesTab())
-	} else {
-		b.WriteString(m.renderImportTab())
+		return m.renderCardGamesTab()
 	}
-	b.WriteString("\n")
-	b.WriteString(m.renderMainMenuHelp() + "\n")
+	return m.renderImportTab()
+}
+
+func (m Model) renderMainFooter() string {
+	var b strings.Builder
 	if m.errorMsg != "" {
-		b.WriteString("\n" + errorStyle.Render(m.errorMsg) + "\n")
+		b.WriteString(errorStyle.Render("Error: "+m.errorMsg) + "\n")
 	}
+	b.WriteString(m.renderMainMenuHelp())
 	return b.String()
 }
 
@@ -45,14 +59,14 @@ func (m Model) renderMainMenuTabs() string {
 
 func (m Model) renderCardGameBox(index int, name string) string {
 	if m.cursor == index {
-		return m.styleManager.GetBoxStyle(true).Render("🎴 " + name)
+		return m.styleManager.GetBoxStyle(true).Render(name)
 	}
-	return m.styleManager.GetBoxStyle(false).Render("🎴 " + name)
+	return m.styleManager.GetBoxStyle(false).Render(name)
 }
 
 func (m Model) renderCardGamesTab() string {
 	var b strings.Builder
-	b.WriteString(titleStyle.Render("Select a card game:") + "\n\n")
+	b.WriteString(titleStyle.Render("Select a card game:") + "\n")
 	if len(m.cardGames) == 0 {
 		b.WriteString(errorStyle.Render("No card games found. Please run migrations.") + "\n")
 	} else {
@@ -60,14 +74,14 @@ func (m Model) renderCardGamesTab() string {
 			b.WriteString(m.renderCardGameBox(i, game.Name) + "\n")
 		}
 	}
-	return b.String()
+	return strings.TrimRight(b.String(), "\n")
 }
 
 func (m Model) renderImportTab() string {
 	var b strings.Builder
-	b.WriteString(titleStyle.Render("Switch to Import tab to manage card sets") + "\n\n")
+	b.WriteString(titleStyle.Render("Switch to Import tab to manage card sets") + "\n")
 	b.WriteString(m.styleManager.GetPanelStyle().Render("Press Enter to open Import Manager") + "\n")
-	return b.String()
+	return strings.TrimRight(b.String(), "\n")
 }
 
 func (m Model) renderMainMenuHelp() string {

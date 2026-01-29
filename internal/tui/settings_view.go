@@ -8,6 +8,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/laiambryant/tui-cardman/internal/runtimecfg"
 )
 
@@ -99,17 +100,18 @@ func (m SettingsModel) Init() tea.Cmd {
 }
 
 func (m SettingsModel) Update(msg tea.Msg) (SettingsModel, tea.Cmd) {
+	if sizeMsg, ok := msg.(tea.WindowSizeMsg); ok {
+		m.width = sizeMsg.Width
+		m.height = sizeMsg.Height
+		m.modal = m.modal.SetDimensions(sizeMsg.Width, sizeMsg.Height)
+		return m, nil
+	}
 	if m.modal.IsVisible() {
 		var cmd tea.Cmd
 		m.modal, cmd = m.modal.Update(msg)
 		return m, cmd
 	}
 	switch msg := msg.(type) {
-	case tea.WindowSizeMsg:
-		m.width = msg.Width
-		m.height = msg.Height
-		m.modal = m.modal.SetDimensions(msg.Width, msg.Height)
-		return m, nil
 	case saveConfirmedMsg:
 		err := m.confirmSaveChanges()
 		if err != nil {
@@ -296,12 +298,25 @@ func (m *SettingsModel) cycleBackgroundStyle(direction int) {
 }
 
 func (m SettingsModel) View() string {
+	header := m.renderSettingsHeader()
+	footer := m.renderSettingsFooter()
+	layout := calculateFrameLayout(lipgloss.Height(header), lipgloss.Height(footer), m.width, m.height)
+	body := m.renderSettingsBody(layout.BodyContentHeight)
+	content := renderFramedViewWithLayout(header, body, footer, layout, m.styleManager)
+	if m.modal.IsVisible() {
+		m.modal = m.modal.SetBackgroundContent(content)
+		return m.modal.View()
+	}
+	return content
+}
+
+func (m SettingsModel) renderSettingsHeader() string {
 	var b strings.Builder
-	title := "⚙️  Settings"
+	title := "Settings"
 	if m.hasChanges {
 		title += " *"
 	}
-	b.WriteString(m.styleManager.GetTitleStyle().Render(title) + "\n\n")
+	b.WriteString(m.styleManager.GetTitleStyle().Render(title) + "\n")
 	tabs := []string{"Keybindings", "UI"}
 	var renderedTabs []string
 	for i, tab := range tabs {
@@ -311,17 +326,30 @@ func (m SettingsModel) View() string {
 			renderedTabs = append(renderedTabs, m.styleManager.GetBlurredStyle().Render("  "+tab+"  "))
 		}
 	}
-	b.WriteString(strings.Join(renderedTabs, " ") + "\n\n")
+	b.WriteString(strings.Join(renderedTabs, " "))
+	return b.String()
+}
+
+func (m SettingsModel) renderSettingsBody(maxLines int) string {
+	var b strings.Builder
+	availableLines := maxLines
 	if m.errorMsg != "" {
-		b.WriteString(m.styleManager.GetErrorStyle().Render("⚠ "+m.errorMsg) + "\n\n")
+		b.WriteString(m.styleManager.GetErrorStyle().Render("Error: "+m.errorMsg) + "\n")
+		availableLines--
+	}
+	if availableLines < 1 {
+		availableLines = 1
 	}
 	switch m.section {
 	case sectionKeybindings:
-		b.WriteString(m.renderKeybindingsSection())
+		b.WriteString(m.renderKeybindingsSection(availableLines))
 	case sectionUI:
-		b.WriteString(m.renderUISection())
+		b.WriteString(m.renderUISection(availableLines))
 	}
-	b.WriteString("\n")
+	return b.String()
+}
+
+func (m SettingsModel) renderSettingsFooter() string {
 	if m.editing {
 		cancelKey := "Esc"
 		if m.configManager != nil {
@@ -329,22 +357,14 @@ func (m SettingsModel) View() string {
 				cancelKey = k
 			}
 		}
-		b.WriteString(m.styleManager.GetHelpStyle().Render(fmt.Sprintf("Press any key to bind (%s to cancel)", cancelKey)) + "\n")
-	} else {
-		help := m.buildHelpText()
-		b.WriteString(m.styleManager.GetHelpStyle().Render(help) + "\n")
+		return m.styleManager.GetHelpStyle().Render(fmt.Sprintf("Press any key to bind (%s to cancel)", cancelKey))
 	}
-	content := b.String()
-	if m.modal.IsVisible() {
-		m.modal = m.modal.SetBackgroundContent(content)
-		return m.modal.View()
-	}
-	return content
+	help := m.buildHelpText()
+	return m.styleManager.GetHelpStyle().Render(help)
 }
 
-func (m SettingsModel) renderKeybindingsSection() string {
+func (m SettingsModel) renderKeybindingsSection(maxLines int) string {
 	var b strings.Builder
-
 	if m.editing {
 		b.WriteString(m.styleManager.GetTitleStyle().Render(fmt.Sprintf("Editing: %s", m.editingAction)) + "\n")
 		b.WriteString(m.styleManager.GetBlurredStyle().Render("Press the key you want to bind...") + "\n")
@@ -356,6 +376,15 @@ func (m SettingsModel) renderKeybindingsSection() string {
 	visibleStart := 0
 	visibleEnd := len(m.actions)
 	maxVisible := 15
+	if maxLines > 0 {
+		maxVisible = maxLines - 2
+		if len(m.actions) > maxVisible {
+			maxVisible--
+		}
+		if maxVisible < 1 {
+			maxVisible = 1
+		}
+	}
 	if len(m.actions) > maxVisible {
 		visibleStart = max(m.cursor-maxVisible/2, 0)
 		visibleEnd = visibleStart + maxVisible
@@ -416,10 +445,10 @@ func (m SettingsModel) renderUILine(isCursor bool, label, value string) string {
 	return line
 }
 
-func (m SettingsModel) renderUISection() string {
+func (m SettingsModel) renderUISection(maxLines int) string {
 	var b strings.Builder
 	cfg := m.tempConfig
-	b.WriteString(m.styleManager.GetTitleStyle().Render("UI Settings") + "\n\n")
+	b.WriteString(m.styleManager.GetTitleStyle().Render("UI Settings") + "\n")
 	themes := runtimecfg.GetColorSchemeNames()
 	bgStyles := []string{"none", "components", "full", "both"}
 	b.WriteString(m.renderUILine(m.uiCursor == uiSettingTheme, "Theme: ", cfg.UI.ColorScheme) + "\n")
@@ -433,11 +462,12 @@ func (m SettingsModel) renderUISection() string {
 		styleValue = m.styleManager.GetBlurredStyle().Render(styleValue)
 	}
 	b.WriteString(m.renderUILine(m.uiCursor == uiSettingBackgroundStyle, "Background Style: ", styleValue) + "\n")
-	b.WriteString("\n")
-	b.WriteString(m.styleManager.GetBlurredStyle().Render("Available themes: "+strings.Join(themes, ", ")) + "\n")
-	b.WriteString(m.styleManager.GetBlurredStyle().Render("Background styles: "+strings.Join(bgStyles, ", ")) + "\n")
-	b.WriteString("\n")
-	b.WriteString(m.styleManager.GetHelpStyle().Render("↑/↓: Navigate • Enter/→/←: Change • Esc: Back") + "\n")
+	if maxLines >= 6 {
+		b.WriteString(m.styleManager.GetBlurredStyle().Render("Available themes: "+strings.Join(themes, ", ")) + "\n")
+	}
+	if maxLines >= 7 {
+		b.WriteString(m.styleManager.GetBlurredStyle().Render("Background styles: "+strings.Join(bgStyles, ", ")) + "\n")
+	}
 	return b.String()
 }
 

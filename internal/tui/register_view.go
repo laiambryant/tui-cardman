@@ -74,22 +74,33 @@ func (m Model) buildAuthViewHelpText() string {
 }
 
 func (m Model) registerView() string {
+	header := titleStyle.Render("CardMan - Register")
+	body := m.renderRegisterBody()
+	footer := m.renderRegisterFooter()
+	return renderFramedView(header, body, footer, m.width, m.height, m.styleManager)
+}
+
+func (m Model) renderRegisterBody() string {
 	var b strings.Builder
-	b.WriteString(RenderTitle("CardMan - Register"))
 	b.WriteString(RenderConditionalLabel(true, "First Name:") + "\n")
-	b.WriteString(m.inputs[0].View() + "\n\n")
+	b.WriteString(m.inputs[0].View() + "\n")
 	b.WriteString(RenderConditionalLabel(false, "Last Name:") + "\n")
-	b.WriteString(m.inputs[1].View() + "\n\n")
+	b.WriteString(m.inputs[1].View() + "\n")
 	b.WriteString(RenderConditionalLabel(false, "Email:") + "\n")
-	b.WriteString(m.inputs[2].View() + "\n\n")
+	b.WriteString(m.inputs[2].View() + "\n")
 	b.WriteString(RenderConditionalLabel(false, "Password (8+ chars, 1 uppercase, 1 special):") + "\n")
-	b.WriteString(m.inputs[3].View() + "\n\n")
+	b.WriteString(m.inputs[3].View())
 	if m.errorMsg != "" {
-		b.WriteString(errorStyle.Render("Error: "+m.errorMsg) + "\n\n")
+		b.WriteString("\n" + errorStyle.Render("Error: "+m.errorMsg))
 	}
-	b.WriteString(m.renderButton(m.focusIndex == len(m.inputs), "[ Register ]") + "\n\n")
-	b.WriteString(helpStyle.Render(m.buildAuthViewHelpText()) + "\n")
+	b.WriteString("\n" + m.renderButton(m.focusIndex == len(m.inputs), "[ Register ]"))
+	return b.String()
+}
+
+func (m Model) renderRegisterFooter() string {
+	var b strings.Builder
 	b.WriteString(helpStyle.Render("Already have an account? Press Enter on the button below") + "\n")
 	b.WriteString(m.renderButton(m.focusIndex == len(m.inputs)+1, "[ Back to Login ]") + "\n")
+	b.WriteString(helpStyle.Render(m.buildAuthViewHelpText()))
 	return b.String()
 }

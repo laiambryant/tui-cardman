@@ -120,7 +120,7 @@ func checkIfKeyExists(keyPath string) error {
 		if err := generateHostKey(keyPath); err != nil {
 			return fmt.Errorf("generate host key: %w", err)
 		}
-		fmt.Println(lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Render("✓ Host key generated successfully"))
+		fmt.Println(lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Render("Host key generated successfully"))
 	}
 	return nil
 }

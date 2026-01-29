@@ -61,6 +61,8 @@ type ImportModel struct {
 	selectedSetHasCol bool
 	cardGameCursor    int
 	cardGames         []model.CardGame
+	width             int
+	height            int
 }
 
 func NewImportModel(db *sql.DB, cfg *runtimecfg.Manager, styleManager *StyleManager, cardGames []model.CardGame) (ImportModel, error) {
@@ -133,6 +135,11 @@ func (m ImportModel) handleImportAllResult(success bool, operation string, err e
 }
 
 func (m ImportModel) Update(msg tea.Msg) (ImportModel, tea.Cmd) {
+	if sizeMsg, ok := msg.(tea.WindowSizeMsg); ok {
+		m.width = sizeMsg.Width
+		m.height = sizeMsg.Height
+		return m, nil
+	}
 	if m.isImporting {
 		return m.handleImportingState(msg)
 	}
