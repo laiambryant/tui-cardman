@@ -4,6 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log/slog"
+	"strings"
+
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/laiambryant/tui-cardman/internal/config"
@@ -14,8 +17,6 @@ import (
 	"github.com/laiambryant/tui-cardman/internal/services/importruns"
 	"github.com/laiambryant/tui-cardman/internal/services/prices"
 	"github.com/laiambryant/tui-cardman/internal/services/sets"
-	"log/slog"
-	"strings"
 )
 
 type ActionType int
@@ -105,6 +106,32 @@ func (m ImportModel) Init() tea.Cmd {
 	)
 }
 
+func (m ImportModel) getAction(s string) string {
+	return MatchActionOrDefault(m.configManager, s, "")
+}
+
+func (m ImportModel) handleImportSetResult(success bool, setID string, err error) (ImportModel, tea.Cmd) {
+	if success {
+		m.isImporting = false
+		m.statusMsg = fmt.Sprintf("Successfully imported set: %s", setID)
+		return m, tea.Batch(m.fetchDatabaseSetsCmd(), m.checkSelectedSetInDB())
+	}
+	m.isImporting = false
+	m.errorMsg = fmt.Sprintf("Failed to import set %s: %v", setID, err)
+	return m, nil
+}
+
+func (m ImportModel) handleImportAllResult(success bool, operation string, err error) (ImportModel, tea.Cmd) {
+	if success {
+		m.isImporting = false
+		m.statusMsg = fmt.Sprintf("Successfully imported %s", operation)
+		return m, m.fetchDatabaseSetsCmd()
+	}
+	m.isImporting = false
+	m.errorMsg = fmt.Sprintf("Failed to import %s: %v", operation, err)
+	return m, nil
+}
+
 func (m ImportModel) Update(msg tea.Msg) (ImportModel, tea.Cmd) {
 	if m.isImporting {
 		return m.handleImportingState(msg)
@@ -142,39 +169,6 @@ func (m ImportModel) Update(msg tea.Msg) (ImportModel, tea.Cmd) {
 	case checkSetInCollectionErrorMsg:
 		m.errorMsg = fmt.Sprintf("Failed to check set collections: %v", msg.err)
 		return m, nil
-	case importSetSuccessMsg:
-		m.isImporting = false
-		m.statusMsg = fmt.Sprintf("Successfully imported set: %s", msg.setID)
-		return m, tea.Batch(m.fetchDatabaseSetsCmd(), m.checkSelectedSetInDB())
-	case importSetErrorMsg:
-		m.isImporting = false
-		m.errorMsg = fmt.Sprintf("Failed to import set %s: %v", msg.setID, msg.err)
-		return m, nil
-	case deleteSetSuccessMsg:
-		m.statusMsg = fmt.Sprintf("Successfully deleted set: %s", msg.setID)
-		return m, tea.Batch(m.fetchDatabaseSetsCmd(), m.checkSelectedSetInDB())
-	case deleteSetErrorMsg:
-		m.errorMsg = fmt.Sprintf("Failed to delete set %s: %v", msg.setID, msg.err)
-		return m, nil
-	case importProgressMsg:
-		m.importProgress = msg
-		return m, nil
-	case importAllSetsSuccessMsg:
-		m.isImporting = false
-		m.statusMsg = "Successfully imported all sets"
-		return m, m.fetchDatabaseSetsCmd()
-	case importAllSetsErrorMsg:
-		m.isImporting = false
-		m.errorMsg = fmt.Sprintf("Failed to import all sets: %v", msg.err)
-		return m, nil
-	case importNewSetsSuccessMsg:
-		m.isImporting = false
-		m.statusMsg = "Successfully imported new sets"
-		return m, m.fetchDatabaseSetsCmd()
-	case importNewSetsErrorMsg:
-		m.isImporting = false
-		m.errorMsg = fmt.Sprintf("Failed to import new sets: %v", msg.err)
-		return m, nil
 	}
 	return m, nil
 }
@@ -189,39 +183,24 @@ func (m ImportModel) handleImportingState(msg tea.Msg) (ImportModel, tea.Cmd) {
 		m.importProgress = msg
 		return m, nil
 	case importSetSuccessMsg:
-		m.isImporting = false
-		m.statusMsg = fmt.Sprintf("Successfully imported set: %s", msg.setID)
-		return m, tea.Batch(m.fetchDatabaseSetsCmd(), m.checkSelectedSetInDB())
+		return m.handleImportSetResult(true, msg.setID, nil)
 	case importSetErrorMsg:
-		m.isImporting = false
-		m.errorMsg = fmt.Sprintf("Failed to import set %s: %v", msg.setID, msg.err)
-		return m, nil
+		return m.handleImportSetResult(false, msg.setID, msg.err)
 	case importAllSetsSuccessMsg:
-		m.isImporting = false
-		m.statusMsg = "Successfully imported all sets"
-		return m, m.fetchDatabaseSetsCmd()
+		return m.handleImportAllResult(true, "all sets", nil)
 	case importAllSetsErrorMsg:
-		m.isImporting = false
-		m.errorMsg = fmt.Sprintf("Failed to import all sets: %v", msg.err)
-		return m, nil
+		return m.handleImportAllResult(false, "all sets", msg.err)
 	case importNewSetsSuccessMsg:
-		m.isImporting = false
-		m.statusMsg = "Successfully imported new sets"
-		return m, m.fetchDatabaseSetsCmd()
+		return m.handleImportAllResult(true, "new sets", nil)
 	case importNewSetsErrorMsg:
-		m.isImporting = false
-		m.errorMsg = fmt.Sprintf("Failed to import new sets: %v", msg.err)
-		return m, nil
+		return m.handleImportAllResult(false, "new sets", msg.err)
 	}
 	return m, nil
 }
 
 func (m ImportModel) handleKeyMsg(msg tea.KeyMsg) (ImportModel, tea.Cmd) {
 	s := msg.String()
-	action := ""
-	if m.configManager != nil {
-		action = m.configManager.MatchAction(s)
-	}
+	action := m.getAction(s)
 	if action == "quit" || s == "ctrl+c" {
 		return m, tea.Quit
 	}
@@ -240,10 +219,7 @@ func (m ImportModel) handleKeyMsg(msg tea.KeyMsg) (ImportModel, tea.Cmd) {
 
 func (m ImportModel) handleSetListNavigation(msg tea.KeyMsg) (ImportModel, tea.Cmd) {
 	s := msg.String()
-	action := ""
-	if m.configManager != nil {
-		action = m.configManager.MatchAction(s)
-	}
+	action := m.getAction(s)
 	if action == "nav_up" || s == "up" || s == "k" {
 		if m.cursor > 0 {
 			m.cursor--
@@ -268,10 +244,7 @@ func (m ImportModel) handleSetListNavigation(msg tea.KeyMsg) (ImportModel, tea.C
 
 func (m ImportModel) handleActionNavigation(msg tea.KeyMsg) (ImportModel, tea.Cmd) {
 	s := msg.String()
-	action := ""
-	if m.configManager != nil {
-		action = m.configManager.MatchAction(s)
-	}
+	action := m.getAction(s)
 	actions := m.getAvailableActions()
 	if action == "nav_up" || s == "up" || s == "k" {
 		if m.actionCursor > 0 {

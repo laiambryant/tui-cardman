@@ -18,6 +18,19 @@ func NewHelpBuilder(cfg *runtimecfg.Manager) *HelpBuilder {
 	return &HelpBuilder{cfg: cfg}
 }
 
+func (h *HelpBuilder) resolveKey(action string, defaultKey string) string {
+	if h.cfg != nil {
+		if k := h.cfg.KeyForAction(action); k != "" {
+			return k
+		}
+	}
+	return defaultKey
+}
+func (h *HelpBuilder) formatKeyItem(item KeyItem) string {
+	key := h.resolveKey(item.Action, item.DefaultKey)
+	return fmt.Sprintf("%s: %s", key, item.Description)
+}
+
 // KeyItem represents a single key binding in help text
 type KeyItem struct {
 	Action      string
@@ -29,13 +42,7 @@ type KeyItem struct {
 func (h *HelpBuilder) Build(items ...KeyItem) string {
 	var parts []string
 	for _, item := range items {
-		key := item.DefaultKey
-		if h.cfg != nil {
-			if k := h.cfg.KeyForAction(item.Action); k != "" {
-				key = k
-			}
-		}
-		parts = append(parts, fmt.Sprintf("%s: %s", key, item.Description))
+		parts = append(parts, h.formatKeyItem(item))
 	}
 	return strings.Join(parts, " • ")
 }
@@ -63,4 +70,47 @@ func NewStyledTable(columns []table.Column, height int, focused bool, styleManag
 	s := styleManager.GetTableStyles()
 	t.SetStyles(s)
 	return t
+}
+
+type ConfigManagerProvider interface {
+	GetConfigManager() *runtimecfg.Manager
+}
+
+func ResolveKeyBinding(cfg *runtimecfg.Manager, action string, defaultKey string) string {
+	if cfg != nil {
+		if k := cfg.KeyForAction(action); k != "" {
+			return k
+		}
+	}
+	return defaultKey
+}
+func MatchActionOrDefault(cfg *runtimecfg.Manager, keyString string, fallback string) string {
+	if cfg != nil {
+		return cfg.MatchAction(keyString)
+	}
+	return fallback
+}
+func RenderActiveTab(label string) string {
+	return titleStyle.Copy().Padding(0, 2).Render("[ " + label + " ]")
+}
+func RenderInactiveTab(label string) string {
+	return blurredStyle.Copy().Padding(0, 2).Render("  " + label + "  ")
+}
+func RenderTitle(title string) string {
+	return titleStyle.Render(title) + "\n\n"
+}
+func RenderSectionTitle(title string) string {
+	return titleStyle.Render(title) + "\n"
+}
+func RenderFocusedLabel(label string) string {
+	return focusedStyle.Render(label)
+}
+func RenderBlurredLabel(label string) string {
+	return blurredStyle.Render(label)
+}
+func RenderConditionalLabel(isFocused bool, label string) string {
+	if isFocused {
+		return RenderFocusedLabel(label)
+	}
+	return RenderBlurredLabel(label)
 }

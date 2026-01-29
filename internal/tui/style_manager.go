@@ -53,12 +53,16 @@ func NewStyleManager(scheme runtimecfg.ColorScheme, opaqueBackground bool, backg
 }
 
 func (sm *StyleManager) initializeStyles() {
-	sm.focusedStyle = lipgloss.NewStyle().Foreground(sm.scheme.Focused)
-	sm.blurredStyle = lipgloss.NewStyle().Foreground(sm.scheme.Blurred)
-	sm.titleStyle = lipgloss.NewStyle().Bold(true).Foreground(sm.scheme.Title)
-	sm.errorStyle = lipgloss.NewStyle().Foreground(sm.scheme.Error)
+	sm.focusedStyle = sm.createForegroundStyle(sm.scheme.Focused)
+	sm.blurredStyle = sm.createForegroundStyle(sm.scheme.Blurred)
+	sm.titleStyle = sm.createForegroundStyle(sm.scheme.Title).Bold(true)
+	sm.errorStyle = sm.createForegroundStyle(sm.scheme.Error)
 	sm.helpStyle = sm.blurredStyle
 	sm.noStyle = lipgloss.NewStyle()
+}
+
+func (sm *StyleManager) createForegroundStyle(color lipgloss.Color) lipgloss.Style {
+	return lipgloss.NewStyle().Foreground(color)
 }
 
 // GetFocusedStyle returns the style for focused elements
@@ -98,26 +102,33 @@ func (sm *StyleManager) GetDisabledStyle() lipgloss.Style {
 
 // GetBoxStyle returns a styled box with optional focus
 func (sm *StyleManager) GetBoxStyle(focused bool) lipgloss.Style {
-	borderColor := sm.scheme.Blurred
-	style := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
+	color := sm.scheme.Blurred
+	if focused {
+		color = sm.scheme.Focused
+	}
+	style := sm.createRoundedBorderStyle(color, false).
 		Padding(1, 2).
 		Width(40).
 		Align(lipgloss.Center)
 	if focused {
-		borderColor = sm.scheme.Focused
 		style = style.Bold(true)
 	}
-	style = style.BorderForeground(borderColor)
 	return sm.applyBackground(style, "box")
+}
+
+func (sm *StyleManager) createRoundedBorderStyle(color lipgloss.Color, pad bool) lipgloss.Style {
+	style := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(color)
+	if pad {
+		style = style.Padding(1, 2)
+	}
+	return style
 }
 
 // GetModalStyle returns a styled modal dialog
 func (sm *StyleManager) GetModalStyle() lipgloss.Style {
-	style := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(sm.scheme.Title).
-		Padding(1, 2).
+	style := sm.createRoundedBorderStyle(sm.scheme.Title, true).
 		Width(50)
 	return sm.applyBackground(style, "modal")
 }
@@ -148,23 +159,19 @@ func (sm *StyleManager) GetSettingsSelectedStyle() lipgloss.Style {
 		Bold(false)
 }
 
+func (sm *StyleManager) resolveColor(preferred, fallback1, fallback2 lipgloss.Color) lipgloss.Color {
+	if preferred != "" {
+		return preferred
+	}
+	if fallback1 != "" {
+		return fallback1
+	}
+	return fallback2
+}
+
 func (sm *StyleManager) getTableSelectionColors() (lipgloss.Color, lipgloss.Color) {
-	foreground := sm.scheme.TableSelectedForeground
-	background := sm.scheme.TableSelectedBackground
-	if foreground == "" {
-		if sm.scheme.Foreground != "" {
-			foreground = sm.scheme.Foreground
-		} else {
-			foreground = sm.scheme.Focused
-		}
-	}
-	if background == "" {
-		if sm.scheme.Focused != "" {
-			background = sm.scheme.Focused
-		} else {
-			background = sm.scheme.Title
-		}
-	}
+	foreground := sm.resolveColor(sm.scheme.TableSelectedForeground, sm.scheme.Foreground, sm.scheme.Focused)
+	background := sm.resolveColor(sm.scheme.TableSelectedBackground, sm.scheme.Focused, sm.scheme.Title)
 	return foreground, background
 }
 
@@ -177,27 +184,31 @@ func (sm *StyleManager) GetTableBaseStyle() lipgloss.Style {
 
 // GetPanelStyle returns a styled panel
 func (sm *StyleManager) GetPanelStyle() lipgloss.Style {
-	style := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(sm.scheme.Blurred).
-		Padding(1, 2)
+	style := sm.createRoundedBorderStyle(sm.scheme.Blurred, true)
 	return sm.applyBackground(style, "panel")
 }
 
 // GetTabStyle returns a styled tab
 func (sm *StyleManager) GetTabStyle(active bool) lipgloss.Style {
+	color := sm.scheme.Blurred
+	border := sm.createInactiveBorder()
 	if active {
-		style := lipgloss.NewStyle().
-			Border(lipgloss.Border{Top: "─", Bottom: " ", Left: "│", Right: "│"}, true).
-			BorderForeground(sm.scheme.Focused).
-			Padding(0, 1)
-		return sm.applyBackground(style, "tab")
+		color = sm.scheme.Focused
+		border = sm.createActiveBorder()
 	}
 	style := lipgloss.NewStyle().
-		Border(lipgloss.Border{Top: "─", Bottom: "─", Left: "│", Right: "│"}, true).
-		BorderForeground(sm.scheme.Blurred).
+		Border(border, true).
+		BorderForeground(color).
 		Padding(0, 1)
 	return sm.applyBackground(style, "tab")
+}
+
+func (sm *StyleManager) createActiveBorder() lipgloss.Border {
+	return lipgloss.Border{Top: "─", Bottom: " ", Left: "│", Right: "│"}
+}
+
+func (sm *StyleManager) createInactiveBorder() lipgloss.Border {
+	return lipgloss.Border{Top: "─", Bottom: "─", Left: "│", Right: "│"}
 }
 
 // ApplyFullBackground applies background to entire view if enabled

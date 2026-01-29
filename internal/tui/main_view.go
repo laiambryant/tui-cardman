@@ -28,22 +28,26 @@ func (m Model) mainView() string {
 	return b.String()
 }
 
+func (m Model) renderTab(isActive bool, label string) string {
+	if isActive {
+		return titleStyle.Copy().Padding(0, 2).Render("[ " + label + " ]")
+	}
+	return blurredStyle.Copy().Padding(0, 2).Render("  " + label + "  ")
+}
+
 func (m Model) renderMainMenuTabs() string {
-	tabStyle := blurredStyle.Copy().Padding(0, 2)
-	activeTabStyle := titleStyle.Copy().Padding(0, 2)
-	var tabs []string
-	if m.mainMenuTab == 0 {
-		tabs = []string{
-			activeTabStyle.Render("[ Card Games ]"),
-			tabStyle.Render("  Import  "),
-		}
-	} else {
-		tabs = []string{
-			tabStyle.Render("  Card Games  "),
-			activeTabStyle.Render("[ Import ]"),
-		}
+	tabs := []string{
+		m.renderTab(m.mainMenuTab == 0, "Card Games"),
+		m.renderTab(m.mainMenuTab == 1, "Import"),
 	}
 	return lipgloss.JoinHorizontal(lipgloss.Top, tabs...)
+}
+
+func (m Model) renderCardGameBox(index int, name string) string {
+	if m.cursor == index {
+		return m.styleManager.GetBoxStyle(true).Render("🎴 " + name)
+	}
+	return m.styleManager.GetBoxStyle(false).Render("🎴 " + name)
 }
 
 func (m Model) renderCardGamesTab() string {
@@ -53,13 +57,7 @@ func (m Model) renderCardGamesTab() string {
 		b.WriteString(errorStyle.Render("No card games found. Please run migrations.") + "\n")
 	} else {
 		for i, game := range m.cardGames {
-			var box string
-			if m.cursor == i {
-				box = m.styleManager.GetBoxStyle(true).Render("🎴 " + game.Name)
-			} else {
-				box = m.styleManager.GetBoxStyle(false).Render("🎴 " + game.Name)
-			}
-			b.WriteString(box + "\n")
+			b.WriteString(m.renderCardGameBox(i, game.Name) + "\n")
 		}
 	}
 	return b.String()
@@ -73,32 +71,12 @@ func (m Model) renderImportTab() string {
 }
 
 func (m Model) renderMainMenuHelp() string {
-	settingsKey := "F1"
-	navUp := "↑"
-	navDown := "↓"
-	selectKey := "Enter"
-	quitKey := "Ctrl+C"
-	tabKey := "Tab"
-	if m.configManager != nil {
-		if k := m.configManager.KeyForAction("settings"); k != "" {
-			settingsKey = k
-		}
-		if k := m.configManager.KeyForAction("nav_up"); k != "" {
-			navUp = k
-		}
-		if k := m.configManager.KeyForAction("nav_down"); k != "" {
-			navDown = k
-		}
-		if k := m.configManager.KeyForAction("select"); k != "" {
-			selectKey = k
-		}
-		if k := m.configManager.KeyForAction("quit"); k != "" {
-			quitKey = k
-		}
-		if k := m.configManager.KeyForAction("nav_next_tab"); k != "" {
-			tabKey = k
-		}
-	}
+	settingsKey := ResolveKeyBinding(m.configManager, "settings", "F1")
+	navUp := ResolveKeyBinding(m.configManager, "nav_up", "↑")
+	navDown := ResolveKeyBinding(m.configManager, "nav_down", "↓")
+	selectKey := ResolveKeyBinding(m.configManager, "select", "Enter")
+	quitKey := ResolveKeyBinding(m.configManager, "quit", "Ctrl+C")
+	tabKey := ResolveKeyBinding(m.configManager, "nav_next_tab", "Tab")
 	if m.mainMenuTab == 0 {
 		help := fmt.Sprintf("%s: Settings • %s/%s: Navigate • %s: Select • %s: Switch Tab • %s: Quit", settingsKey, navUp, navDown, selectKey, tabKey, quitKey)
 		return helpStyle.Render(help)

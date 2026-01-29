@@ -75,6 +75,41 @@ func NewCardGameTabsModel(selectedGame *model.CardGame, cfg *runtimecfg.Manager,
 func (m CardGameTabsModel) Init() tea.Cmd {
 	return textinput.Blink
 }
+func (m *CardGameTabsModel) configureTableColumns(columns []table.Column) {
+	m.cardTable.SetColumns(columns)
+	m.cardTable.SetStyles(m.styleManager.GetTableStyles())
+	m.cardTable.Focus()
+}
+func (m CardGameTabsModel) getSelectedCard() (model.Card, bool) {
+	selectedRow := m.cardTable.Cursor()
+	if selectedRow < 0 {
+		return model.Card{}, false
+	}
+	showAll := m.searchInput.Value() == ""
+	if showAll {
+		if selectedRow >= len(m.cards) {
+			return model.Card{}, false
+		}
+		return m.cards[selectedRow], true
+	}
+	if selectedRow >= len(m.filteredCards) {
+		return model.Card{}, false
+	}
+	return m.filteredCards[selectedRow], true
+}
+func buildCollectionRows(collections []model.UserCollection) []table.Row {
+	var rows []table.Row
+	for _, collection := range collections {
+		rows = append(rows, collectionToRow(collection))
+	}
+	return rows
+}
+func (m CardGameTabsModel) renderEmptySearchMessage(searchValue string, messageWhenEmpty string, messageNoMatch string) string {
+	if searchValue == "" {
+		return blurredStyle.Render(messageWhenEmpty) + "\n"
+	}
+	return blurredStyle.Render(messageNoMatch) + "\n"
+}
 
 func (m CardGameTabsModel) Update(msg tea.Msg) (CardGameTabsModel, tea.Cmd) {
 	if m.modal.IsVisible() {
@@ -90,10 +125,7 @@ func (m CardGameTabsModel) Update(msg tea.Msg) (CardGameTabsModel, tea.Cmd) {
 		return m.performSaveCollection()
 	case tea.KeyMsg:
 		s := msg.String()
-		action := ""
-		if m.configManager != nil {
-			action = m.configManager.MatchAction(s)
-		}
+		action := MatchActionOrDefault(m.configManager, s, "")
 
 		// Quit handling
 		if action == "quit" || s == "ctrl+c" {
@@ -106,7 +138,7 @@ func (m CardGameTabsModel) Update(msg tea.Msg) (CardGameTabsModel, tea.Cmd) {
 		}
 
 		// Tab navigation
-		if action == "nav_next_tab" {
+		if action == "nav_next_tab" || action == "nav_right" || s == "right" {
 			m.currentTab = (m.currentTab + 1) % 3
 			m = m.updateTableForTab()
 			if m.currentTab == TabCardSearch || m.currentTab == TabUserSearch {
@@ -117,7 +149,7 @@ func (m CardGameTabsModel) Update(msg tea.Msg) (CardGameTabsModel, tea.Cmd) {
 			return m, nil
 		}
 
-		if action == "nav_prev_tab" {
+		if action == "nav_prev_tab" || action == "nav_left" || s == "left" {
 			if m.currentTab == 0 {
 				m.currentTab = 2
 			} else {
@@ -133,14 +165,14 @@ func (m CardGameTabsModel) Update(msg tea.Msg) (CardGameTabsModel, tea.Cmd) {
 		}
 
 		// Up / down navigation (keep vim keys as fallbacks)
-		if action == "nav_up" || s == "k" {
+		if action == "nav_up" || s == "k" || s == "up" {
 			if m.currentTab == TabCardSearch || m.currentTab == TabUserSearch || m.currentTab == TabCollection {
 				m.cardTable, _ = m.cardTable.Update(msg)
 				return m, nil
 			}
 			return m, nil
 		}
-		if action == "nav_down" || s == "j" {
+		if action == "nav_down" || s == "j" || s == "down" {
 			if m.currentTab == TabCardSearch || m.currentTab == TabUserSearch || m.currentTab == TabCollection {
 				m.cardTable, _ = m.cardTable.Update(msg)
 				return m, nil
@@ -164,10 +196,7 @@ func (m CardGameTabsModel) Update(msg tea.Msg) (CardGameTabsModel, tea.Cmd) {
 	if m.currentTab == TabCardSearch || m.currentTab == TabUserSearch {
 		if keyMsg, ok := msg.(tea.KeyMsg); ok {
 			s := keyMsg.String()
-			action := ""
-			if m.configManager != nil {
-				action = m.configManager.MatchAction(s)
-			}
+			action := MatchActionOrDefault(m.configManager, s, "")
 			// Don't pass navigation keys to search input
 			if action != "nav_up" && action != "nav_down" && s != "k" && s != "j" {
 				var cmd tea.Cmd
@@ -228,57 +257,8 @@ func (m CardGameTabsModel) View() string {
 		b.WriteString(m.renderUserSearchTab())
 	}
 
-	// Help text
 	b.WriteString("\n")
-	settingsKey := "F1"
-	nextTab := "Tab"
-	prevTab := "Shift+Tab"
-	navUp := "↑"
-	navDown := "↓"
-	backKey := "Q"
-	quitKey := "Ctrl+C"
-	incrementKey := "+"
-	decrementKey := "Delete"
-	saveKey := "Ctrl+S"
-	if m.configManager != nil {
-		if k := m.configManager.KeyForAction("settings"); k != "" {
-			settingsKey = k
-		}
-		if k := m.configManager.KeyForAction("nav_next_tab"); k != "" {
-			nextTab = k
-		}
-		if k := m.configManager.KeyForAction("nav_prev_tab"); k != "" {
-			prevTab = k
-		}
-		if k := m.configManager.KeyForAction("nav_up"); k != "" {
-			navUp = k
-		}
-		if k := m.configManager.KeyForAction("nav_down"); k != "" {
-			navDown = k
-		}
-		if k := m.configManager.KeyForAction("back"); k != "" {
-			backKey = k
-		}
-		if k := m.configManager.KeyForAction("quit"); k != "" {
-			quitKey = k
-		}
-		if k := m.configManager.KeyForAction("increment_quantity"); k != "" {
-			incrementKey = k
-		}
-		if k := m.configManager.KeyForAction("decrement_quantity"); k != "" {
-			decrementKey = k
-		}
-		if k := m.configManager.KeyForAction("save"); k != "" {
-			saveKey = k
-		}
-	}
-	var help string
-	if m.currentTab == TabCardSearch {
-		help = fmt.Sprintf("%s: Add • %s: Remove • %s: Save • %s/%s: Navigate • %s: Back", incrementKey, decrementKey, saveKey, navUp, navDown, backKey)
-	} else {
-		help = fmt.Sprintf("%s: Settings • %s/%s: Switch tabs • %s/%s: Navigate • %s: Back • %s: Quit", settingsKey, prevTab, nextTab, navUp, navDown, backKey, quitKey)
-	}
-	b.WriteString(helpStyle.Render(help) + "\n")
+	b.WriteString(helpStyle.Render(m.buildHelpText()) + "\n")
 
 	content := b.String()
 	if m.modal.IsVisible() {
@@ -287,52 +267,64 @@ func (m CardGameTabsModel) View() string {
 	}
 	return content
 }
+func (m CardGameTabsModel) buildHelpText() string {
+	if m.currentTab == TabCardSearch {
+		return m.buildCardSearchHelpText()
+	}
+	return m.buildDefaultHelpText()
+}
+func (m CardGameTabsModel) buildCardSearchHelpText() string {
+	incrementKey := ResolveKeyBinding(m.configManager, "increment_quantity", "+")
+	decrementKey := ResolveKeyBinding(m.configManager, "decrement_quantity", "Delete")
+	saveKey := ResolveKeyBinding(m.configManager, "save", "Ctrl+S")
+	navUp := ResolveKeyBinding(m.configManager, "nav_up", "↑")
+	navDown := ResolveKeyBinding(m.configManager, "nav_down", "↓")
+	backKey := ResolveKeyBinding(m.configManager, "back", "Q")
+	return fmt.Sprintf("%s: Add • %s: Remove • %s: Save • %s/%s: Navigate • %s: Back", incrementKey, decrementKey, saveKey, navUp, navDown, backKey)
+}
+func (m CardGameTabsModel) buildDefaultHelpText() string {
+	settingsKey := ResolveKeyBinding(m.configManager, "settings", "F1")
+	nextTab := ResolveKeyBinding(m.configManager, "nav_next_tab", "Tab")
+	prevTab := ResolveKeyBinding(m.configManager, "nav_prev_tab", "Shift+Tab")
+	navUp := ResolveKeyBinding(m.configManager, "nav_up", "↑")
+	navDown := ResolveKeyBinding(m.configManager, "nav_down", "↓")
+	backKey := ResolveKeyBinding(m.configManager, "back", "Q")
+	quitKey := ResolveKeyBinding(m.configManager, "quit", "Ctrl+C")
+	return fmt.Sprintf("%s: Settings • %s/%s: Switch tabs • %s/%s: Navigate • %s: Back • %s: Quit", settingsKey, prevTab, nextTab, navUp, navDown, backKey, quitKey)
+}
 
 func (m CardGameTabsModel) updateTableForTab() CardGameTabsModel {
 	m.cardTable.SetRows([]table.Row{})
 	switch m.currentTab {
 	case TabCardSearch:
-		m.cardTable.SetColumns([]table.Column{
-			{Title: "Name", Width: 25},
-			{Title: "Expansion", Width: 15},
-			{Title: "Rarity", Width: 12},
-			{Title: "Card #", Width: 8},
-			{Title: "Quantity", Width: 8},
-		})
-		m.cardTable.SetStyles(m.styleManager.GetTableStyles())
-		m.cardTable.Focus()
+		m.configureTableColumns(m.getCardSearchColumns())
 		m.updateCardTable()
 	case TabUserSearch:
-		m.cardTable.SetColumns([]table.Column{
-			{Title: "Name", Width: 25},
-			{Title: "Expansion", Width: 15},
-			{Title: "Rarity", Width: 12},
-			{Title: "Amount", Width: 8},
-		})
-		m.cardTable.SetStyles(m.styleManager.GetTableStyles())
-		m.cardTable.Focus()
-		var rows []table.Row
-		for _, collection := range m.filteredCollection {
-			rows = append(rows, collectionToRow(collection))
-		}
-		m.cardTable.SetRows(rows)
+		m.configureTableColumns(m.getCollectionColumns())
+		m.cardTable.SetRows(buildCollectionRows(m.filteredCollection))
 	case TabCollection:
-		m.cardTable.SetColumns([]table.Column{
-			{Title: "Name", Width: 25},
-			{Title: "Expansion", Width: 15},
-			{Title: "Rarity", Width: 12},
-			{Title: "Amount", Width: 8},
-		})
-		m.cardTable.SetStyles(m.styleManager.GetTableStyles())
-		m.cardTable.Focus()
-		var rows []table.Row
-		for _, collection := range m.filteredCollection {
-			rows = append(rows, collectionToRow(collection))
-		}
-		m.cardTable.SetRows(rows)
+		m.configureTableColumns(m.getCollectionColumns())
+		m.cardTable.SetRows(buildCollectionRows(m.filteredCollection))
 	}
 	m.cardTable.SetCursor(0)
 	return m
+}
+func (m CardGameTabsModel) getCardSearchColumns() []table.Column {
+	return []table.Column{
+		{Title: "Name", Width: 25},
+		{Title: "Expansion", Width: 15},
+		{Title: "Rarity", Width: 12},
+		{Title: "Card #", Width: 8},
+		{Title: "Quantity", Width: 8},
+	}
+}
+func (m CardGameTabsModel) getCollectionColumns() []table.Column {
+	return []table.Column{
+		{Title: "Name", Width: 25},
+		{Title: "Expansion", Width: 15},
+		{Title: "Rarity", Width: 12},
+		{Title: "Amount", Width: 8},
+	}
 }
 
 // renderCollectionTab now uses a table instead of a list
@@ -357,13 +349,7 @@ func (m CardGameTabsModel) renderCollectionTab() string {
 		titleStyle.Render(fmt.Sprintf("%d", totalCards)) + "\n\n")
 
 	b.WriteString(titleStyle.Render("Recent additions:") + "\n")
-
-	// Update table with collection data
-	var rows []table.Row
-	for _, collection := range m.filteredCollection {
-		rows = append(rows, collectionToRow(collection))
-	}
-	m.cardTable.SetRows(rows)
+	m.cardTable.SetRows(buildCollectionRows(m.filteredCollection))
 	b.WriteString(m.styleManager.GetTableBaseStyle().Render(m.cardTable.View()))
 
 	return b.String()
@@ -414,18 +400,10 @@ func (m CardGameTabsModel) renderUserSearchTab() string {
 	b.WriteString(titleStyle.Render("Search Your Collection") + "\n\n")
 	b.WriteString(blurredStyle.Render("Search: ") + m.searchInput.View() + "\n\n")
 	if len(m.filteredCollection) == 0 {
-		if m.searchInput.Value() == "" {
-			b.WriteString(blurredStyle.Render("Type to search your collection...") + "\n")
-		} else {
-			b.WriteString(blurredStyle.Render("No cards in your collection match your search.") + "\n")
-		}
+		b.WriteString(m.renderEmptySearchMessage(m.searchInput.Value(), "Type to search your collection...", "No cards in your collection match your search."))
 	} else {
 		b.WriteString(titleStyle.Render("Your matching cards:") + "\n")
-		var rows []table.Row
-		for _, collection := range m.filteredCollection {
-			rows = append(rows, collectionToRow(collection))
-		}
-		m.cardTable.SetRows(rows)
+		m.cardTable.SetRows(buildCollectionRows(m.filteredCollection))
 		b.WriteString(m.styleManager.GetTableBaseStyle().Render(m.cardTable.View()))
 	}
 	return b.String()
@@ -526,22 +504,9 @@ func collectionToRow(c model.UserCollection) table.Row {
 
 // handleIncrementQuantity increments the quantity of the selected card
 func (m CardGameTabsModel) handleIncrementQuantity() (CardGameTabsModel, tea.Cmd) {
-	selectedRow := m.cardTable.Cursor()
-	if selectedRow < 0 {
+	card, ok := m.getSelectedCard()
+	if !ok {
 		return m, nil
-	}
-	showAll := m.searchInput.Value() == ""
-	var card model.Card
-	if showAll {
-		if selectedRow >= len(m.cards) {
-			return m, nil
-		}
-		card = m.cards[selectedRow]
-	} else {
-		if selectedRow >= len(m.filteredCards) {
-			return m, nil
-		}
-		card = m.filteredCards[selectedRow]
 	}
 	if m.tempQuantityChanges == nil {
 		m.tempQuantityChanges = make(map[int64]int)
@@ -553,22 +518,9 @@ func (m CardGameTabsModel) handleIncrementQuantity() (CardGameTabsModel, tea.Cmd
 
 // handleDecrementQuantity decrements the quantity of the selected card
 func (m CardGameTabsModel) handleDecrementQuantity() (CardGameTabsModel, tea.Cmd) {
-	selectedRow := m.cardTable.Cursor()
-	if selectedRow < 0 {
+	card, ok := m.getSelectedCard()
+	if !ok {
 		return m, nil
-	}
-	showAll := m.searchInput.Value() == ""
-	var card model.Card
-	if showAll {
-		if selectedRow >= len(m.cards) {
-			return m, nil
-		}
-		card = m.cards[selectedRow]
-	} else {
-		if selectedRow >= len(m.filteredCards) {
-			return m, nil
-		}
-		card = m.filteredCards[selectedRow]
 	}
 	dbQty := m.dbQuantities[card.ID]
 	tempDelta := m.tempQuantityChanges[card.ID]

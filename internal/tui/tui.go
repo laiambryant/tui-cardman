@@ -126,6 +126,173 @@ func (m *Model) onConfigChange(cfg *runtimecfg.RuntimeConfig) {
 	m.styleManager.UpdateTheme(scheme, cfg.UI.OpaqueBackground, cfg.UI.BackgroundStyle)
 }
 
+func isNavigationKey(action, s string) bool {
+	return action == "nav_prev_tab" || action == "nav_next_tab" || action == "nav_up" || action == "nav_down" || action == "nav_left" || action == "nav_right" || s == "tab" || s == "shift+tab" || s == "up" || s == "down" || s == "left" || s == "right"
+}
+
+func isSelectKey(action, s string) bool {
+	return action == "select" || s == "enter" || s == "\r" || s == "\n"
+}
+
+func isBackKey(action, s string) bool {
+	return action == "back" || action == "quit_alt" || s == "q" || s == "esc"
+}
+
+func isQuitKey(action, s string) bool {
+	return action == "quit" || action == "quit_alt" || s == "ctrl+c"
+}
+
+func (m *Model) getAction(s string) string {
+	if m.configManager != nil {
+		return m.configManager.MatchAction(s)
+	}
+	return ""
+}
+
+func (m *Model) updateInputFocus(cmds []tea.Cmd) tea.Cmd {
+	for i := 0; i <= len(m.inputs)-1; i++ {
+		if i == m.focusIndex {
+			cmds[i] = m.inputs[i].Focus()
+			m.inputs[i].Prompt = m.styleManager.GetFocusedStyle().Render("> ")
+			m.inputs[i].TextStyle = m.styleManager.GetFocusedStyle()
+		} else {
+			m.inputs[i].Blur()
+			m.inputs[i].Prompt = m.styleManager.GetBlurredStyle().Render("> ")
+			m.inputs[i].TextStyle = m.styleManager.GetNoStyle()
+		}
+	}
+	return tea.Batch(cmds...)
+}
+
+func (m *Model) cycleFocusIndex(forward bool) {
+	if forward {
+		m.focusIndex++
+	} else {
+		m.focusIndex--
+	}
+	maxIndex := len(m.inputs) + 1
+	if m.focusIndex > maxIndex {
+		m.focusIndex = 0
+	} else if m.focusIndex < 0 {
+		m.focusIndex = maxIndex
+	}
+}
+
+func (m *Model) handleInputScreenNavigation(action, s string) tea.Cmd {
+	if action == "nav_up" || s == "up" || s == "shift+tab" || action == "nav_left" || s == "left" {
+		m.cycleFocusIndex(false)
+	} else if action == "nav_down" || s == "down" || action == "nav_next_tab" || s == "tab" || action == "nav_right" || s == "right" {
+		m.cycleFocusIndex(true)
+	}
+	cmds := make([]tea.Cmd, len(m.inputs))
+	return m.updateInputFocus(cmds)
+}
+
+func (m *Model) cycleMainMenuTab(forward bool) {
+	if forward {
+		m.mainMenuTab = (m.mainMenuTab + 1) % 2
+	} else {
+		m.mainMenuTab = (m.mainMenuTab - 1 + 2) % 2
+	}
+}
+
+func (m *Model) handleMainScreenCursor(action, s string) {
+	if action == "nav_up" || s == "up" {
+		if m.cursor > 0 {
+			m.cursor--
+		}
+	} else if action == "nav_down" || s == "down" || s == "tab" {
+		if m.cursor < len(m.cardGames)-1 {
+			m.cursor++
+		}
+	} else if action == "nav_left" || s == "left" {
+		m.cycleMainMenuTab(false)
+	} else if action == "nav_right" || s == "right" {
+		m.cycleMainMenuTab(true)
+	}
+}
+
+func (m *Model) handleLoginSelect() (tea.Model, tea.Cmd) {
+	if m.focusIndex == len(m.inputs) {
+		return m.handleLogin()
+	} else if m.focusIndex == len(m.inputs)+1 {
+		m.screen = ScreenRegister
+		m.initRegisterInputs()
+		m.errorMsg = ""
+		return m, nil
+	}
+	return m, nil
+}
+
+func (m *Model) handleRegisterSelect() (tea.Model, tea.Cmd) {
+	if m.focusIndex == len(m.inputs) {
+		return m.handleRegister()
+	} else if m.focusIndex == len(m.inputs)+1 {
+		m.screen = ScreenLogin
+		m.initLoginInputs()
+		m.errorMsg = ""
+		return m, nil
+	}
+	return m, nil
+}
+
+func (m *Model) handleLocalUserSetupSelect() (tea.Model, tea.Cmd) {
+	if m.focusIndex == len(m.inputs) {
+		return m.handleLocalUserSetup()
+	}
+	return m, nil
+}
+
+func (m *Model) selectCardGame() (tea.Model, tea.Cmd) {
+	if len(m.cardGames) > 0 && m.cursor < len(m.cardGames) {
+		selectedGame := &m.cardGames[m.cursor]
+		cardGameTabs, err := m.createCardGameTabsModel(selectedGame)
+		if err != nil {
+			slog.Error("failed to create card game tabs model", "error", err)
+			m.errorMsg = fmt.Sprintf("Failed to load card game: %v", err)
+			return m, nil
+		}
+		m.cardGameTabs = cardGameTabs
+		m.screen = ScreenCardGameTabs
+		m.errorMsg = ""
+		return m, m.cardGameTabs.Init()
+	}
+	return m, nil
+}
+
+func (m *Model) selectImport() (tea.Model, tea.Cmd) {
+	importModel, err := m.createImportModel()
+	if err != nil {
+		slog.Error("failed to create import model", "error", err)
+		m.errorMsg = fmt.Sprintf("Failed to load import screen: %v", err)
+		return m, nil
+	}
+	m.importModel = &importModel
+	m.screen = ScreenImport
+	m.errorMsg = ""
+	return m, m.importModel.Init()
+}
+
+func (m *Model) handleSettingsKey(action string) (tea.Model, tea.Cmd) {
+	if action == "settings" && m.screen != ScreenSettings {
+		m.settingsModel = NewSettingsModel(m.configManager, m.styleManager)
+		m.screen = ScreenSettings
+		return m, m.settingsModel.Init()
+	}
+	return m, nil
+}
+
+func (m *Model) handleQuitKey(action, s string) (tea.Model, tea.Cmd) {
+	if isQuitKey(action, s) {
+		if m.screen == ScreenSettings {
+			m.screen = ScreenMain
+			return m, nil
+		}
+		return m, tea.Quit
+	}
+	return m, nil
+}
+
 func (m Model) Init() tea.Cmd {
 	return textinput.Blink
 }
@@ -134,170 +301,125 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		s := msg.String()
-		action := ""
-		if m.configManager != nil {
-			action = m.configManager.MatchAction(s)
+		action := m.getAction(s)
+		slog.Debug("tui key pressed", "key", s, "action", action, "screen", m.screen)
+		if newModel, cmd := m.handleSettingsKey(action); cmd != nil {
+			return newModel, cmd
 		}
-		if action == "settings" && m.screen != ScreenSettings {
-			m.settingsModel = NewSettingsModel(m.configManager, m.styleManager)
-			m.screen = ScreenSettings
-			return m, m.settingsModel.Init()
+		if newModel, cmd := m.handleQuitKey(action, s); cmd != nil {
+			return newModel, cmd
 		}
-		if action == "quit" || action == "quit_alt" || s == "ctrl+c" {
-			if m.screen == ScreenSettings {
-				m.screen = ScreenMain
-				return m, nil
-			}
-			return m, tea.Quit
-		}
-		if action == "nav_prev_tab" || action == "nav_next_tab" || action == "nav_up" || action == "nav_down" || s == "tab" || s == "shift+tab" || s == "up" || s == "down" {
-			switch m.screen {
-			case ScreenLogin, ScreenRegister, ScreenLocalUserSetup:
-				if action == "nav_up" || s == "up" || s == "shift+tab" {
-					m.focusIndex--
-				} else {
-					m.focusIndex++
-				}
-				maxIndex := len(m.inputs) + 1
-				if m.focusIndex > maxIndex {
-					m.focusIndex = 0
-				} else if m.focusIndex < 0 {
-					m.focusIndex = maxIndex
-				}
-				cmds := make([]tea.Cmd, len(m.inputs))
-				for i := 0; i <= len(m.inputs)-1; i++ {
-					if i == m.focusIndex {
-						cmds[i] = m.inputs[i].Focus()
-						m.inputs[i].Prompt = m.styleManager.GetFocusedStyle().Render("> ")
-						m.inputs[i].TextStyle = m.styleManager.GetFocusedStyle()
-					} else {
-						m.inputs[i].Blur()
-						m.inputs[i].Prompt = m.styleManager.GetBlurredStyle().Render("> ")
-						m.inputs[i].TextStyle = m.styleManager.GetNoStyle()
-					}
-				}
-				return m, tea.Batch(cmds...)
-			case ScreenMain:
-				if action == "nav_next_tab" || (s == "tab" && m.mainMenuTab == 1) {
-					m.mainMenuTab = (m.mainMenuTab + 1) % 2
-					return m, nil
-				}
-				if action == "nav_prev_tab" || s == "shift+tab" {
-					m.mainMenuTab = (m.mainMenuTab - 1 + 2) % 2
-					return m, nil
-				}
-				if m.mainMenuTab == 0 {
-					if action == "nav_up" || s == "up" {
-						if m.cursor > 0 {
-							m.cursor--
-						}
-					} else if action == "nav_down" || s == "down" || s == "tab" {
-						if m.cursor < len(m.cardGames)-1 {
-							m.cursor++
-						}
-					}
-				}
-				return m, nil
+		if isNavigationKey(action, s) {
+			if m.screen == ScreenLogin || m.screen == ScreenRegister || m.screen == ScreenLocalUserSetup || m.screen == ScreenMain {
+				return m.handleNavigationKeys(action, s)
 			}
 		}
-		if action == "select" || s == "enter" || s == "\r" || s == "\n" {
-			switch m.screen {
-			case ScreenLogin:
-				if m.focusIndex == len(m.inputs) {
-					return m.handleLogin()
-				} else if m.focusIndex == len(m.inputs)+1 {
-					m.screen = ScreenRegister
-					m.initRegisterInputs()
-					m.errorMsg = ""
-					return m, nil
-				}
-			case ScreenRegister:
-				if m.focusIndex == len(m.inputs) {
-					return m.handleRegister()
-				} else if m.focusIndex == len(m.inputs)+1 {
-					m.screen = ScreenLogin
-					m.initLoginInputs()
-					m.errorMsg = ""
-					return m, nil
-				}
-			case ScreenLocalUserSetup:
-				if m.focusIndex == len(m.inputs) {
-					return m.handleLocalUserSetup()
-				}
-			case ScreenMain:
-				switch m.mainMenuTab {
-				case 0:
-					if len(m.cardGames) > 0 && m.cursor < len(m.cardGames) {
-						selectedGame := &m.cardGames[m.cursor]
-						cardGameTabs, err := m.createCardGameTabsModel(selectedGame)
-						if err != nil {
-							slog.Error("failed to create card game tabs model", "error", err)
-							m.errorMsg = fmt.Sprintf("Failed to load card game: %v", err)
-							return m, nil
-						}
-						m.cardGameTabs = cardGameTabs
-						m.screen = ScreenCardGameTabs
-						m.errorMsg = ""
-						return m, m.cardGameTabs.Init()
-					}
-				case 1:
-					importModel, err := m.createImportModel()
-					if err != nil {
-						slog.Error("failed to create import model", "error", err)
-						m.errorMsg = fmt.Sprintf("Failed to load import screen: %v", err)
-						return m, nil
-					}
-					m.importModel = &importModel
-					m.screen = ScreenImport
-					m.errorMsg = ""
-					return m, m.importModel.Init()
-				}
+		if isSelectKey(action, s) {
+			if m.screen == ScreenLogin || m.screen == ScreenRegister || m.screen == ScreenLocalUserSetup || m.screen == ScreenMain {
+				return m.handleSelectKeys()
 			}
 		}
 	}
+	return m.handleScreenUpdates(msg)
+}
+
+func (m Model) handleNavigationKeys(action, s string) (tea.Model, tea.Cmd) {
 	switch m.screen {
 	case ScreenLogin, ScreenRegister, ScreenLocalUserSetup:
-		cmd := m.updateInputs(msg)
-		return m, cmd
+		return m, m.handleInputScreenNavigation(action, s)
+	case ScreenMain:
+		return m.handleMainScreenNavigation(action, s)
+	}
+	return m, nil
+}
+
+func (m *Model) handleMainScreenNavigation(action, s string) (tea.Model, tea.Cmd) {
+	if action == "nav_next_tab" || (s == "tab" && m.mainMenuTab == 1) {
+		m.cycleMainMenuTab(true)
+		return m, nil
+	}
+	if action == "nav_prev_tab" || s == "shift+tab" {
+		m.cycleMainMenuTab(false)
+		return m, nil
+	}
+	if m.mainMenuTab == 0 {
+		m.handleMainScreenCursor(action, s)
+	}
+	return m, nil
+}
+
+func (m Model) handleSelectKeys() (tea.Model, tea.Cmd) {
+	switch m.screen {
+	case ScreenLogin:
+		return m.handleLoginSelect()
+	case ScreenRegister:
+		return m.handleRegisterSelect()
+	case ScreenLocalUserSetup:
+		return m.handleLocalUserSetupSelect()
+	case ScreenMain:
+		return m.handleMainScreenSelect()
+	}
+	return m, nil
+}
+
+func (m *Model) handleMainScreenSelect() (tea.Model, tea.Cmd) {
+	switch m.mainMenuTab {
+	case 0:
+		return m.selectCardGame()
+	case 1:
+		return m.selectImport()
+	}
+	return m, nil
+}
+
+func (m Model) handleScreenUpdates(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch m.screen {
+	case ScreenLogin, ScreenRegister, ScreenLocalUserSetup:
+		return m, m.updateInputs(msg)
 	case ScreenSettings:
-		var cmd tea.Cmd
-		*m.settingsModel, cmd = m.settingsModel.Update(msg)
-		if m.settingsModel.shouldClose {
-			m.screen = ScreenMain
-		}
-		return m, cmd
+		return m.updateSettings(msg)
 	case ScreenCardGameTabs:
+		return m.updateCardGameTabs(msg)
+	case ScreenImport:
+		return m.updateImport(msg)
+	}
+	return m, nil
+}
+
+func (m *Model) updateSettings(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
+	*m.settingsModel, cmd = m.settingsModel.Update(msg)
+	if m.settingsModel.shouldClose {
+		m.screen = ScreenMain
+	}
+	return m, cmd
+}
+
+func (m *Model) updateCardGameTabs(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
+	m.cardGameTabs, cmd = m.cardGameTabs.Update(msg)
+	if keyMsg, ok := msg.(tea.KeyMsg); ok {
+		action := m.getAction(keyMsg.String())
+		if isBackKey(action, keyMsg.String()) {
+			m.screen = ScreenMain
+			return m, nil
+		}
+	}
+	return m, cmd
+}
+
+func (m *Model) updateImport(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if m.importModel != nil {
 		var cmd tea.Cmd
-		m.cardGameTabs, cmd = m.cardGameTabs.Update(msg)
+		*m.importModel, cmd = m.importModel.Update(msg)
 		if keyMsg, ok := msg.(tea.KeyMsg); ok {
-			action := ""
-			if m.configManager != nil {
-				action = m.configManager.MatchAction(keyMsg.String())
-			}
-			if action == "back" || action == "quit_alt" || keyMsg.String() == "q" || keyMsg.String() == "esc" {
+			action := m.getAction(keyMsg.String())
+			if isBackKey(action, keyMsg.String()) && !m.importModel.isImporting {
 				m.screen = ScreenMain
 				return m, nil
 			}
 		}
 		return m, cmd
-	case ScreenImport:
-		if m.importModel != nil {
-			var cmd tea.Cmd
-			*m.importModel, cmd = m.importModel.Update(msg)
-			if keyMsg, ok := msg.(tea.KeyMsg); ok {
-				action := ""
-				if m.configManager != nil {
-					action = m.configManager.MatchAction(keyMsg.String())
-				}
-				if action == "back" || action == "quit_alt" || keyMsg.String() == "q" || keyMsg.String() == "esc" {
-					if !m.importModel.isImporting {
-						m.screen = ScreenMain
-						return m, nil
-					}
-				}
-			}
-			return m, cmd
-		}
 	}
 	return m, nil
 }

@@ -9,44 +9,30 @@ import (
 	"github.com/laiambryant/tui-cardman/internal/auth"
 )
 
+func (m *Model) createTextInput(placeholder string, charLimit, width int, focused bool, isPassword bool) textinput.Model {
+	t := textinput.New()
+	t.Placeholder = placeholder
+	t.CharLimit = charLimit
+	t.Width = width
+	if focused {
+		t.Focus()
+		t.Prompt = focusedStyle.Render("> ")
+	} else {
+		t.Prompt = blurredStyle.Render("> ")
+	}
+	if isPassword {
+		t.EchoMode = textinput.EchoPassword
+		t.EchoCharacter = '•'
+	}
+	return t
+}
+
 func (m *Model) initRegisterInputs() {
 	m.inputs = make([]textinput.Model, 4)
-
-	// Name input
-	t := textinput.New()
-	t.Placeholder = "First Name"
-	t.Focus()
-	t.CharLimit = 100
-	t.Width = 50
-	t.Prompt = focusedStyle.Render("> ")
-	m.inputs[0] = t
-
-	// Surname input
-	t = textinput.New()
-	t.Placeholder = "Last Name"
-	t.CharLimit = 100
-	t.Width = 50
-	t.Prompt = blurredStyle.Render("> ")
-	m.inputs[1] = t
-
-	// Email input
-	t = textinput.New()
-	t.Placeholder = "email@example.com"
-	t.CharLimit = 255
-	t.Width = 50
-	t.Prompt = blurredStyle.Render("> ")
-	m.inputs[2] = t
-
-	// Password input
-	t = textinput.New()
-	t.Placeholder = "password"
-	t.CharLimit = 255
-	t.Width = 50
-	t.EchoMode = textinput.EchoPassword
-	t.EchoCharacter = '•'
-	t.Prompt = blurredStyle.Render("> ")
-	m.inputs[3] = t
-
+	m.inputs[0] = m.createTextInput("First Name", 100, 50, true, false)
+	m.inputs[1] = m.createTextInput("Last Name", 100, 50, false, false)
+	m.inputs[2] = m.createTextInput("email@example.com", 255, 50, false, false)
+	m.inputs[3] = m.createTextInput("password", 255, 50, false, true)
 	m.focusIndex = 0
 }
 
@@ -71,54 +57,39 @@ func (m *Model) handleRegister() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+func (m Model) renderButton(isFocused bool, label string) string {
+	if isFocused {
+		return titleStyle.Render(label)
+	}
+	return label
+}
+
+func (m Model) buildAuthViewHelpText() string {
+	settingsKey := ResolveKeyBinding(m.configManager, "settings", "F1")
+	navNext := ResolveKeyBinding(m.configManager, "nav_next_tab", "Tab")
+	navPrev := ResolveKeyBinding(m.configManager, "nav_prev_tab", "Shift+Tab")
+	submitKey := ResolveKeyBinding(m.configManager, "select", "Enter")
+	quitKey := ResolveKeyBinding(m.configManager, "quit", "Ctrl+C")
+	return fmt.Sprintf("%s: Settings • %s/%s: Navigate • %s: Submit • %s: Quit", settingsKey, navPrev, navNext, submitKey, quitKey)
+}
+
 func (m Model) registerView() string {
 	var b strings.Builder
-	b.WriteString(titleStyle.Render("CardMan - Register") + "\n\n")
-	b.WriteString(focusedStyle.Render("First Name:") + "\n")
+	b.WriteString(RenderTitle("CardMan - Register"))
+	b.WriteString(RenderConditionalLabel(true, "First Name:") + "\n")
 	b.WriteString(m.inputs[0].View() + "\n\n")
-	b.WriteString(blurredStyle.Render("Last Name:") + "\n")
+	b.WriteString(RenderConditionalLabel(false, "Last Name:") + "\n")
 	b.WriteString(m.inputs[1].View() + "\n\n")
-	b.WriteString(blurredStyle.Render("Email:") + "\n")
+	b.WriteString(RenderConditionalLabel(false, "Email:") + "\n")
 	b.WriteString(m.inputs[2].View() + "\n\n")
-	b.WriteString(blurredStyle.Render("Password (8+ chars, 1 uppercase, 1 special):") + "\n")
+	b.WriteString(RenderConditionalLabel(false, "Password (8+ chars, 1 uppercase, 1 special):") + "\n")
 	b.WriteString(m.inputs[3].View() + "\n\n")
 	if m.errorMsg != "" {
 		b.WriteString(errorStyle.Render("Error: "+m.errorMsg) + "\n\n")
 	}
-	button := "[ Register ]"
-	if m.focusIndex == len(m.inputs) {
-		button = titleStyle.Render("[ Register ]")
-	}
-	b.WriteString(button + "\n\n")
-	settingsKey := "F1"
-	navNext := "Tab"
-	navPrev := "Shift+Tab"
-	submitKey := "Enter"
-	quitKey := "Ctrl+C"
-	if m.configManager != nil {
-		if k := m.configManager.KeyForAction("settings"); k != "" {
-			settingsKey = k
-		}
-		if k := m.configManager.KeyForAction("nav_next_tab"); k != "" {
-			navNext = k
-		}
-		if k := m.configManager.KeyForAction("nav_prev_tab"); k != "" {
-			navPrev = k
-		}
-		if k := m.configManager.KeyForAction("select"); k != "" {
-			submitKey = k
-		}
-		if k := m.configManager.KeyForAction("quit"); k != "" {
-			quitKey = k
-		}
-	}
-	help := fmt.Sprintf("%s: Settings • %s/%s: Navigate • %s: Submit • %s: Quit", settingsKey, navPrev, navNext, submitKey, quitKey)
-	b.WriteString(helpStyle.Render(help) + "\n")
+	b.WriteString(m.renderButton(m.focusIndex == len(m.inputs), "[ Register ]") + "\n\n")
+	b.WriteString(helpStyle.Render(m.buildAuthViewHelpText()) + "\n")
 	b.WriteString(helpStyle.Render("Already have an account? Press Enter on the button below") + "\n")
-	loginBtn := "[ Back to Login ]"
-	if m.focusIndex == len(m.inputs)+1 {
-		loginBtn = titleStyle.Render("[ Back to Login ]")
-	}
-	b.WriteString(loginBtn + "\n")
+	b.WriteString(m.renderButton(m.focusIndex == len(m.inputs)+1, "[ Back to Login ]") + "\n")
 	return b.String()
 }

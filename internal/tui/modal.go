@@ -44,34 +44,46 @@ func (m ModalModel) Update(msg tea.Msg) (ModalModel, tea.Cmd) {
 	}
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		switch msg.String() {
-		case "left", "h":
-			m.selected = 0
-			return m, nil
-		case "right", "l":
-			m.selected = 1
-			return m, nil
-		case "enter":
-			if m.selected == 1 {
-				m.confirmed = true
-				m.visible = false
-				if m.onConfirm != nil {
-					return m, m.onConfirm()
-				}
-			} else {
-				m.visible = false
-				if m.onCancel != nil {
-					return m, m.onCancel()
-				}
-			}
-			return m, nil
-		case "esc", "q":
-			m.visible = false
-			if m.onCancel != nil {
-				return m, m.onCancel()
-			}
-			return m, nil
+		return m.handleKey(msg.String())
+	}
+	return m, nil
+}
+
+func (m ModalModel) handleKey(key string) (ModalModel, tea.Cmd) {
+	switch key {
+	case "left", "h":
+		m.selected = 0
+		return m, nil
+	case "right", "l":
+		m.selected = 1
+		return m, nil
+	case "enter":
+		return m.handleConfirm()
+	case "esc", "q":
+		return m.handleCancel()
+	}
+	return m, nil
+}
+
+func (m ModalModel) handleConfirm() (ModalModel, tea.Cmd) {
+	m.visible = false
+	if m.selected == 1 {
+		m.confirmed = true
+		if m.onConfirm != nil {
+			return m, m.onConfirm()
 		}
+	} else {
+		if m.onCancel != nil {
+			return m, m.onCancel()
+		}
+	}
+	return m, nil
+}
+
+func (m ModalModel) handleCancel() (ModalModel, tea.Cmd) {
+	m.visible = false
+	if m.onCancel != nil {
+		return m, m.onCancel()
 	}
 	return m, nil
 }
@@ -95,43 +107,40 @@ func (m ModalModel) View() string {
 	return m.overlayContent(overlay, centered)
 }
 
+func (m ModalModel) createButtonStyle(focused bool) lipgloss.Style {
+	style := m.styleManager.GetFocusedStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(m.styleManager.scheme.Focused).
+		Padding(0, 2)
+	if focused {
+		style = style.Bold(true)
+	} else {
+		style = m.styleManager.GetBlurredStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(m.styleManager.scheme.Blurred).
+			Padding(0, 2)
+	}
+	return style
+}
+
 func (m ModalModel) renderModalBox() string {
 	var b strings.Builder
 	modalStyle := m.styleManager.GetModalStyle()
 	titleStyle := m.styleManager.GetTitleStyle().Align(lipgloss.Center)
 	messageStyle := m.styleManager.GetBlurredStyle().Align(lipgloss.Center)
-	buttonNoStyle := m.styleManager.GetBlurredStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(m.styleManager.scheme.Blurred).
-		Padding(0, 2)
-	buttonYesStyle := m.styleManager.GetBlurredStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(m.styleManager.scheme.Blurred).
-		Padding(0, 2)
-	buttonNoFocusedStyle := m.styleManager.GetFocusedStyle().
-		Bold(true).
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(m.styleManager.scheme.Focused).
-		Padding(0, 2)
-	buttonYesFocusedStyle := m.styleManager.GetFocusedStyle().
-		Bold(true).
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(m.styleManager.scheme.Focused).
-		Padding(0, 2)
 	b.WriteString(titleStyle.Render(m.title) + "\n\n")
 	b.WriteString(messageStyle.Render(m.message) + "\n\n")
-	noButton := "No"
-	yesButton := "Yes"
-	if m.selected == 0 {
-		noButton = buttonNoFocusedStyle.Render(noButton)
-		yesButton = buttonYesStyle.Render(yesButton)
-	} else {
-		noButton = buttonNoStyle.Render(noButton)
-		yesButton = buttonYesFocusedStyle.Render(yesButton)
-	}
-	buttons := lipgloss.JoinHorizontal(lipgloss.Center, noButton, "  ", yesButton)
-	b.WriteString(lipgloss.NewStyle().Align(lipgloss.Center).Render(buttons))
+	b.WriteString(m.renderButtons())
 	return modalStyle.Render(b.String())
+}
+
+func (m ModalModel) renderButtons() string {
+	noStyle := m.createButtonStyle(m.selected == 0)
+	yesStyle := m.createButtonStyle(m.selected == 1)
+	noButton := noStyle.Render("No")
+	yesButton := yesStyle.Render("Yes")
+	buttons := lipgloss.JoinHorizontal(lipgloss.Center, noButton, "  ", yesButton)
+	return lipgloss.NewStyle().Align(lipgloss.Center).Render(buttons)
 }
 
 func (m ModalModel) renderOverlay() string {
@@ -149,23 +158,27 @@ func (m ModalModel) renderOverlay() string {
 	return strings.Join(overlayLines, "\n")
 }
 
+func (m ModalModel) getLineAt(lines []string, index int) string {
+	if index < len(lines) {
+		return lines[index]
+	}
+	return ""
+}
+
+func maxLen(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
 func (m ModalModel) overlayContent(background, foreground string) string {
 	bgLines := strings.Split(background, "\n")
 	fgLines := strings.Split(foreground, "\n")
-	maxLines := len(bgLines)
-	if len(fgLines) > maxLines {
-		maxLines = len(fgLines)
-	}
+	maxLines := maxLen(len(bgLines), len(fgLines))
 	var result []string
 	for i := 0; i < maxLines; i++ {
-		var bgLine, fgLine string
-		if i < len(bgLines) {
-			bgLine = bgLines[i]
-		}
-		if i < len(fgLines) {
-			fgLine = fgLines[i]
-		}
-		combinedLine := m.mergeLines(bgLine, fgLine)
+		combinedLine := m.mergeLines(m.getLineAt(bgLines, i), m.getLineAt(fgLines, i))
 		result = append(result, combinedLine)
 	}
 	return strings.Join(result, "\n")
