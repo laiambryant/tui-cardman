@@ -127,12 +127,16 @@ func resolveMinSectionHeight(height int) int {
 }
 
 func reduceSectionHeights(headerHeight, footerHeight, deficit, minSectionHeight int) (int, int) {
-	for deficit > 0 && (headerHeight > minSectionHeight || footerHeight > minSectionHeight) {
-		if headerHeight > minSectionHeight {
+	// Ensure we never reduce below 3 to maintain at least 1 line of visible content
+	// (3 = 1 content line + 2 for border)
+	minAllowedHeight := max(minSectionHeight, 3)
+
+	for deficit > 0 && (headerHeight > minAllowedHeight || footerHeight > minAllowedHeight) {
+		if headerHeight > minAllowedHeight {
 			headerHeight--
 			deficit--
 		}
-		if deficit > 0 && footerHeight > minSectionHeight {
+		if deficit > 0 && footerHeight > minAllowedHeight {
 			footerHeight--
 			deficit--
 		}

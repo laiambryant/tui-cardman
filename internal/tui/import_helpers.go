@@ -50,58 +50,69 @@ func renderStyledLine(style lipgloss.Style, format string, args ...interface{}) 
 }
 
 func splitImportPanelWidths(contentWidth int) (int, int) {
-	spacing := 2
-	if contentWidth <= spacing {
-		return max(contentWidth, 0), 0
+	// Each panel has: border (2 chars) + padding (4 chars) = 6 overhead
+	// We need spacing between panels: 1 char
+	const panelOverhead = 6 // border + padding per panel
+	const spacing = 1
+	
+	if contentWidth < 20 {
+		return max(contentWidth/2, 10), max(contentWidth/2, 10)
 	}
-	available := contentWidth - spacing
+	
+	// Total overhead: 2 panels worth of overhead + spacing
+	totalOverhead := (panelOverhead * 2) + spacing
+	available := contentWidth - totalOverhead
+	
+	if available < 10 {
+		return 15, 15
+	}
+	
 	left := available * 3 / 5
 	right := available - left
-	if left < 20 {
-		left = min(20, available)
-		right = available - left
-	}
-	if right < 12 {
-		right = max(available-left, 0)
-	}
+	
 	return left, right
 }
 
 func (m ImportModel) renderImportView() string {
+	if m.width == 0 || m.height == 0 {
+		return "Initializing..."
+	}
 	header := m.renderImportHeader()
+	body := m.renderImportBody()
 	footer := m.renderImportFooter()
-	layout := calculateFrameLayout(lipgloss.Height(header), lipgloss.Height(footer), m.width, m.height)
-	body := m.renderImportBody(layout.ContentWidth, layout.BodyContentHeight)
-	return renderFramedViewWithLayout(header, body, footer, layout, m.styleManager)
+	return renderFramedView(header, body, footer, m.width, m.height, m.styleManager)
 }
 
 func (m ImportModel) renderImportHeader() string {
 	var b strings.Builder
 	b.WriteString(titleStyle.Render("CardMan - Import Pokemon TCG Sets") + "\n")
-	b.WriteString(m.renderCardGameSelector())
+	b.WriteString(m.renderCardGameSelector() + "\n")
 	return b.String()
 }
 
-func (m ImportModel) renderImportBody(contentWidth, contentHeight int) string {
+func (m ImportModel) renderImportBody() string {
 	var b strings.Builder
 	if m.isLoading {
 		b.WriteString(focusedStyle.Render(m.loadingMsg))
 		return b.String()
 	}
-	b.WriteString(m.renderSearchInput())
-	if contentHeight > 0 {
-		b.WriteString("\n")
-	}
-	panelHeight := contentHeight - 1
-	if panelHeight < 3 {
-		panelHeight = 3
+	b.WriteString(m.renderSearchInput() + "\n\n")
+	
+	// Calculate available width for the two panels
+	contentWidth := m.width - frameBorderSize - framePaddingX*2
+	if contentWidth < 0 {
+		contentWidth = 0
 	}
 	listWidth, actionsWidth := splitImportPanelWidths(contentWidth)
+	
+	leftPanel := m.renderSetsListPanel(listWidth)
+	rightPanel := m.renderActionsPanelContent(actionsWidth)
+	
 	mainContent := lipgloss.JoinHorizontal(
 		lipgloss.Top,
-		m.renderSetsList(listWidth, panelHeight),
-		"  ",
-		m.renderActionsPanel(actionsWidth, panelHeight),
+		leftPanel,
+		" ",
+		rightPanel,
 	)
 	b.WriteString(mainContent)
 	return b.String()
@@ -115,7 +126,11 @@ func (m ImportModel) renderImportFooter() string {
 	if m.statusMsg != "" {
 		b.WriteString(focusedStyle.Render(m.statusMsg) + "\n")
 	}
-	b.WriteString(m.renderStatusBar() + "\n")
+	contentWidth := m.width - frameBorderSize - framePaddingX*2
+	if contentWidth < 0 {
+		contentWidth = 0
+	}
+	b.WriteString(m.renderStatusBar(contentWidth) + "\n")
 	b.WriteString(m.renderHelp())
 	return b.String()
 }
@@ -131,18 +146,23 @@ func (m ImportModel) renderSearchInput() string {
 	return label + m.searchInput.View()
 }
 
-func (m ImportModel) renderSetsList(width, height int) string {
-	listStyle := m.createPanelStyle(width, height, m.styleManager.scheme.Blurred)
+func (m ImportModel) renderSetsListPanel(width int) string {
 	var b strings.Builder
-	contentHeight := max(height-4, 1)
-	itemsPerPage := max(contentHeight-2, 1)
 	b.WriteString(titleStyle.Render("Sets") + "\n")
 	if len(m.filteredSets) == 0 {
 		b.WriteString(m.renderEmptySetsList())
 	} else {
+		itemsPerPage := 15 // Reasonable default
 		b.WriteString(m.renderSetsListContent(itemsPerPage))
 	}
-	return listStyle.Render(b.String())
+	
+	panelStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(m.styleManager.scheme.Blurred).
+		Padding(1, 2).
+		MaxWidth(width)
+	
+	return panelStyle.Render(b.String())
 }
 func (m ImportModel) renderEmptySetsList() string {
 	if m.isLoading {
@@ -169,15 +189,20 @@ func (m ImportModel) renderSetListItem(index int) string {
 	return blurredStyle.Render(line) + "\n"
 }
 
-func (m ImportModel) renderActionsPanel(width, height int) string {
-	panelStyle := m.createPanelStyle(width, height, m.styleManager.scheme.Blurred)
+func (m ImportModel) renderActionsPanelContent(width int) string {
 	var b strings.Builder
-	contentHeight := max(height-4, 1)
 	b.WriteString(titleStyle.Render("Actions") + "\n")
-	if len(m.filteredSets) > 0 && m.cursor < len(m.filteredSets) && contentHeight > 6 {
+	if len(m.filteredSets) > 0 && m.cursor < len(m.filteredSets) {
 		b.WriteString(m.renderSelectedSetInfo())
 	}
 	b.WriteString(m.renderActionsList())
+	
+	panelStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(m.styleManager.scheme.Blurred).
+		Padding(1, 2).
+		MaxWidth(width)
+	
 	return panelStyle.Render(b.String())
 }
 func (m ImportModel) renderSelectedSetInfo() string {
@@ -222,12 +247,33 @@ func (m ImportModel) renderDisabledAction(action ActionItem) string {
 	return line + "\n"
 }
 
-func (m ImportModel) renderStatusBar() string {
+func (m ImportModel) renderStatusBar(contentWidth int) string {
 	totalSets := len(m.availableSets)
 	importedSets := len(m.databaseSetIDs)
 	filteredCount := len(m.filteredSets)
-	status := fmt.Sprintf("Total: %d | Imported: %d | Showing: %d", totalSets, importedSets, filteredCount)
-	return blurredStyle.Render(status)
+
+	leftSection := fmt.Sprintf("Total: %d  Imported: %d", totalSets, importedSets)
+	rightSection := fmt.Sprintf("Showing: %d", filteredCount)
+
+	// Calculate widths for left and right sections
+	leftWidth := contentWidth * 2 / 3
+	rightWidth := contentWidth - leftWidth
+
+	if leftWidth < 0 {
+		leftWidth = 0
+	}
+	if rightWidth < 0 {
+		rightWidth = 0
+	}
+
+	leftStyle := blurredStyle.Copy().Width(leftWidth).Align(lipgloss.Left)
+	rightStyle := blurredStyle.Copy().Width(rightWidth).Align(lipgloss.Right)
+
+	return lipgloss.JoinHorizontal(
+		lipgloss.Top,
+		leftStyle.Render(leftSection),
+		rightStyle.Render(rightSection),
+	)
 }
 
 func (m ImportModel) renderHelp() string {
