@@ -165,6 +165,12 @@ func (m ImportModel) Update(msg tea.Msg) (ImportModel, tea.Cmd) {
 	case fetchDatabaseSetsErrorMsg:
 		m.errorMsg = fmt.Sprintf("Failed to fetch database sets: %v", msg.err)
 		return m, nil
+	case deleteSetSuccessMsg:
+		m.statusMsg = fmt.Sprintf("Successfully deleted set: %s", msg.setID)
+		return m, tea.Batch(m.fetchDatabaseSetsCmd(), m.checkSelectedSetInDB())
+	case deleteSetErrorMsg:
+		m.errorMsg = fmt.Sprintf("Failed to delete set %s: %v", msg.setID, msg.err)
+		return m, nil
 	case checkSetInDBMsg:
 		m.selectedSetInDB = true
 		m.selectedSetHasCol = msg.hasCollections

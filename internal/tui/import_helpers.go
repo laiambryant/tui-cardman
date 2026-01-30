@@ -7,14 +7,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-func (m ImportModel) createPanelStyle(width int, height int, borderColor lipgloss.Color) lipgloss.Style {
-	return lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(borderColor).
-		Padding(1, 2).
-		Width(width).
-		Height(height)
-}
 func getCursorPrefix(isCursor bool) string {
 	if isCursor {
 		return "> "
