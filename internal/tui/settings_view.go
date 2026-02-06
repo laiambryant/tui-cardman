@@ -21,8 +21,6 @@ const (
 
 const (
 	uiSettingTheme = iota
-	uiSettingOpaqueBackground
-	uiSettingBackgroundStyle
 )
 
 type saveConfirmedMsg struct{}
@@ -204,9 +202,7 @@ func (m *SettingsModel) navigateUp() {
 
 func (m *SettingsModel) navigateDown() {
 	if m.section == sectionUI {
-		if m.uiCursor < 2 {
-			m.uiCursor++
-		}
+		// Only one UI setting (theme), so cursor stays at 0
 	} else {
 		maxCursor := len(m.actions) - 1
 		if m.cursor < maxCursor {
@@ -263,10 +259,6 @@ func (m *SettingsModel) handleUISettingChange(direction int) {
 	switch m.uiCursor {
 	case uiSettingTheme:
 		m.cycleTheme(direction)
-	case uiSettingOpaqueBackground:
-		m.toggleOpaqueBackground()
-	case uiSettingBackgroundStyle:
-		m.cycleBackgroundStyle(direction)
 	}
 }
 
@@ -278,22 +270,6 @@ func (m *SettingsModel) cycleTheme(direction int) {
 	currentIndex := findCurrentIndex(themes, m.tempConfig.UI.ColorScheme)
 	newIndex := cyclicIndex(currentIndex, direction, len(themes))
 	m.tempConfig.UI.ColorScheme = themes[newIndex]
-	m.hasChanges = true
-}
-
-func (m *SettingsModel) toggleOpaqueBackground() {
-	m.tempConfig.UI.OpaqueBackground = !m.tempConfig.UI.OpaqueBackground
-	m.hasChanges = true
-}
-
-func (m *SettingsModel) cycleBackgroundStyle(direction int) {
-	if !m.tempConfig.UI.OpaqueBackground {
-		return
-	}
-	styles := []string{"none", "components", "full", "both"}
-	currentIndex := findCurrentIndex(styles, m.tempConfig.UI.BackgroundStyle)
-	newIndex := cyclicIndex(currentIndex, direction, len(styles))
-	m.tempConfig.UI.BackgroundStyle = styles[newIndex]
 	m.hasChanges = true
 }
 
@@ -450,23 +426,9 @@ func (m SettingsModel) renderUISection(maxLines int) string {
 	cfg := m.tempConfig
 	b.WriteString(m.styleManager.GetTitleStyle().Render("UI Settings") + "\n")
 	themes := runtimecfg.GetColorSchemeNames()
-	bgStyles := []string{"none", "components", "full", "both"}
 	b.WriteString(m.renderUILine(m.uiCursor == uiSettingTheme, "Theme: ", cfg.UI.ColorScheme) + "\n")
-	bgValue := "Off"
-	if cfg.UI.OpaqueBackground {
-		bgValue = "On"
-	}
-	b.WriteString(m.renderUILine(m.uiCursor == uiSettingOpaqueBackground, "Opaque Background: ", bgValue) + "\n")
-	styleValue := cfg.UI.BackgroundStyle
-	if !cfg.UI.OpaqueBackground {
-		styleValue = m.styleManager.GetBlurredStyle().Render(styleValue)
-	}
-	b.WriteString(m.renderUILine(m.uiCursor == uiSettingBackgroundStyle, "Background Style: ", styleValue) + "\n")
-	if maxLines >= 6 {
+	if maxLines >= 4 {
 		b.WriteString(m.styleManager.GetBlurredStyle().Render("Available themes: "+strings.Join(themes, ", ")) + "\n")
-	}
-	if maxLines >= 7 {
-		b.WriteString(m.styleManager.GetBlurredStyle().Render("Background styles: "+strings.Join(bgStyles, ", ")) + "\n")
 	}
 	return b.String()
 }

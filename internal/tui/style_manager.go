@@ -19,7 +19,7 @@ var (
 
 func init() {
 	scheme := runtimecfg.ColorSchemes["default"]
-	defaultStyleManager = NewStyleManager(scheme, false, "components")
+	defaultStyleManager = NewStyleManager(scheme)
 	focusedStyle = defaultStyleManager.GetFocusedStyle()
 	blurredStyle = defaultStyleManager.GetBlurredStyle()
 	noStyle = defaultStyleManager.GetNoStyle()
@@ -30,23 +30,19 @@ func init() {
 
 // StyleManager centralizes all TUI styling and applies themes
 type StyleManager struct {
-	scheme           runtimecfg.ColorScheme
-	opaqueBackground bool
-	backgroundStyle  string
-	focusedStyle     lipgloss.Style
-	blurredStyle     lipgloss.Style
-	titleStyle       lipgloss.Style
-	errorStyle       lipgloss.Style
-	helpStyle        lipgloss.Style
-	noStyle          lipgloss.Style
+	scheme       runtimecfg.ColorScheme
+	focusedStyle lipgloss.Style
+	blurredStyle lipgloss.Style
+	titleStyle   lipgloss.Style
+	errorStyle   lipgloss.Style
+	helpStyle    lipgloss.Style
+	noStyle      lipgloss.Style
 }
 
-// NewStyleManager creates a new style manager with the given color scheme and settings
-func NewStyleManager(scheme runtimecfg.ColorScheme, opaqueBackground bool, backgroundStyle string) *StyleManager {
+// NewStyleManager creates a new style manager with the given color scheme
+func NewStyleManager(scheme runtimecfg.ColorScheme) *StyleManager {
 	sm := &StyleManager{
-		scheme:           scheme,
-		opaqueBackground: opaqueBackground,
-		backgroundStyle:  backgroundStyle,
+		scheme: scheme,
 	}
 	sm.initializeStyles()
 	return sm
@@ -113,7 +109,7 @@ func (sm *StyleManager) GetBoxStyle(focused bool) lipgloss.Style {
 	if focused {
 		style = style.Bold(true)
 	}
-	return sm.applyBackground(style, "box")
+	return style
 }
 
 func (sm *StyleManager) createRoundedBorderStyle(color lipgloss.Color, pad bool) lipgloss.Style {
@@ -128,9 +124,8 @@ func (sm *StyleManager) createRoundedBorderStyle(color lipgloss.Color, pad bool)
 
 // GetModalStyle returns a styled modal dialog
 func (sm *StyleManager) GetModalStyle() lipgloss.Style {
-	style := sm.createRoundedBorderStyle(sm.scheme.Title, true).
+	return sm.createRoundedBorderStyle(sm.scheme.Title, true).
 		Width(50)
-	return sm.applyBackground(style, "modal")
 }
 
 // GetTableStyles returns styled table configuration
@@ -184,8 +179,7 @@ func (sm *StyleManager) GetTableBaseStyle() lipgloss.Style {
 
 // GetPanelStyle returns a styled panel
 func (sm *StyleManager) GetPanelStyle() lipgloss.Style {
-	style := sm.createRoundedBorderStyle(sm.scheme.Blurred, true)
-	return sm.applyBackground(style, "panel")
+	return sm.createRoundedBorderStyle(sm.scheme.Blurred, true)
 }
 
 // GetTabStyle returns a styled tab
@@ -196,11 +190,10 @@ func (sm *StyleManager) GetTabStyle(active bool) lipgloss.Style {
 		color = sm.scheme.Focused
 		border = sm.createActiveBorder()
 	}
-	style := lipgloss.NewStyle().
+	return lipgloss.NewStyle().
 		Border(border, true).
 		BorderForeground(color).
 		Padding(0, 1)
-	return sm.applyBackground(style, "tab")
 }
 
 func (sm *StyleManager) createActiveBorder() lipgloss.Border {
@@ -211,9 +204,10 @@ func (sm *StyleManager) createInactiveBorder() lipgloss.Border {
 	return lipgloss.Border{Top: "─", Bottom: "─", Left: "│", Right: "│"}
 }
 
-// ApplyFullBackground applies background to entire view if enabled
+// ApplyFullBackground applies background to entire view if the scheme has background colors
 func (sm *StyleManager) ApplyFullBackground(content string, width, height int) string {
-	if !sm.shouldApplyFullBackground() {
+	// Only apply background if the scheme explicitly defines background/foreground colors
+	if sm.scheme.Background == "" || sm.scheme.Foreground == "" {
 		return content
 	}
 	style := lipgloss.NewStyle().
@@ -224,41 +218,9 @@ func (sm *StyleManager) ApplyFullBackground(content string, width, height int) s
 	return style.Render(content)
 }
 
-func (sm *StyleManager) applyBackground(style lipgloss.Style, component string) lipgloss.Style {
-	if !sm.shouldApplyComponentBackground(component) {
-		return style
-	}
-	return style.Background(sm.scheme.Background).Foreground(sm.scheme.Foreground)
-}
-
-func (sm *StyleManager) shouldApplyComponentBackground(_ string) bool {
-	if !sm.opaqueBackground {
-		return false
-	}
-	switch sm.backgroundStyle {
-	case "none":
-		return false
-	case "components", "both":
-		return true
-	case "full":
-		return false
-	default:
-		return false
-	}
-}
-
-func (sm *StyleManager) shouldApplyFullBackground() bool {
-	if !sm.opaqueBackground {
-		return false
-	}
-	return sm.backgroundStyle == "full" || sm.backgroundStyle == "both"
-}
-
 // UpdateTheme updates the style manager with a new theme
-func (sm *StyleManager) UpdateTheme(scheme runtimecfg.ColorScheme, opaqueBackground bool, backgroundStyle string) {
+func (sm *StyleManager) UpdateTheme(scheme runtimecfg.ColorScheme) {
 	sm.scheme = scheme
-	sm.opaqueBackground = opaqueBackground
-	sm.backgroundStyle = backgroundStyle
 	sm.initializeStyles()
 	focusedStyle = sm.GetFocusedStyle()
 	blurredStyle = sm.GetBlurredStyle()

@@ -24,8 +24,6 @@
   },
   "ui": {
     "compact_lists": false,
-    "color_scheme": "dark",
-    "opaque_background": false,
-    "background_style": "both"
+    "color_scheme": "default"
   }
 }

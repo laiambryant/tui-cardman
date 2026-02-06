@@ -63,7 +63,7 @@ func NewModel(db *sql.DB, isSSHMode bool) (*Model, error) {
 	}
 	cfg := configManager.Get()
 	scheme := runtimecfg.GetColorScheme(cfg.UI.ColorScheme)
-	styleManager := NewStyleManager(scheme, cfg.UI.OpaqueBackground, cfg.UI.BackgroundStyle)
+	styleManager := NewStyleManager(scheme)
 	userService, cardGameService, cardService, collectionService, authSvc := initServices(db)
 	cardGames, err := cardGameService.GetAllCardGames()
 	if err != nil {
@@ -123,7 +123,7 @@ func initServices(db *sql.DB) (user.UserService, cardgame.CardGameService, card.
 
 func (m *Model) onConfigChange(cfg *runtimecfg.RuntimeConfig) {
 	scheme := runtimecfg.GetColorScheme(cfg.UI.ColorScheme)
-	m.styleManager.UpdateTheme(scheme, cfg.UI.OpaqueBackground, cfg.UI.BackgroundStyle)
+	m.styleManager.UpdateTheme(scheme)
 }
 
 func isNavigationKey(action, s string) bool {

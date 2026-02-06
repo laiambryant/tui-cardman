@@ -82,7 +82,6 @@ func renderFrameSection(content string, width, height int, styleManager *StyleMa
 	style := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Padding(framePaddingY, framePaddingX).Width(contentWidth).Height(contentHeight)
 	if styleManager != nil {
 		style = style.BorderForeground(styleManager.scheme.Blurred)
-		style = styleManager.applyBackground(style, "frame")
 	}
 	return style.Render(content)
 }

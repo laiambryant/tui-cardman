@@ -16,10 +16,8 @@ type RuntimeConfig struct {
 
 // UIConfig holds UI-related settings
 type UIConfig struct {
-	CompactLists     bool   `json:"compact_lists"`
-	ColorScheme      string `json:"color_scheme"`
-	OpaqueBackground bool   `json:"opaque_background"`
-	BackgroundStyle  string `json:"background_style"`
+	CompactLists bool   `json:"compact_lists"`
+	ColorScheme  string `json:"color_scheme"`
 }
 
 // ColorScheme defines a color palette for the TUI
@@ -140,10 +138,8 @@ func Default() *RuntimeConfig {
 			"decrement_quantity": "delete",
 		},
 		UI: UIConfig{
-			CompactLists:     false,
-			ColorScheme:      "default",
-			OpaqueBackground: false,
-			BackgroundStyle:  "components",
+			CompactLists: false,
+			ColorScheme:  "default",
 		},
 	}
 }
@@ -182,9 +178,6 @@ func initializeKeybindings(cfg *RuntimeConfig, defaults *RuntimeConfig) {
 func initializeUISettings(cfg *RuntimeConfig, defaults *RuntimeConfig) {
 	if cfg.UI.ColorScheme == "" {
 		cfg.UI.ColorScheme = defaults.UI.ColorScheme
-	}
-	if cfg.UI.BackgroundStyle == "" {
-		cfg.UI.BackgroundStyle = defaults.UI.BackgroundStyle
 	}
 }
 

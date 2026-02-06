@@ -44,9 +44,9 @@ func (m Model) renderMainFooter() string {
 
 func (m Model) renderTab(isActive bool, label string) string {
 	if isActive {
-		return titleStyle.Copy().Padding(0, 2).Render("[ " + label + " ]")
+		return titleStyle.Padding(0, 2).Render("[ " + label + " ]")
 	}
-	return blurredStyle.Copy().Padding(0, 2).Render("  " + label + "  ")
+	return blurredStyle.Padding(0, 2).Render("  " + label + "  ")
 }
 
 func (m Model) renderMainMenuTabs() string {

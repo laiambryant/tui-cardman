@@ -5,6 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/cellbuf"
 )
 
 type ModalModel struct {
@@ -126,6 +127,9 @@ func (m ModalModel) createButtonStyle(focused bool) lipgloss.Style {
 func (m ModalModel) renderModalBox() string {
 	var b strings.Builder
 	modalStyle := m.styleManager.GetModalStyle()
+	if m.styleManager != nil {
+		modalStyle = modalStyle.Foreground(m.styleManager.scheme.Foreground)
+	}
 	titleStyle := m.styleManager.GetTitleStyle().Align(lipgloss.Center)
 	messageStyle := m.styleManager.GetBlurredStyle().Align(lipgloss.Center)
 	b.WriteString(titleStyle.Render(m.title) + "\n\n")
@@ -147,63 +151,47 @@ func (m ModalModel) renderOverlay() string {
 	if m.backgroundContent == "" {
 		return ""
 	}
-	lines := strings.Split(m.backgroundContent, "\n")
-	var overlayLines []string
-	shadeStyle := m.styleManager.GetBlurredStyle()
-	for _, line := range lines {
-		plainLine := stripANSI(line)
-		shadedLine := strings.Repeat("░", len(plainLine))
-		overlayLines = append(overlayLines, shadeStyle.Render(shadedLine))
-	}
-	return strings.Join(overlayLines, "\n")
-}
-
-func (m ModalModel) getLineAt(lines []string, index int) string {
-	if index < len(lines) {
-		return lines[index]
-	}
-	return ""
-}
-
-func maxLen(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
+	return m.backgroundContent
 }
 
 func (m ModalModel) overlayContent(background, foreground string) string {
-	bgLines := strings.Split(background, "\n")
-	fgLines := strings.Split(foreground, "\n")
-	maxLines := maxLen(len(bgLines), len(fgLines))
-	var result []string
-	for i := 0; i < maxLines; i++ {
-		combinedLine := m.mergeLines(m.getLineAt(bgLines, i), m.getLineAt(fgLines, i))
-		result = append(result, combinedLine)
+	if background == "" {
+		return foreground
 	}
-	return strings.Join(result, "\n")
-}
-
-func (m ModalModel) mergeLines(bg, fg string) string {
-	if fg == "" {
-		return bg
+	if foreground == "" {
+		return background
 	}
-	bgPlain := stripANSI(bg)
-	fgPlain := stripANSI(fg)
-	if len(fgPlain) == 0 {
-		return bg
+	width := maxLineWidth(background)
+	fgWidth := maxLineWidth(foreground)
+	if fgWidth > width {
+		width = fgWidth
 	}
-	bgRunes := []rune(bgPlain)
-	fgRunes := []rune(fgPlain)
-	var result strings.Builder
-	for i := 0; i < len(bgRunes); i++ {
-		if i < len(fgRunes) && fgRunes[i] != ' ' {
-			result.WriteRune(fgRunes[i])
-		} else {
-			result.WriteRune(bgRunes[i])
+	height := lineCount(background)
+	fgHeight := lineCount(foreground)
+	if fgHeight > height {
+		height = fgHeight
+	}
+	if width == 0 || height == 0 {
+		return background
+	}
+	bgBuf := cellbuf.NewBuffer(width, height)
+	cellbuf.SetContent(bgBuf, background)
+	fgBuf := cellbuf.NewBuffer(width, height)
+	cellbuf.SetContent(fgBuf, foreground)
+	blank := cellbuf.BlankCell
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			cell := fgBuf.Cell(x, y)
+			if cell == nil || cell.Width == 0 {
+				continue
+			}
+			if cell.Equal(&blank) {
+				continue
+			}
+			bgBuf.SetCell(x, y, cell)
 		}
 	}
-	return result.String()
+	return strings.ReplaceAll(cellbuf.Render(bgBuf), "\r\n", "\n")
 }
 
 func stripANSI(s string) string {
@@ -223,6 +211,28 @@ func stripANSI(s string) string {
 		result.WriteRune(r)
 	}
 	return result.String()
+}
+
+func lineCount(s string) int {
+	if s == "" {
+		return 0
+	}
+	return strings.Count(s, "\n") + 1
+}
+
+func maxLineWidth(s string) int {
+	if s == "" {
+		return 0
+	}
+	lines := strings.Split(s, "\n")
+	maxWidth := 0
+	for _, line := range lines {
+		width := lipgloss.Width(line)
+		if width > maxWidth {
+			maxWidth = width
+		}
+	}
+	return maxWidth
 }
 
 func (m ModalModel) IsVisible() bool {
