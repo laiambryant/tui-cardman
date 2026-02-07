@@ -154,6 +154,14 @@ func (m ImportModel) renderSetsListPanel(width int) string {
 		Padding(1, 2).
 		MaxWidth(width)
 
+	// Apply background and foreground if they're set
+	if m.styleManager.scheme.Background != "" {
+		panelStyle = panelStyle.Background(m.styleManager.scheme.Background)
+	}
+	if m.styleManager.scheme.Foreground != "" {
+		panelStyle = panelStyle.Foreground(m.styleManager.scheme.Foreground)
+	}
+
 	return panelStyle.Render(b.String())
 }
 func (m ImportModel) renderEmptySetsList() string {
@@ -194,6 +202,14 @@ func (m ImportModel) renderActionsPanelContent(width int) string {
 		BorderForeground(m.styleManager.scheme.Blurred).
 		Padding(1, 2).
 		MaxWidth(width)
+
+	// Apply background and foreground if they're set
+	if m.styleManager.scheme.Background != "" {
+		panelStyle = panelStyle.Background(m.styleManager.scheme.Background)
+	}
+	if m.styleManager.scheme.Foreground != "" {
+		panelStyle = panelStyle.Foreground(m.styleManager.scheme.Foreground)
+	}
 
 	return panelStyle.Render(b.String())
 }
@@ -295,12 +311,22 @@ func (m ImportModel) createProgressPanelStyle(contentWidth int) lipgloss.Style {
 	if contentWidth > 0 {
 		panelWidth = min(60, contentWidth)
 	}
-	return lipgloss.NewStyle().
+	style := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(m.styleManager.scheme.Focused).
 		Padding(2, 4).
 		Width(panelWidth).
 		Align(lipgloss.Center)
+
+	// Apply background and foreground if they're set
+	if m.styleManager.scheme.Background != "" {
+		style = style.Background(m.styleManager.scheme.Background)
+	}
+	if m.styleManager.scheme.Foreground != "" {
+		style = style.Foreground(m.styleManager.scheme.Foreground)
+	}
+
+	return style
 }
 func (m ImportModel) renderProgressContent() string {
 	var content strings.Builder

@@ -1,4 +1,4 @@
-.PHONY: help build build-fast clean clean-all test test-coverage test-bench fmt vet lint lint-install tidy migrate serve serve-ssh import-full import-updates list-sets install deps all check run
+.PHONY: help build build-fast clean clean-all test test-coverage test-bench fmt fmt-check vet lint lint-fix lint-install gofumpt-install tidy migrate serve serve-ssh import-full import-updates list-sets install deps all check run
 
 BINARY_NAME=cardman
 BUILD_DIR=.
@@ -30,10 +30,13 @@ help:
 	@echo "  make test           - Run all tests"
 	@echo "  make test-coverage  - Run tests with coverage report"
 	@echo "  make test-bench     - Run all benchmarks"
-	@echo "  make fmt            - Format code"
+	@echo "  make fmt            - Format code with gofumpt"
+	@echo "  make fmt-check      - Check code formatting without modifying"
 	@echo "  make vet            - Run go vet"
 	@echo "  make lint           - Run linter (golangci-lint)"
+	@echo "  make lint-fix       - Run linter with auto-fix"
 	@echo "  make lint-install   - Install golangci-lint"
+	@echo "  make gofumpt-install - Install gofumpt formatter"
 	@echo "  make tidy           - Tidy dependencies"
 	@echo "  make check          - Run fmt, vet, and test"
 	@echo "  make all            - Build, test, and check everything"
@@ -84,16 +87,25 @@ test-bench:
 	go test -bench=. ./...
 
 fmt:
-	go fmt ./...
+	@command -v gofumpt >/dev/null 2>&1 && gofumpt -l -w . || go fmt ./...
+
+fmt-check:
+	@command -v gofumpt >/dev/null 2>&1 && (gofumpt -l . | grep . && echo "Files need formatting" && exit 1 || echo "All files formatted") || echo "gofumpt not installed, skipping"
 
 vet:
 	go vet ./...
 
 lint:
-	@command -v golangci-lint >/dev/null 2>&1 && golangci-lint run || echo golangci-lint not found, skipping
+	@command -v golangci-lint >/dev/null 2>&1 && golangci-lint run || echo "golangci-lint not found, skipping"
+
+lint-fix:
+	@command -v golangci-lint >/dev/null 2>&1 && golangci-lint run --fix || echo "golangci-lint not found, skipping"
 
 lint-install:
 	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+
+gofumpt-install:
+	go install mvdan.cc/gofumpt@latest
 
 tidy:
 	go mod tidy

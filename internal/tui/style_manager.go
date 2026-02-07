@@ -140,18 +140,25 @@ func (sm *StyleManager) GetTableStyles() table.Styles {
 	selectedForeground, selectedBackground := sm.getTableSelectionColors()
 	s.Selected = s.Selected.
 		Foreground(selectedForeground).
-		Background(selectedBackground).
 		Bold(false)
+	// Only apply background if explicitly set in the color scheme
+	if sm.scheme.TableSelectedBackground != "" {
+		s.Selected = s.Selected.Background(selectedBackground)
+	}
 	return s
 }
 
 // GetSettingsSelectedStyle returns the style for selected settings items
 func (sm *StyleManager) GetSettingsSelectedStyle() lipgloss.Style {
 	selectedForeground, selectedBackground := sm.getTableSelectionColors()
-	return lipgloss.NewStyle().
+	style := lipgloss.NewStyle().
 		Foreground(selectedForeground).
-		Background(selectedBackground).
 		Bold(false)
+	// Only apply background if explicitly set in the color scheme
+	if sm.scheme.TableSelectedBackground != "" {
+		style = style.Background(selectedBackground)
+	}
+	return style
 }
 
 func (sm *StyleManager) resolveColor(preferred, fallback1, fallback2 lipgloss.Color) lipgloss.Color {

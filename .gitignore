@@ -36,8 +36,15 @@ cardman.db
 
 #logfiles
 output.log
-.github/*
+debug.log
+
+# GitHub Actions (removed - we want to track workflows)
 cardman
+
+# Goreleaser build artifacts
+dist/
+
+# Development plans
 AGENTS.md
 *PLAN.md
 

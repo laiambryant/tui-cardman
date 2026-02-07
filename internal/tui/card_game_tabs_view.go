@@ -3,8 +3,6 @@ package tui
 import (
 	"context"
 	"fmt"
-	"strings"
-
 	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -13,6 +11,8 @@ import (
 	"github.com/laiambryant/tui-cardman/internal/model"
 	"github.com/laiambryant/tui-cardman/internal/runtimecfg"
 	"github.com/laiambryant/tui-cardman/internal/services/usercollection"
+	"maps"
+	"strings"
 )
 
 // Tab represents different tabs in the card game view
@@ -616,9 +616,7 @@ func (m CardGameTabsModel) performSaveCollection() (CardGameTabsModel, tea.Cmd) 
 	if err != nil {
 		return m, nil
 	}
-	for cardID, newQty := range updates {
-		m.dbQuantities[cardID] = newQty
-	}
+	maps.Copy(m.dbQuantities, updates)
 	m.tempQuantityChanges = make(map[int64]int)
 	m.updateCardTable()
 

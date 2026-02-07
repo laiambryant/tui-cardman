@@ -1,11 +1,10 @@
 package tui
 
 import (
-	"strings"
-
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/cellbuf"
+	"strings"
 )
 
 type ModalModel struct {
@@ -127,9 +126,6 @@ func (m ModalModel) createButtonStyle(focused bool) lipgloss.Style {
 func (m ModalModel) renderModalBox() string {
 	var b strings.Builder
 	modalStyle := m.styleManager.GetModalStyle()
-	if m.styleManager != nil {
-		modalStyle = modalStyle.Foreground(m.styleManager.scheme.Foreground)
-	}
 	titleStyle := m.styleManager.GetTitleStyle().Align(lipgloss.Center)
 	messageStyle := m.styleManager.GetBlurredStyle().Align(lipgloss.Center)
 	b.WriteString(titleStyle.Render(m.title) + "\n\n")

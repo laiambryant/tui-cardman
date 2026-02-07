@@ -79,10 +79,23 @@ func calculateFrameLayout(headerLines, footerLines, width, height int) FrameLayo
 func renderFrameSection(content string, width, height int, styleManager *StyleManager) string {
 	contentWidth := max(width-frameBorderSize-framePaddingX*2, 0)
 	contentHeight := max(height-frameBorderSize-framePaddingY*2, 0)
-	style := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Padding(framePaddingY, framePaddingX).Width(contentWidth).Height(contentHeight)
+
+	style := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		Padding(framePaddingY, framePaddingX).
+		Width(contentWidth).
+		Height(contentHeight)
+
 	if styleManager != nil {
 		style = style.BorderForeground(styleManager.scheme.Blurred)
+		if styleManager.scheme.Background != "" {
+			style = style.Background(styleManager.scheme.Background)
+		}
+		if styleManager.scheme.Foreground != "" {
+			style = style.Foreground(styleManager.scheme.Foreground)
+		}
 	}
+
 	return style.Render(content)
 }
 

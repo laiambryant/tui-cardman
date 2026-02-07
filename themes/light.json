@@ -1,9 +1,11 @@
 {
   "name": "Light",
-  "focused": "4",
-  "blurred": "7",
-  "error": "1",
-  "title": "2",
-  "background": "15",
-  "foreground": "0"
+  "focused": "27",
+  "blurred": "242",
+  "error": "160",
+  "title": "25",
+  "background": "231",
+  "foreground": "235",
+  "table_selected_foreground": "27",
+  "table_selected_background": "0"
 }

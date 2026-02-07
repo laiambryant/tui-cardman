@@ -1,9 +1,11 @@
 {
   "name": "Dark",
-  "focused": "15",
-  "blurred": "8",
-  "error": "1",
-  "title": "12",
+  "focused": "99",
+  "blurred": "241",
+  "error": "196",
+  "title": "141",
   "background": "0",
-  "foreground": "15"
+  "foreground": "252",
+  "table_selected_foreground": "99",
+  "table_selected_background": "0"
 }

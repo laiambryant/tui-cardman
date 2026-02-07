@@ -5,5 +5,7 @@
   "error": "9",
   "title": "170",
   "background": "",
-  "foreground": ""
+  "foreground": "",
+  "table_selected_foreground": "205",
+  "table_selected_background": "0"
 }
