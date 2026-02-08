@@ -52,6 +52,9 @@ func NewCardGameTabsModel(selectedGame *model.CardGame, cfg *runtimecfg.Manager,
 	searchInput.Placeholder = "Search cards..."
 	searchInput.Width = 30
 
+	// Apply theme colors to search input
+	styleManager.ApplyTextInputStyles(&searchInput)
+
 	// Initialize table with Collection Tab columns (default tab)
 	columns := []table.Column{
 		{Title: "Name", Width: 25},
@@ -109,9 +112,9 @@ func buildCollectionRows(collections []model.UserCollection) []table.Row {
 }
 func (m CardGameTabsModel) renderEmptySearchMessage(searchValue string, messageWhenEmpty string, messageNoMatch string) string {
 	if searchValue == "" {
-		return blurredStyle.Render(messageWhenEmpty) + "\n"
+		return m.styleManager.GetBlurredStyle().Render(messageWhenEmpty) + "\n"
 	}
-	return blurredStyle.Render(messageNoMatch) + "\n"
+	return m.styleManager.GetBlurredStyle().Render(messageNoMatch) + "\n"
 }
 
 func (m CardGameTabsModel) Update(msg tea.Msg) (CardGameTabsModel, tea.Cmd) {
@@ -247,18 +250,20 @@ func (m CardGameTabsModel) View() string {
 func (m CardGameTabsModel) renderCardGameTabsHeader() string {
 	var b strings.Builder
 	if m.selectedGame != nil {
-		b.WriteString(titleStyle.Render(m.selectedGame.Name+" Collection Manager") + "\n")
+		b.WriteString(m.styleManager.GetTitleStyle().Render(m.selectedGame.Name+" Collection Manager") + "\n")
 	}
 	tabs := []string{"Collection", "Card Search", "My Collection"}
 	var tabStyles []string
 	for i, tab := range tabs {
 		if Tab(i) == m.currentTab {
-			tabStyles = append(tabStyles, titleStyle.Render("[ "+tab+" ]"))
+			tabStyles = append(tabStyles, m.styleManager.GetTitleStyle().Inline(true).Render("[ "+tab+" ]"))
 		} else {
-			tabStyles = append(tabStyles, blurredStyle.Render("  "+tab+"  "))
+			tabStyles = append(tabStyles, m.styleManager.GetBlurredStyle().Inline(true).Render("  "+tab+"  "))
 		}
 	}
-	b.WriteString(strings.Join(tabStyles, " "))
+	// Join tabs with styled space separator
+	separator := m.styleManager.GetNoStyle().Render(" ")
+	b.WriteString(strings.Join(tabStyles, separator))
 	return b.String()
 }
 
@@ -275,7 +280,7 @@ func (m CardGameTabsModel) renderCardGameTabsBody(availableHeight int) string {
 }
 
 func (m CardGameTabsModel) renderCardGameTabsFooter() string {
-	return helpStyle.Render(m.buildHelpText())
+	return m.styleManager.GetHelpStyle().Render(m.buildHelpText())
 }
 func (m CardGameTabsModel) buildHelpText() string {
 	if m.currentTab == TabCardSearch {
@@ -340,21 +345,21 @@ func (m CardGameTabsModel) getCollectionColumns() []table.Column {
 // renderCollectionTab now uses a table instead of a list
 func (m CardGameTabsModel) renderCollectionTab(availableHeight int) string {
 	var b strings.Builder
-	b.WriteString(titleStyle.Render("Your Collection Summary") + "\n")
+	b.WriteString(m.styleManager.GetTitleStyle().Render("Your Collection Summary") + "\n")
 	if len(m.filteredCollection) == 0 {
-		b.WriteString(blurredStyle.Render("No cards in your collection yet.") + "\n")
-		b.WriteString(blurredStyle.Render("Use Card Search to discover cards to add!"))
+		b.WriteString(m.styleManager.GetBlurredStyle().Render("No cards in your collection yet.") + "\n")
+		b.WriteString(m.styleManager.GetBlurredStyle().Render("Use Card Search to discover cards to add!"))
 		return b.String()
 	}
 	totalCards := 0
 	for _, collection := range m.filteredCollection {
 		totalCards += collection.Quantity
 	}
-	b.WriteString(blurredStyle.Render("Total unique cards: ") +
-		titleStyle.Render(fmt.Sprintf("%d", len(m.filteredCollection))) + "\n")
-	b.WriteString(blurredStyle.Render("Total cards: ") +
-		titleStyle.Render(fmt.Sprintf("%d", totalCards)) + "\n")
-	b.WriteString(titleStyle.Render("Recent additions:") + "\n")
+	b.WriteString(m.styleManager.GetBlurredStyle().Render("Total unique cards: ") +
+		m.styleManager.GetTitleStyle().Render(fmt.Sprintf("%d", len(m.filteredCollection))) + "\n")
+	b.WriteString(m.styleManager.GetBlurredStyle().Render("Total cards: ") +
+		m.styleManager.GetTitleStyle().Render(fmt.Sprintf("%d", totalCards)) + "\n")
+	b.WriteString(m.styleManager.GetTitleStyle().Render("Recent additions:") + "\n")
 	tableHeight := 10
 	if availableHeight > 0 {
 		tableHeight = availableHeight - 4
@@ -370,8 +375,8 @@ func (m CardGameTabsModel) renderCollectionTab(availableHeight int) string {
 
 func (m CardGameTabsModel) renderCardSearchTab(availableHeight int) string {
 	var b strings.Builder
-	b.WriteString(titleStyle.Render("Search All Cards") + "\n")
-	b.WriteString(blurredStyle.Render("Search: ") + m.searchInput.View() + "\n")
+	b.WriteString(m.styleManager.GetTitleStyle().Render("Search All Cards") + "\n")
+	b.WriteString(m.styleManager.GetBlurredStyle().Render("Search: ") + m.searchInput.View() + "\n")
 	showAll := m.searchInput.Value() == ""
 	var rows []table.Row
 	var any bool
@@ -392,17 +397,17 @@ func (m CardGameTabsModel) renderCardSearchTab(availableHeight int) string {
 	}
 	if !any {
 		if showAll {
-			b.WriteString(blurredStyle.Render("No cards available.") + "\n")
+			b.WriteString(m.styleManager.GetBlurredStyle().Render("No cards available.") + "\n")
 		} else {
 			if m.searchInput.Value() == "" {
-				b.WriteString(blurredStyle.Render("Type to search for cards...") + "\n")
+				b.WriteString(m.styleManager.GetBlurredStyle().Render("Type to search for cards...") + "\n")
 			} else {
-				b.WriteString(blurredStyle.Render("No cards match your search.") + "\n")
+				b.WriteString(m.styleManager.GetBlurredStyle().Render("No cards match your search.") + "\n")
 			}
 		}
 		return b.String()
 	}
-	b.WriteString(titleStyle.Render("Found cards:") + "\n")
+	b.WriteString(m.styleManager.GetTitleStyle().Render("Found cards:") + "\n")
 	tableHeight := 10
 	if availableHeight > 0 {
 		tableHeight = availableHeight - 3
@@ -418,12 +423,12 @@ func (m CardGameTabsModel) renderCardSearchTab(availableHeight int) string {
 
 func (m CardGameTabsModel) renderUserSearchTab(availableHeight int) string {
 	var b strings.Builder
-	b.WriteString(titleStyle.Render("Search Your Collection") + "\n")
-	b.WriteString(blurredStyle.Render("Search: ") + m.searchInput.View() + "\n")
+	b.WriteString(m.styleManager.GetTitleStyle().Render("Search Your Collection") + "\n")
+	b.WriteString(m.styleManager.GetBlurredStyle().Render("Search: ") + m.searchInput.View() + "\n")
 	if len(m.filteredCollection) == 0 {
 		b.WriteString(m.renderEmptySearchMessage(m.searchInput.Value(), "Type to search your collection...", "No cards in your collection match your search."))
 	} else {
-		b.WriteString(titleStyle.Render("Your matching cards:") + "\n")
+		b.WriteString(m.styleManager.GetTitleStyle().Render("Your matching cards:") + "\n")
 		tableHeight := 10
 		if availableHeight > 0 {
 			tableHeight = availableHeight - 3

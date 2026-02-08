@@ -2,6 +2,7 @@ package tui
 
 import (
 	"github.com/charmbracelet/bubbles/table"
+	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/laiambryant/tui-cardman/internal/runtimecfg"
 )
@@ -54,11 +55,23 @@ func (sm *StyleManager) initializeStyles() {
 	sm.titleStyle = sm.createForegroundStyle(sm.scheme.Title).Bold(true)
 	sm.errorStyle = sm.createForegroundStyle(sm.scheme.Error)
 	sm.helpStyle = sm.blurredStyle
-	sm.noStyle = lipgloss.NewStyle()
+	// Create noStyle with theme background/foreground if set, and inline
+	sm.noStyle = lipgloss.NewStyle().Inline(true)
+	if sm.scheme.Background != "" {
+		sm.noStyle = sm.noStyle.Background(sm.scheme.Background)
+	}
+	if sm.scheme.Foreground != "" {
+		sm.noStyle = sm.noStyle.Foreground(sm.scheme.Foreground)
+	}
 }
 
 func (sm *StyleManager) createForegroundStyle(color lipgloss.Color) lipgloss.Style {
-	return lipgloss.NewStyle().Foreground(color)
+	style := lipgloss.NewStyle().Foreground(color).Inline(true)
+	// Apply theme background if explicitly set
+	if sm.scheme.Background != "" {
+		style = style.Background(sm.scheme.Background)
+	}
+	return style
 }
 
 // GetFocusedStyle returns the style for focused elements
@@ -93,7 +106,12 @@ func (sm *StyleManager) GetNoStyle() lipgloss.Style {
 
 // GetDisabledStyle returns the style for disabled elements
 func (sm *StyleManager) GetDisabledStyle() lipgloss.Style {
-	return lipgloss.NewStyle().Foreground(sm.scheme.Disabled).Strikethrough(true)
+	style := lipgloss.NewStyle().Foreground(sm.scheme.Disabled).Strikethrough(true).Inline(true)
+	// Apply theme background if explicitly set
+	if sm.scheme.Background != "" {
+		style = style.Background(sm.scheme.Background)
+	}
+	return style
 }
 
 // GetBoxStyle returns a styled box with optional focus
@@ -109,6 +127,13 @@ func (sm *StyleManager) GetBoxStyle(focused bool) lipgloss.Style {
 	if focused {
 		style = style.Bold(true)
 	}
+	// Apply theme background/foreground if explicitly set
+	if sm.scheme.Background != "" {
+		style = style.Background(sm.scheme.Background)
+	}
+	if sm.scheme.Foreground != "" {
+		style = style.Foreground(sm.scheme.Foreground)
+	}
 	return style
 }
 
@@ -119,24 +144,53 @@ func (sm *StyleManager) createRoundedBorderStyle(color lipgloss.Color, pad bool)
 	if pad {
 		style = style.Padding(1, 2)
 	}
+	// Apply theme background to border area if explicitly set
+	if sm.scheme.Background != "" {
+		style = style.BorderBackground(sm.scheme.Background)
+	}
 	return style
 }
 
 // GetModalStyle returns a styled modal dialog
 func (sm *StyleManager) GetModalStyle() lipgloss.Style {
-	return sm.createRoundedBorderStyle(sm.scheme.Title, true).
+	style := sm.createRoundedBorderStyle(sm.scheme.Title, true).
 		Width(50)
+	// Apply theme background/foreground if explicitly set
+	if sm.scheme.Background != "" {
+		style = style.Background(sm.scheme.Background)
+	}
+	if sm.scheme.Foreground != "" {
+		style = style.Foreground(sm.scheme.Foreground)
+	}
+	return style
 }
 
 // GetTableStyles returns styled table configuration
 func (sm *StyleManager) GetTableStyles() table.Styles {
 	s := table.DefaultStyles()
+
+	// Apply theme background and foreground to header
 	s.Header = s.Header.
 		BorderStyle(lipgloss.NormalBorder()).
 		BorderForeground(sm.scheme.Blurred).
 		BorderBottom(true).
 		Bold(true).
 		Align(lipgloss.Center)
+	if sm.scheme.Background != "" {
+		s.Header = s.Header.Background(sm.scheme.Background).BorderBackground(sm.scheme.Background)
+	}
+	if sm.scheme.Foreground != "" {
+		s.Header = s.Header.Foreground(sm.scheme.Foreground)
+	}
+
+	// Apply theme background and foreground to cells
+	if sm.scheme.Background != "" {
+		s.Cell = s.Cell.Background(sm.scheme.Background)
+	}
+	if sm.scheme.Foreground != "" {
+		s.Cell = s.Cell.Foreground(sm.scheme.Foreground)
+	}
+
 	selectedForeground, selectedBackground := sm.getTableSelectionColors()
 	s.Selected = s.Selected.
 		Foreground(selectedForeground).
@@ -179,14 +233,27 @@ func (sm *StyleManager) getTableSelectionColors() (lipgloss.Color, lipgloss.Colo
 
 // GetTableBaseStyle returns the style for the table container
 func (sm *StyleManager) GetTableBaseStyle() lipgloss.Style {
-	return lipgloss.NewStyle().
+	style := lipgloss.NewStyle().
 		BorderStyle(lipgloss.NormalBorder()).
 		BorderForeground(sm.scheme.Blurred)
+	// Apply theme background to border area
+	if sm.scheme.Background != "" {
+		style = style.BorderBackground(sm.scheme.Background)
+	}
+	return style
 }
 
 // GetPanelStyle returns a styled panel
 func (sm *StyleManager) GetPanelStyle() lipgloss.Style {
-	return sm.createRoundedBorderStyle(sm.scheme.Blurred, true)
+	style := sm.createRoundedBorderStyle(sm.scheme.Blurred, true)
+	// Apply theme background/foreground if explicitly set
+	if sm.scheme.Background != "" {
+		style = style.Background(sm.scheme.Background)
+	}
+	if sm.scheme.Foreground != "" {
+		style = style.Foreground(sm.scheme.Foreground)
+	}
+	return style
 }
 
 // GetTabStyle returns a styled tab
@@ -235,4 +302,23 @@ func (sm *StyleManager) UpdateTheme(scheme runtimecfg.ColorScheme) {
 	helpStyle = sm.GetHelpStyle()
 	errorStyle = sm.GetErrorStyle()
 	titleStyle = sm.GetTitleStyle()
+}
+
+// ApplyTextInputStyles configures a textinput with theme-aware colors
+func (sm *StyleManager) ApplyTextInputStyles(ti *textinput.Model) {
+	// Set text and cursor colors
+	if sm.scheme.Foreground != "" {
+		ti.TextStyle = lipgloss.NewStyle().Foreground(sm.scheme.Foreground)
+	}
+	if sm.scheme.Focused != "" {
+		ti.Cursor.Style = lipgloss.NewStyle().Foreground(sm.scheme.Focused)
+	}
+	// Set placeholder color
+	if sm.scheme.Blurred != "" {
+		ti.PlaceholderStyle = lipgloss.NewStyle().Foreground(sm.scheme.Blurred)
+	}
+	// Prompt color
+	if sm.scheme.Focused != "" {
+		ti.PromptStyle = lipgloss.NewStyle().Foreground(sm.scheme.Focused)
+	}
 }

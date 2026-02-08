@@ -43,10 +43,13 @@ func (m Model) renderMainFooter() string {
 }
 
 func (m Model) renderTab(isActive bool, label string) string {
+	// Use inline styles to avoid creating boxes
 	if isActive {
-		return titleStyle.Padding(0, 2).Render("[ " + label + " ]")
+		// Render active tab inline without boxing
+		return m.styleManager.GetTitleStyle().Inline(true).Render("  [ " + label + " ]  ")
 	}
-	return blurredStyle.Padding(0, 2).Render("  " + label + "  ")
+	// Render inactive tab inline without boxing
+	return m.styleManager.GetBlurredStyle().Inline(true).Render("    " + label + "    ")
 }
 
 func (m Model) renderMainMenuTabs() string {

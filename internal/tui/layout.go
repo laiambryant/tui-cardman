@@ -89,7 +89,7 @@ func renderFrameSection(content string, width, height int, styleManager *StyleMa
 	if styleManager != nil {
 		style = style.BorderForeground(styleManager.scheme.Blurred)
 		if styleManager.scheme.Background != "" {
-			style = style.Background(styleManager.scheme.Background)
+			style = style.Background(styleManager.scheme.Background).BorderBackground(styleManager.scheme.Background)
 		}
 		if styleManager.scheme.Foreground != "" {
 			style = style.Foreground(styleManager.scheme.Foreground)

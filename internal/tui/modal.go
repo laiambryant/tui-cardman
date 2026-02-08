@@ -120,6 +120,10 @@ func (m ModalModel) createButtonStyle(focused bool) lipgloss.Style {
 			BorderForeground(m.styleManager.scheme.Blurred).
 			Padding(0, 2)
 	}
+	// Apply theme background if explicitly set
+	if m.styleManager.scheme.Background != "" {
+		style = style.Background(m.styleManager.scheme.Background)
+	}
 	return style
 }
 
@@ -135,11 +139,12 @@ func (m ModalModel) renderModalBox() string {
 }
 
 func (m ModalModel) renderButtons() string {
-	noStyle := m.createButtonStyle(m.selected == 0)
+	noButtonStyle := m.createButtonStyle(m.selected == 0)
 	yesStyle := m.createButtonStyle(m.selected == 1)
-	noButton := noStyle.Render("No")
+	noButton := noButtonStyle.Render("No")
 	yesButton := yesStyle.Render("Yes")
-	buttons := lipgloss.JoinHorizontal(lipgloss.Center, noButton, "  ", yesButton)
+	separator := m.styleManager.GetNoStyle().Render("  ")
+	buttons := lipgloss.JoinHorizontal(lipgloss.Center, noButton, separator, yesButton)
 	return lipgloss.NewStyle().Align(lipgloss.Center).Render(buttons)
 }
 

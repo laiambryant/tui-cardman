@@ -302,7 +302,9 @@ func (m SettingsModel) renderSettingsHeader() string {
 			renderedTabs = append(renderedTabs, m.styleManager.GetBlurredStyle().Render("  "+tab+"  "))
 		}
 	}
-	b.WriteString(strings.Join(renderedTabs, " "))
+	// Join tabs with styled space separator
+	separator := m.styleManager.GetNoStyle().Render(" ")
+	b.WriteString(strings.Join(renderedTabs, separator))
 	return b.String()
 }
 
@@ -347,8 +349,12 @@ func (m SettingsModel) renderKeybindingsSection(maxLines int) string {
 		return b.String()
 	}
 	cfg := m.tempConfig
-	b.WriteString(m.styleManager.GetTitleStyle().Render("Action") + strings.Repeat(" ", 25) + m.styleManager.GetTitleStyle().Render("Key") + "\n")
-	b.WriteString(strings.Repeat("─", 50) + "\n")
+	// Render header with styled spacing
+	headerSpace := m.styleManager.GetNoStyle().Render(strings.Repeat(" ", 25))
+	b.WriteString(m.styleManager.GetTitleStyle().Render("Action") + headerSpace + m.styleManager.GetTitleStyle().Render("Key") + "\n")
+	// Render separator with styled background
+	separator := m.styleManager.GetNoStyle().Render(strings.Repeat("─", 50))
+	b.WriteString(separator + "\n")
 	visibleStart := 0
 	visibleEnd := len(m.actions)
 	maxVisible := 15
@@ -385,7 +391,8 @@ func (m SettingsModel) renderKeybindingsSection(maxLines int) string {
 		if i == m.cursor {
 			b.WriteString(m.styleManager.GetSettingsSelectedStyle().Render("> "+actionDisplay+" "+keyDisplay) + "\n")
 		} else {
-			b.WriteString(m.styleManager.GetBlurredStyle().Render("  "+actionDisplay) + " " + m.styleManager.GetNoStyle().Render(keyDisplay) + "\n")
+			separator := m.styleManager.GetNoStyle().Render(" ")
+			b.WriteString(m.styleManager.GetBlurredStyle().Render("  "+actionDisplay) + separator + m.styleManager.GetNoStyle().Render(keyDisplay) + "\n")
 		}
 	}
 	if len(m.actions) > maxVisible {

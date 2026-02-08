@@ -103,7 +103,7 @@ func (m ImportModel) renderImportBody() string {
 	mainContent := lipgloss.JoinHorizontal(
 		lipgloss.Top,
 		leftPanel,
-		" ",
+		noStyle.Render(" "),
 		rightPanel,
 	)
 	b.WriteString(mainContent)
@@ -350,7 +350,9 @@ func (m ImportModel) renderProgressBar() string {
 	total := m.importProgress.totalSets
 	percentage := calculateProgressPercentage(completed, total)
 	bar := createProgressBar(completed, total, 40)
-	b.WriteString(fmt.Sprintf("[%s] %d%%\n\n", bar, percentage))
+	// Render progress bar with styled background
+	progressLine := noStyle.Render(fmt.Sprintf("[%s] %d%%", bar, percentage))
+	b.WriteString(progressLine + "\n\n")
 	b.WriteString(renderStyledLine(blurredStyle, "Sets: %d / %d completed", completed, total))
 	if m.importProgress.cardsImported > 0 {
 		b.WriteString(renderStyledLine(blurredStyle, "Total cards: %d", m.importProgress.cardsImported))
