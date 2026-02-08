@@ -236,9 +236,9 @@ func (sm *StyleManager) GetTableBaseStyle() lipgloss.Style {
 	style := lipgloss.NewStyle().
 		BorderStyle(lipgloss.NormalBorder()).
 		BorderForeground(sm.scheme.Blurred)
-	// Apply theme background to border area
+	// Apply theme background to both content and border area
 	if sm.scheme.Background != "" {
-		style = style.BorderBackground(sm.scheme.Background)
+		style = style.Background(sm.scheme.Background).BorderBackground(sm.scheme.Background)
 	}
 	return style
 }

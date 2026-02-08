@@ -376,7 +376,7 @@ func (m CardGameTabsModel) renderCollectionTab(availableHeight int) string {
 func (m CardGameTabsModel) renderCardSearchTab(availableHeight int) string {
 	var b strings.Builder
 	b.WriteString(m.styleManager.GetTitleStyle().Render("Search All Cards") + "\n")
-	b.WriteString(m.styleManager.GetBlurredStyle().Render("Search: ") + m.searchInput.View() + "\n")
+	b.WriteString(m.styleManager.GetBlurredStyle().Render("Search: ") + m.styleManager.GetNoStyle().Render(m.searchInput.View()) + "\n")
 	showAll := m.searchInput.Value() == ""
 	var rows []table.Row
 	var any bool
@@ -424,7 +424,7 @@ func (m CardGameTabsModel) renderCardSearchTab(availableHeight int) string {
 func (m CardGameTabsModel) renderUserSearchTab(availableHeight int) string {
 	var b strings.Builder
 	b.WriteString(m.styleManager.GetTitleStyle().Render("Search Your Collection") + "\n")
-	b.WriteString(m.styleManager.GetBlurredStyle().Render("Search: ") + m.searchInput.View() + "\n")
+	b.WriteString(m.styleManager.GetBlurredStyle().Render("Search: ") + m.styleManager.GetNoStyle().Render(m.searchInput.View()) + "\n")
 	if len(m.filteredCollection) == 0 {
 		b.WriteString(m.renderEmptySearchMessage(m.searchInput.Value(), "Type to search your collection...", "No cards in your collection match your search."))
 	} else {
