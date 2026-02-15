@@ -56,6 +56,10 @@ func (m *Model) handleLogin() (tea.Model, tea.Cmd) {
 	m.initSSHConfigManager(user.ID)
 	m.screen = ScreenMain
 	m.errorMsg = ""
+	m.initMainScreenImport()
+	if m.importModel != nil {
+		return m, m.importModel.Init()
+	}
 	return m, nil
 }
 

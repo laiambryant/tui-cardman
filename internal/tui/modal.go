@@ -108,23 +108,12 @@ func (m ModalModel) View() string {
 }
 
 func (m ModalModel) createButtonStyle(focused bool) lipgloss.Style {
-	style := m.styleManager.GetFocusedStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(m.styleManager.scheme.Focused).
-		Padding(0, 2)
 	if focused {
-		style = style.Bold(true)
-	} else {
-		style = m.styleManager.GetBlurredStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(m.styleManager.scheme.Blurred).
-			Padding(0, 2)
+		s := m.styleManager.GetFocusedStyle().Border(lipgloss.RoundedBorder()).BorderForeground(m.styleManager.scheme.Focused).Padding(0, 2).Bold(true)
+		return m.styleManager.applyBGFG(s)
 	}
-	// Apply theme background if explicitly set
-	if m.styleManager.scheme.Background != "" {
-		style = style.Background(m.styleManager.scheme.Background)
-	}
-	return style
+	s := m.styleManager.GetBlurredStyle().Border(lipgloss.RoundedBorder()).BorderForeground(m.styleManager.scheme.Blurred).Padding(0, 2)
+	return m.styleManager.applyBGFG(s)
 }
 
 func (m ModalModel) renderModalBox() string {
@@ -145,7 +134,7 @@ func (m ModalModel) renderButtons() string {
 	yesButton := yesStyle.Render("Yes")
 	separator := m.styleManager.GetNoStyle().Render("  ")
 	buttons := lipgloss.JoinHorizontal(lipgloss.Center, noButton, separator, yesButton)
-	return lipgloss.NewStyle().Align(lipgloss.Center).Render(buttons)
+	return m.styleManager.applyBGFG(lipgloss.NewStyle().Align(lipgloss.Center)).Render(buttons)
 }
 
 func (m ModalModel) renderOverlay() string {

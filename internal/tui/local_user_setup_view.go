@@ -125,9 +125,17 @@ func (m *Model) handleLocalUserSetup() (tea.Model, tea.Cmd) {
 	if err != nil {
 		m.errorMsg = fmt.Sprintf("Profile created but failed to add sample collection cards: %v", err)
 		m.screen = ScreenMain
+		m.initMainScreenImport()
+		if m.importModel != nil {
+			return m, m.importModel.Init()
+		}
 		return m, nil
 	}
 	m.screen = ScreenMain
 	m.errorMsg = ""
+	m.initMainScreenImport()
+	if m.importModel != nil {
+		return m, m.importModel.Init()
+	}
 	return m, nil
 }

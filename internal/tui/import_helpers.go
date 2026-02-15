@@ -65,6 +65,45 @@ func splitImportPanelWidths(contentWidth int) (int, int) {
 	return left, right
 }
 
+func (m ImportModel) renderImportPanel(width, height int, isFocused bool) string {
+	var b strings.Builder
+
+	b.WriteString(titleStyle.Render("Import") + "\n")
+
+	if m.isLoading {
+		b.WriteString(focusedStyle.Render(m.loadingMsg))
+	} else if len(m.filteredSets) == 0 {
+		b.WriteString(blurredStyle.Render("No sets loaded") + "\n")
+	} else {
+		// Single-column layout: sets list then actions
+		itemsPerPage := 8
+		b.WriteString(m.renderSetsListContent(itemsPerPage))
+		b.WriteString("\n")
+		b.WriteString(titleStyle.Render("Actions") + "\n")
+		b.WriteString(m.renderActionsList())
+	}
+
+	if m.statusMsg != "" {
+		b.WriteString("\n" + focusedStyle.Render(m.statusMsg))
+	}
+
+	borderColor := m.styleManager.scheme.Blurred
+	if isFocused {
+		borderColor = m.styleManager.scheme.Focused
+	}
+
+	innerWidth := width - 6
+	if innerWidth < 1 {
+		innerWidth = 1
+	}
+	innerHeight := height - 4
+	if innerHeight < 1 {
+		innerHeight = 1
+	}
+	panel := m.styleManager.Box(borderColor, innerWidth, innerHeight, 0, 2, 1).Render(b.String())
+	return panel
+}
+
 func (m ImportModel) renderImportView() string {
 	if m.width == 0 || m.height == 0 {
 		return "Initializing..."
@@ -148,21 +187,8 @@ func (m ImportModel) renderSetsListPanel(width int) string {
 		b.WriteString(m.renderSetsListContent(itemsPerPage))
 	}
 
-	panelStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(m.styleManager.scheme.Blurred).
-		Padding(1, 2).
-		MaxWidth(width)
-
-	// Apply background and foreground if they're set
-	if m.styleManager.scheme.Background != "" {
-		panelStyle = panelStyle.Background(m.styleManager.scheme.Background)
-	}
-	if m.styleManager.scheme.Foreground != "" {
-		panelStyle = panelStyle.Foreground(m.styleManager.scheme.Foreground)
-	}
-
-	return panelStyle.Render(b.String())
+	panel := m.styleManager.Box(m.styleManager.scheme.Blurred, 0, 0, width, 2, 1).Render(b.String())
+	return panel
 }
 func (m ImportModel) renderEmptySetsList() string {
 	if m.isLoading {
@@ -197,21 +223,8 @@ func (m ImportModel) renderActionsPanelContent(width int) string {
 	}
 	b.WriteString(m.renderActionsList())
 
-	panelStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(m.styleManager.scheme.Blurred).
-		Padding(1, 2).
-		MaxWidth(width)
-
-	// Apply background and foreground if they're set
-	if m.styleManager.scheme.Background != "" {
-		panelStyle = panelStyle.Background(m.styleManager.scheme.Background)
-	}
-	if m.styleManager.scheme.Foreground != "" {
-		panelStyle = panelStyle.Foreground(m.styleManager.scheme.Foreground)
-	}
-
-	return panelStyle.Render(b.String())
+	panel := m.styleManager.Box(m.styleManager.scheme.Blurred, 0, 0, width, 2, 1).Render(b.String())
+	return panel
 }
 func (m ImportModel) renderSelectedSetInfo() string {
 	var b strings.Builder
@@ -311,21 +324,7 @@ func (m ImportModel) createProgressPanelStyle(contentWidth int) lipgloss.Style {
 	if contentWidth > 0 {
 		panelWidth = min(60, contentWidth)
 	}
-	style := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(m.styleManager.scheme.Focused).
-		Padding(2, 4).
-		Width(panelWidth).
-		Align(lipgloss.Center)
-
-	// Apply background and foreground if they're set
-	if m.styleManager.scheme.Background != "" {
-		style = style.Background(m.styleManager.scheme.Background)
-	}
-	if m.styleManager.scheme.Foreground != "" {
-		style = style.Foreground(m.styleManager.scheme.Foreground)
-	}
-
+	style := m.styleManager.Box(m.styleManager.scheme.Focused, panelWidth, 0, 0, 4, 2).Align(lipgloss.Center)
 	return style
 }
 func (m ImportModel) renderProgressContent() string {

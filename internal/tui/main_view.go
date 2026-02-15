@@ -11,26 +11,15 @@ func (m Model) mainView() string {
 	header := m.renderMainHeader()
 	footer := m.renderMainFooter()
 	layout := calculateFrameLayout(lipgloss.Height(header), lipgloss.Height(footer), m.width, m.height)
-	body := m.renderMainBody()
+	body := m.renderSplitMainBody(layout.ContentWidth, layout.BodyContentHeight)
 	return renderFramedViewWithLayout(header, body, footer, layout, m.styleManager)
 }
 
 func (m Model) renderMainHeader() string {
-	var b strings.Builder
 	if m.user != nil {
-		b.WriteString(titleStyle.Render(fmt.Sprintf("CardMan - Welcome, %s %s!", m.user.Name, m.user.Surname)) + "\n")
-	} else {
-		b.WriteString(titleStyle.Render("CardMan - Card Management TUI") + "\n")
+		return titleStyle.Render(fmt.Sprintf("CardMan - Welcome, %s %s!", m.user.Name, m.user.Surname))
 	}
-	b.WriteString(m.renderMainMenuTabs())
-	return b.String()
-}
-
-func (m Model) renderMainBody() string {
-	if m.mainMenuTab == 0 {
-		return m.renderCardGamesTab()
-	}
-	return m.renderImportTab()
+	return titleStyle.Render("CardMan - Card Management TUI")
 }
 
 func (m Model) renderMainFooter() string {
@@ -42,49 +31,57 @@ func (m Model) renderMainFooter() string {
 	return b.String()
 }
 
-func (m Model) renderTab(isActive bool, label string) string {
-	// Use inline styles to avoid creating boxes
-	if isActive {
-		// Render active tab inline without boxing
-		return m.styleManager.GetTitleStyle().Inline(true).Render("  [ " + label + " ]  ")
+func (m Model) renderSplitMainBody(contentWidth, contentHeight int) string {
+	if contentWidth <= 0 || contentHeight <= 0 {
+		return ""
 	}
-	// Render inactive tab inline without boxing
-	return m.styleManager.GetBlurredStyle().Inline(true).Render("    " + label + "    ")
+	leftWidth := contentWidth * 40 / 100
+	rightWidth := contentWidth - leftWidth
+
+	leftPanel := m.renderCardGamesPanel(leftWidth, contentHeight)
+	rightPanel := m.renderImportPanelMain(rightWidth, contentHeight)
+
+	return lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, rightPanel)
 }
 
-func (m Model) renderMainMenuTabs() string {
-	tabs := []string{
-		m.renderTab(m.mainMenuTab == 0, "Card Games"),
-		m.renderTab(m.mainMenuTab == 1, "Import"),
-	}
-	return lipgloss.JoinHorizontal(lipgloss.Top, tabs...)
-}
-
-func (m Model) renderCardGameBox(index int, name string) string {
-	if m.cursor == index {
-		return m.styleManager.GetBoxStyle(true).Render(name)
-	}
-	return m.styleManager.GetBoxStyle(false).Render(name)
-}
-
-func (m Model) renderCardGamesTab() string {
+func (m Model) renderCardGamesPanel(width, height int) string {
 	var b strings.Builder
-	b.WriteString(titleStyle.Render("Select a card game:") + "\n")
+	b.WriteString(titleStyle.Render("Card Games") + "\n")
 	if len(m.cardGames) == 0 {
-		b.WriteString(errorStyle.Render("No card games found. Please run migrations.") + "\n")
+		b.WriteString(errorStyle.Render("No card games found.") + "\n")
 	} else {
 		for i, game := range m.cardGames {
-			b.WriteString(m.renderCardGameBox(i, game.Name) + "\n")
+			prefix := getCursorPrefix(m.cursor == i)
+			line := fmt.Sprintf("%s%s", prefix, game.Name)
+			if m.cursor == i && m.mainFocusPanel == 0 {
+				b.WriteString(titleStyle.Render(line) + "\n")
+			} else {
+				b.WriteString(blurredStyle.Render(line) + "\n")
+			}
 		}
 	}
-	return strings.TrimRight(b.String(), "\n")
+
+	borderColor := m.styleManager.scheme.Blurred
+	if m.mainFocusPanel == 0 {
+		borderColor = m.styleManager.scheme.Focused
+	}
+
+	innerWidth := width - 6
+	if innerWidth < 1 {
+		innerWidth = 1
+	}
+	innerHeight := height - 4
+	if innerHeight < 1 {
+		innerHeight = 1
+	}
+	return m.styleManager.Box(borderColor, innerWidth, innerHeight, 0, 2, 1).Render(b.String())
 }
 
-func (m Model) renderImportTab() string {
-	var b strings.Builder
-	b.WriteString(titleStyle.Render("Switch to Import tab to manage card sets") + "\n")
-	b.WriteString(m.styleManager.GetPanelStyle().Render("Press Enter to open Import Manager") + "\n")
-	return strings.TrimRight(b.String(), "\n")
+func (m Model) renderImportPanelMain(width, height int) string {
+	if m.importModel == nil {
+		return ""
+	}
+	return m.importModel.renderImportPanel(width, height, m.mainFocusPanel == 1)
 }
 
 func (m Model) renderMainMenuHelp() string {
@@ -93,11 +90,6 @@ func (m Model) renderMainMenuHelp() string {
 	navDown := ResolveKeyBinding(m.configManager, "nav_down", "↓")
 	selectKey := ResolveKeyBinding(m.configManager, "select", "Enter")
 	quitKey := ResolveKeyBinding(m.configManager, "quit", "Ctrl+C")
-	tabKey := ResolveKeyBinding(m.configManager, "nav_next_tab", "Tab")
-	if m.mainMenuTab == 0 {
-		help := fmt.Sprintf("%s: Settings • %s/%s: Navigate • %s: Select • %s: Switch Tab • %s: Quit", settingsKey, navUp, navDown, selectKey, tabKey, quitKey)
-		return helpStyle.Render(help)
-	}
-	help := fmt.Sprintf("%s: Settings • %s: Open Import • %s: Switch Tab • %s: Quit", settingsKey, selectKey, tabKey, quitKey)
+	help := fmt.Sprintf("%s: Settings • Left/Right: Switch Panel • %s/%s: Navigate • %s: Select • %s: Quit", settingsKey, navUp, navDown, selectKey, quitKey)
 	return helpStyle.Render(help)
 }

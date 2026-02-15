@@ -80,23 +80,16 @@ func renderFrameSection(content string, width, height int, styleManager *StyleMa
 	contentWidth := max(width-frameBorderSize-framePaddingX*2, 0)
 	contentHeight := max(height-frameBorderSize-framePaddingY*2, 0)
 
-	style := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		Padding(framePaddingY, framePaddingX).
-		Width(contentWidth).
-		Height(contentHeight)
-
-	if styleManager != nil {
-		style = style.BorderForeground(styleManager.scheme.Blurred)
-		if styleManager.scheme.Background != "" {
-			style = style.Background(styleManager.scheme.Background).BorderBackground(styleManager.scheme.Background)
-		}
-		if styleManager.scheme.Foreground != "" {
-			style = style.Foreground(styleManager.scheme.Foreground)
-		}
-	}
-
+	style := mstyle(styleManager).Box(styleManager.scheme.Blurred, contentWidth, contentHeight, 0, framePaddingX, framePaddingY)
 	return style.Render(content)
+}
+
+// helper to safely access styleManager in layout functions
+func mstyle(sm *StyleManager) *StyleManager {
+	if sm == nil {
+		return defaultStyleManager
+	}
+	return sm
 }
 
 func limitLines(s string, maxLines int) string {

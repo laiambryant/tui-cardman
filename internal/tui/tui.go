@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -27,7 +28,10 @@ const (
 	ScreenLocalUserSetup
 	ScreenSettings
 	ScreenImport
+	ScreenSplash
 )
+
+type splashDoneMsg struct{}
 
 // Model is the main application model
 type Model struct {
@@ -49,8 +53,9 @@ type Model struct {
 	cursor            int
 	cardGameTabs      CardGameTabsModel
 	settingsModel     *SettingsModel
-	mainMenuTab       int
+	mainFocusPanel    int
 	importModel       *ImportModel
+	postSplashScreen  Screen
 	width             int
 	height            int
 }
@@ -82,11 +87,10 @@ func NewModel(db *sql.DB, isSSHMode bool) (*Model, error) {
 		inputs:            make([]textinput.Model, 2),
 		cardGames:         cardGames,
 		cursor:            0,
-		mainMenuTab:       0,
 	}
 	configManager.Subscribe(m.onConfigChange)
 	if isSSHMode {
-		m.screen = ScreenLogin
+		m.postSplashScreen = ScreenLogin
 		m.initLoginInputs()
 	} else {
 		hasUsers, err := userService.HasUsers()
@@ -94,7 +98,7 @@ func NewModel(db *sql.DB, isSSHMode bool) (*Model, error) {
 			return nil, &FailedToCheckForExistingUsersError{Err: err}
 		}
 		if !hasUsers {
-			m.screen = ScreenLocalUserSetup
+			m.postSplashScreen = ScreenLocalUserSetup
 			m.initLocalUserSetupInputs()
 		} else {
 			firstUser, err := userService.GetFirstUser()
@@ -106,9 +110,11 @@ func NewModel(db *sql.DB, isSSHMode bool) (*Model, error) {
 			if err != nil {
 				fmt.Printf("Warning: failed to update last login: %v\n", err)
 			}
-			m.screen = ScreenMain
+			m.postSplashScreen = ScreenMain
+			m.initMainScreenImport()
 		}
 	}
+	m.screen = ScreenSplash
 	return m, nil
 }
 
@@ -188,14 +194,6 @@ func (m *Model) handleInputScreenNavigation(action, s string) tea.Cmd {
 	return m.updateInputFocus(cmds)
 }
 
-func (m *Model) cycleMainMenuTab(forward bool) {
-	if forward {
-		m.mainMenuTab = (m.mainMenuTab + 1) % 2
-	} else {
-		m.mainMenuTab = (m.mainMenuTab - 1 + 2) % 2
-	}
-}
-
 func (m *Model) handleMainScreenCursor(action, s string) {
 	if action == "nav_up" || s == "up" {
 		if m.cursor > 0 {
@@ -205,10 +203,6 @@ func (m *Model) handleMainScreenCursor(action, s string) {
 		if m.cursor < len(m.cardGames)-1 {
 			m.cursor++
 		}
-	} else if action == "nav_left" || s == "left" {
-		m.cycleMainMenuTab(false)
-	} else if action == "nav_right" || s == "right" {
-		m.cycleMainMenuTab(true)
 	}
 }
 
@@ -260,17 +254,14 @@ func (m *Model) selectCardGame() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m *Model) selectImport() (tea.Model, tea.Cmd) {
+func (m *Model) initMainScreenImport() {
 	importModel, err := m.createImportModel()
 	if err != nil {
 		slog.Error("failed to create import model", "error", err)
-		m.errorMsg = fmt.Sprintf("Failed to load import screen: %v", err)
-		return m, nil
+		m.errorMsg = fmt.Sprintf("Failed to load import panel: %v", err)
+		return
 	}
 	m.importModel = &importModel
-	m.screen = ScreenImport
-	m.errorMsg = ""
-	return m, m.importModel.Init()
 }
 
 func (m *Model) handleSettingsKey(action string) (tea.Model, tea.Cmd) {
@@ -297,11 +288,22 @@ func (m *Model) handleQuitKey(action, s string) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) Init() tea.Cmd {
-	return textinput.Blink
+	return tea.Batch(
+		textinput.Blink,
+		tea.Tick(2500*time.Millisecond, func(t time.Time) tea.Msg {
+			return splashDoneMsg{}
+		}),
+	)
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case splashDoneMsg:
+		m.screen = m.postSplashScreen
+		if m.screen == ScreenMain && m.importModel != nil {
+			return m, m.importModel.Init()
+		}
+		return m, nil
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
@@ -312,6 +314,27 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		slog.Debug("tui key pressed", "key", s, "action", action, "screen", m.screen)
 		if newModel, cmd := m.handleSettingsKey(action); cmd != nil {
 			return newModel, cmd
+		}
+		// When import panel is focused on main screen, intercept keys
+		if m.screen == ScreenMain && m.mainFocusPanel == 1 && m.importModel != nil {
+			// Left arrow switches back to card games panel
+			if action == "nav_left" || s == "left" {
+				m.mainFocusPanel = 0
+				return m, nil
+			}
+			// Back key switches to card games panel instead of quitting
+			if isBackKey(action, s) {
+				m.mainFocusPanel = 0
+				return m, nil
+			}
+			// Quit key still quits
+			if isQuitKey(action, s) {
+				return m, tea.Quit
+			}
+			// Forward all other keys to import model
+			var cmd tea.Cmd
+			*m.importModel, cmd = m.importModel.Update(msg)
+			return m, cmd
 		}
 		if newModel, cmd := m.handleQuitKey(action, s); cmd != nil {
 			return newModel, cmd
@@ -341,15 +364,15 @@ func (m Model) handleNavigationKeys(action, s string) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleMainScreenNavigation(action, s string) (tea.Model, tea.Cmd) {
-	if action == "nav_next_tab" || (s == "tab" && m.mainMenuTab == 1) {
-		m.cycleMainMenuTab(true)
+	if action == "nav_right" || s == "right" {
+		m.mainFocusPanel = 1
 		return m, nil
 	}
-	if action == "nav_prev_tab" || s == "shift+tab" {
-		m.cycleMainMenuTab(false)
+	if action == "nav_left" || s == "left" {
+		m.mainFocusPanel = 0
 		return m, nil
 	}
-	if m.mainMenuTab == 0 {
+	if m.mainFocusPanel == 0 {
 		m.handleMainScreenCursor(action, s)
 	}
 	return m, nil
@@ -370,11 +393,8 @@ func (m Model) handleSelectKeys() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleMainScreenSelect() (tea.Model, tea.Cmd) {
-	switch m.mainMenuTab {
-	case 0:
+	if m.mainFocusPanel == 0 {
 		return m.selectCardGame()
-	case 1:
-		return m.selectImport()
 	}
 	return m, nil
 }
@@ -389,6 +409,12 @@ func (m Model) handleScreenUpdates(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateCardGameTabs(msg)
 	case ScreenImport:
 		return m.updateImport(msg)
+	case ScreenMain:
+		if m.importModel != nil {
+			var cmd tea.Cmd
+			*m.importModel, cmd = m.importModel.Update(msg)
+			return m, cmd
+		}
 	}
 	return m, nil
 }
@@ -441,6 +467,8 @@ func (m *Model) updateInputs(msg tea.Msg) tea.Cmd {
 
 func (m Model) View() string {
 	switch m.screen {
+	case ScreenSplash:
+		return m.splashView()
 	case ScreenLogin:
 		return m.loginView()
 	case ScreenRegister:
