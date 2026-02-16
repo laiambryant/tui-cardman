@@ -3,6 +3,10 @@ package tui
 import (
 	"context"
 	"fmt"
+	"maps"
+	"sort"
+	"strings"
+
 	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -11,8 +15,6 @@ import (
 	"github.com/laiambryant/tui-cardman/internal/model"
 	"github.com/laiambryant/tui-cardman/internal/runtimecfg"
 	"github.com/laiambryant/tui-cardman/internal/services/usercollection"
-	"maps"
-	"strings"
 )
 
 // Tab represents different tabs in the card game view
@@ -24,7 +26,13 @@ const (
 	TabUserSearch
 )
 
-// CardGameTabsModel represents the state for the card game tabs view
+type setCompletionData struct {
+	SetID   int64
+	SetName string
+	Owned   int
+	Total   int
+	Percent float64
+}
 type CardGameTabsModel struct {
 	selectedGame        *model.CardGame
 	currentTab          Tab
@@ -44,6 +52,13 @@ type CardGameTabsModel struct {
 	collectionService   usercollection.UserCollectionService
 	user                *auth.User
 	modal               ModalModel
+	setCompletionTable  table.Model
+	setCompletions      []setCompletionData
+	spotlightSetID      int64
+	collectionTabFocus  int
+	spotlightScroll     int
+	collectionValue     float64
+	rarityBreakdown     string
 }
 
 // NewCardGameTabsModel creates a new card game tabs model
@@ -78,6 +93,90 @@ func NewCardGameTabsModel(selectedGame *model.CardGame, cfg *runtimecfg.Manager,
 	}
 }
 
+func (m *CardGameTabsModel) computeCollectionStats() {
+	rarityCounts := make(map[string]int)
+	for _, uc := range m.userCollections {
+		if uc.Card != nil {
+			rarityCounts[uc.Card.Rarity] += uc.Quantity
+		}
+	}
+	var parts []string
+	for r, count := range rarityCounts {
+		label := r
+		if len(label) > 2 {
+			label = label[:1]
+		}
+		parts = append(parts, fmt.Sprintf("%s:%d", label, count))
+	}
+	if len(parts) > 0 {
+		m.rarityBreakdown = strings.Join(parts, " ")
+	} else {
+		m.rarityBreakdown = "N/A"
+	}
+	setMap := make(map[int64]*struct {
+		id           int64
+		name         string
+		printedTotal int
+	})
+	for i := range m.cards {
+		if m.cards[i].Set != nil && m.cards[i].Set.ID > 0 {
+			if _, ok := setMap[m.cards[i].Set.ID]; !ok {
+				setMap[m.cards[i].Set.ID] = &struct {
+					id           int64
+					name         string
+					printedTotal int
+				}{m.cards[i].Set.ID, m.cards[i].Set.Name, m.cards[i].Set.PrintedTotal}
+			}
+		}
+	}
+	ownedPerSet := make(map[int64]int)
+	for _, uc := range m.userCollections {
+		if uc.Card != nil && uc.Card.Set != nil {
+			ownedPerSet[uc.Card.Set.ID]++
+		}
+	}
+	m.setCompletions = nil
+	for setID, owned := range ownedPerSet {
+		if si, ok := setMap[setID]; ok {
+			total := si.printedTotal
+			if total == 0 {
+				total = owned
+			}
+			pct := 0.0
+			if total > 0 {
+				pct = float64(owned) / float64(total) * 100
+			}
+			m.setCompletions = append(m.setCompletions, setCompletionData{
+				SetID:   setID,
+				SetName: si.name,
+				Owned:   owned,
+				Total:   total,
+				Percent: pct,
+			})
+		}
+	}
+	sort.Slice(m.setCompletions, func(i, j int) bool {
+		return m.setCompletions[i].SetName < m.setCompletions[j].SetName
+	})
+	m.setCompletionTable = NewStyledTable([]table.Column{
+		{Title: "Set", Width: 20},
+		{Title: "Cards", Width: 10},
+		{Title: "Progress", Width: 20},
+	}, 5, true, m.styleManager)
+	var rows []table.Row
+	for _, sc := range m.setCompletions {
+		rows = append(rows, table.Row{
+			Truncate(sc.SetName, 20),
+			fmt.Sprintf("%d/%d", sc.Owned, sc.Total),
+			RenderProgressBar(sc.Percent, 16, m.styleManager),
+		})
+	}
+	m.setCompletionTable.SetRows(rows)
+	if len(m.setCompletions) > 0 {
+		m.spotlightSetID = m.setCompletions[0].SetID
+		m.spotlightScroll = 0
+	}
+}
 func (m CardGameTabsModel) Init() tea.Cmd {
 	return textinput.Blink
 }
@@ -173,16 +272,42 @@ func (m CardGameTabsModel) Update(msg tea.Msg) (CardGameTabsModel, tea.Cmd) {
 			return m, nil
 		}
 
-		// Up / down navigation (keep vim keys as fallbacks)
+		if s == "tab" && m.currentTab == TabCollection {
+			m.collectionTabFocus = (m.collectionTabFocus + 1) % 2
+			if m.collectionTabFocus == 0 {
+				m.setCompletionTable.Focus()
+			} else {
+				m.setCompletionTable.Blur()
+			}
+			return m, nil
+		}
 		if action == "nav_up" || s == "k" || s == "up" {
-			if m.currentTab == TabCardSearch || m.currentTab == TabUserSearch || m.currentTab == TabCollection {
+			if m.currentTab == TabCollection {
+				if m.collectionTabFocus == 0 {
+					m.setCompletionTable, _ = m.setCompletionTable.Update(msg)
+					m.updateSpotlightFromSetTable()
+				} else if m.spotlightScroll > 0 {
+					m.spotlightScroll--
+				}
+				return m, nil
+			}
+			if m.currentTab == TabCardSearch || m.currentTab == TabUserSearch {
 				m.cardTable, _ = m.cardTable.Update(msg)
 				return m, nil
 			}
 			return m, nil
 		}
 		if action == "nav_down" || s == "j" || s == "down" {
-			if m.currentTab == TabCardSearch || m.currentTab == TabUserSearch || m.currentTab == TabCollection {
+			if m.currentTab == TabCollection {
+				if m.collectionTabFocus == 0 {
+					m.setCompletionTable, _ = m.setCompletionTable.Update(msg)
+					m.updateSpotlightFromSetTable()
+				} else {
+					m.spotlightScroll++
+				}
+				return m, nil
+			}
+			if m.currentTab == TabCardSearch || m.currentTab == TabUserSearch {
 				m.cardTable, _ = m.cardTable.Update(msg)
 				return m, nil
 			}
@@ -286,6 +411,14 @@ func (m CardGameTabsModel) buildHelpText() string {
 	if m.currentTab == TabCardSearch {
 		return m.buildCardSearchHelpText()
 	}
+	if m.currentTab == TabCollection {
+		navUp := ResolveKeyBinding(m.configManager, "nav_up", "↑")
+		navDown := ResolveKeyBinding(m.configManager, "nav_down", "↓")
+		nextTab := ResolveKeyBinding(m.configManager, "nav_next_tab", "Tab")
+		prevTab := ResolveKeyBinding(m.configManager, "nav_prev_tab", "Shift+Tab")
+		backKey := ResolveKeyBinding(m.configManager, "back", "Q")
+		return fmt.Sprintf("Tab: Switch panel • %s/%s: Navigate • %s/%s: Switch tabs • %s: Back", navUp, navDown, prevTab, nextTab, backKey)
+	}
 	return m.buildDefaultHelpText()
 }
 func (m CardGameTabsModel) buildCardSearchHelpText() string {
@@ -318,8 +451,8 @@ func (m CardGameTabsModel) updateTableForTab() CardGameTabsModel {
 		m.configureTableColumns(m.getCollectionColumns())
 		m.cardTable.SetRows(buildCollectionRows(m.filteredCollection))
 	case TabCollection:
-		m.configureTableColumns(m.getCollectionColumns())
-		m.cardTable.SetRows(buildCollectionRows(m.filteredCollection))
+		m.setCompletionTable.Focus()
+		m.collectionTabFocus = 0
 	}
 	m.cardTable.SetCursor(0)
 	return m
@@ -342,35 +475,129 @@ func (m CardGameTabsModel) getCollectionColumns() []table.Column {
 	}
 }
 
-// renderCollectionTab now uses a table instead of a list
 func (m CardGameTabsModel) renderCollectionTab(availableHeight int) string {
-	var b strings.Builder
-	b.WriteString(m.styleManager.GetTitleStyle().Render("Your Collection Summary") + "\n")
-	if len(m.filteredCollection) == 0 {
-		b.WriteString(m.styleManager.GetBlurredStyle().Render("No cards in your collection yet.") + "\n")
-		b.WriteString(m.styleManager.GetBlurredStyle().Render("Use Card Search to discover cards to add!"))
+	if len(m.userCollections) == 0 {
+		var b strings.Builder
+		b.WriteString(m.styleManager.GetTitleStyle().Render("Your Collection Summary") + "\n")
+		b.WriteString(m.styleManager.GetBlurredStyle().Render("No cards in your collection yet."))
 		return b.String()
 	}
+	contentWidth := m.width - frameBorderSize - framePaddingX*2
+	if contentWidth < 20 {
+		contentWidth = 20
+	}
+	leftWidth := contentWidth / 2
+	rightWidth := contentWidth - leftWidth
 	totalCards := 0
-	for _, collection := range m.filteredCollection {
-		totalCards += collection.Quantity
+	for _, u := range m.userCollections {
+		totalCards += u.Quantity
 	}
-	b.WriteString(m.styleManager.GetBlurredStyle().Render("Total unique cards: ") +
-		m.styleManager.GetTitleStyle().Render(fmt.Sprintf("%d", len(m.filteredCollection))) + "\n")
-	b.WriteString(m.styleManager.GetBlurredStyle().Render("Total cards: ") +
-		m.styleManager.GetTitleStyle().Render(fmt.Sprintf("%d", totalCards)) + "\n")
-	b.WriteString(m.styleManager.GetTitleStyle().Render("Recent additions:") + "\n")
-	tableHeight := 10
-	if availableHeight > 0 {
-		tableHeight = availableHeight - 4
+	topLeft := fmt.Sprintf("Total unique: %d  Total: %d\nRarity: %s\nValue: ", len(m.userCollections), totalCards, m.rarityBreakdown)
+	if m.collectionValue > 0 {
+		topLeft += fmt.Sprintf("$%.2f", m.collectionValue)
+	} else {
+		topLeft += "N/A"
 	}
-	if tableHeight < 3 {
-		tableHeight = 3
+	topLeftPanel := m.renderPanel(m.styleManager.GetTitleStyle().Render("Your Collection Summary\n")+topLeft, leftWidth, 4, false)
+	bottomLeftHeight := availableHeight - 6
+	if bottomLeftHeight < 3 {
+		bottomLeftHeight = 3
 	}
-	m.cardTable.SetRows(buildCollectionRows(m.filteredCollection))
-	m.cardTable.SetHeight(tableHeight)
-	b.WriteString(m.styleManager.GetTableBaseStyle().Render(m.cardTable.View()))
-	return b.String()
+	m.setCompletionTable.SetHeight(bottomLeftHeight - 1)
+	bottomLeft := m.setCompletionTable.View()
+	if len(m.setCompletions) == 0 {
+		bottomLeft = m.styleManager.GetBlurredStyle().Render("No sets found.")
+	}
+	bottomLeftPanel := m.renderPanel(bottomLeft, leftWidth, bottomLeftHeight, m.collectionTabFocus == 0)
+	leftColumn := lipgloss.JoinVertical(lipgloss.Left, topLeftPanel, bottomLeftPanel)
+	spotlightHeight := availableHeight - 2
+	if spotlightHeight < 3 {
+		spotlightHeight = 3
+	}
+	var selected *setCompletionData
+	for i := range m.setCompletions {
+		if m.setCompletions[i].SetID == m.spotlightSetID {
+			selected = &m.setCompletions[i]
+			break
+		}
+	}
+	spotContent := m.styleManager.GetBlurredStyle().Render("No set selected.")
+	if selected != nil {
+		ownedCards := make(map[int64]bool)
+		for _, uc := range m.userCollections {
+			if uc.Card != nil && uc.Card.Set != nil && uc.Card.Set.ID == m.spotlightSetID {
+				ownedCards[uc.Card.ID] = true
+			}
+		}
+		var spotCards []struct {
+			name  string
+			owned bool
+		}
+		for i := range m.cards {
+			if m.cards[i].Set != nil && m.cards[i].Set.ID == m.spotlightSetID {
+				spotCards = append(spotCards, struct {
+					name  string
+					owned bool
+				}{m.cards[i].Name, ownedCards[m.cards[i].ID]})
+			}
+		}
+		visibleLines := spotlightHeight - 3
+		if visibleLines < 1 {
+			visibleLines = 1
+		}
+		start := m.spotlightScroll
+		if start > len(spotCards)-visibleLines {
+			start = len(spotCards) - visibleLines
+		}
+		if start < 0 {
+			start = 0
+		}
+		end := start + visibleLines
+		if end > len(spotCards) {
+			end = len(spotCards)
+		}
+		var sb strings.Builder
+		sb.WriteString(m.styleManager.GetTitleStyle().Render(selected.SetName) + "\n")
+		sb.WriteString(m.styleManager.GetBlurredStyle().Render(fmt.Sprintf("%d/%d (%.0f%%)", selected.Owned, selected.Total, selected.Percent)) + "\n")
+		for _, sc := range spotCards[start:end] {
+			if sc.owned {
+				sb.WriteString(m.styleManager.GetFocusedStyle().Render("✓ " + sc.name + "\n"))
+			} else {
+				sb.WriteString(m.styleManager.GetBlurredStyle().Render("✗ " + sc.name + "\n"))
+			}
+		}
+		spotContent = sb.String()
+	}
+	rightPanel := m.renderPanel(spotContent, rightWidth, spotlightHeight, m.collectionTabFocus == 1)
+	return lipgloss.JoinHorizontal(lipgloss.Top, leftColumn, rightPanel)
+}
+func (m CardGameTabsModel) renderPanel(content string, width, height int, focused bool) string {
+	borderColor := m.styleManager.scheme.Blurred
+	if focused {
+		borderColor = m.styleManager.scheme.Focused
+	}
+	contentWidth := width - 4
+	if contentWidth < 1 {
+		contentWidth = 1
+	}
+	if height < 1 {
+		height = 1
+	}
+	style := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(borderColor).Padding(0, 1).Width(contentWidth).Height(height)
+	if m.styleManager.scheme.Background != "" {
+		style = style.Background(m.styleManager.scheme.Background).BorderBackground(m.styleManager.scheme.Background)
+	}
+	if m.styleManager.scheme.Foreground != "" {
+		style = style.Foreground(m.styleManager.scheme.Foreground)
+	}
+	return style.Render(content)
+}
+func (m *CardGameTabsModel) updateSpotlightFromSetTable() {
+	idx := m.setCompletionTable.Cursor()
+	if idx >= 0 && idx < len(m.setCompletions) {
+		m.spotlightSetID = m.setCompletions[idx].SetID
+		m.spotlightScroll = 0
+	}
 }
 
 func (m CardGameTabsModel) renderCardSearchTab(availableHeight int) string {
@@ -630,8 +857,8 @@ func (m CardGameTabsModel) performSaveCollection() (CardGameTabsModel, tea.Cmd) 
 		if err == nil {
 			m.userCollections = collections
 			m.filteredCollection = m.filterUserCollection(m.searchInput.Value())
+			m.computeCollectionStats()
 		}
 	}
-
 	return m, nil
 }

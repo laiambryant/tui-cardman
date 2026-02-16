@@ -20,6 +20,7 @@ type UserCollectionService interface {
 	DecrementQuantity(ctx context.Context, userID, cardID int64) error
 	UpsertCollectionBatch(ctx context.Context, userID int64, updates map[int64]int) error
 	GetAllQuantitiesForGame(userID, gameID int64) (map[int64]int, error)
+	GetCollectionValue(userID, gameID int64) (float64, error)
 }
 
 // UserCollectionServiceImpl implements the UserCollectionService interface
@@ -84,8 +85,15 @@ const (
 	`
 
 	deleteCollectionQuery = `
-		DELETE FROM user_collections 
+		DELETE FROM user_collections
 		WHERE user_id = ? AND card_id = ?
+	`
+	selectCollectionValueQuery = `
+		SELECT COALESCE(SUM(p.market * uc.quantity), 0)
+		FROM user_collections uc
+		JOIN prices_tcgplayer p ON p.card_id = uc.card_id
+		JOIN cards c ON uc.card_id = c.id
+		WHERE uc.user_id = ? AND c.card_game_id = ?
 	`
 )
 
@@ -304,7 +312,15 @@ func (s *UserCollectionServiceImpl) DecrementQuantity(ctx context.Context, userI
 	return nil
 }
 
-// UpsertCollectionBatch updates multiple card quantities in a single transaction
+func (s *UserCollectionServiceImpl) GetCollectionValue(userID, gameID int64) (float64, error) {
+	var value float64
+	err := db.QueryRow(s.db, selectCollectionValueQuery, userID, gameID).Scan(&value)
+	if err != nil {
+		slog.Error("failed to get collection value", "user_id", userID, "game_id", gameID, "error", err)
+		return 0, err
+	}
+	return value, nil
+}
 func (s *UserCollectionServiceImpl) UpsertCollectionBatch(ctx context.Context, userID int64, updates map[int64]int) error {
 	return db.WithTransaction(ctx, s.db, func(tx *sql.Tx) error {
 		for cardID, quantity := range updates {

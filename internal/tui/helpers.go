@@ -90,6 +90,27 @@ func MatchActionOrDefault(cfg *runtimecfg.Manager, keyString string, fallback st
 	}
 	return fallback
 }
+func RenderProgressBar(percent float64, width int, sm *StyleManager) string {
+	if percent < 0 {
+		percent = 0
+	}
+	if percent > 100 {
+		percent = 100
+	}
+	if width < 5 {
+		width = 5
+	}
+	barWidth := width - 5
+	if barWidth < 1 {
+		barWidth = 1
+	}
+	filled := int(percent / 100.0 * float64(barWidth))
+	if filled > barWidth {
+		filled = barWidth
+	}
+	empty := barWidth - filled
+	return sm.GetFocusedStyle().Render(strings.Repeat("█", filled)) + sm.GetBlurredStyle().Render(strings.Repeat("░", empty)) + fmt.Sprintf(" %3.0f%%", percent)
+}
 func RenderActiveTab(label string) string {
 	return titleStyle.Copy().Padding(0, 2).Render("[ " + label + " ]")
 }

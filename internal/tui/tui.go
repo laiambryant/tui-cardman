@@ -534,6 +534,13 @@ func (m *Model) createCardGameTabsModel(selectedGame *model.CardGame) (CardGameT
 		} else {
 			cardGameTabs.dbQuantities = quantities
 		}
+		cardGameTabs.computeCollectionStats()
+		value, err := m.collectionService.GetCollectionValue(m.user.ID, selectedGame.ID)
+		if err != nil {
+			slog.Error("failed to load collection value", "user_id", m.user.ID, "game_id", selectedGame.ID, "error", err)
+		} else {
+			cardGameTabs.collectionValue = value
+		}
 	}
 	return cardGameTabs, nil
 }
