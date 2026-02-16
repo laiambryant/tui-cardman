@@ -1,0 +1,11 @@
+CREATE TABLE user_list_cards (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    list_id INTEGER NOT NULL,
+    card_id INTEGER NOT NULL,
+    quantity INTEGER NOT NULL DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (list_id) REFERENCES user_lists(id) ON DELETE CASCADE,
+    FOREIGN KEY (card_id) REFERENCES cards(id),
+    UNIQUE(list_id, card_id)
+);

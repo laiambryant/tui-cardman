@@ -53,6 +53,27 @@ type ButtonConfiguration struct {
 	User          *auth.User `json:"user,omitempty"`
 }
 
+type UserList struct {
+	ID         int64     `json:"id"`
+	UserID     int64     `json:"user_id"`
+	CardGameID int64     `json:"card_game_id"`
+	Name       string    `json:"name"`
+	Description string   `json:"description"`
+	Color      string    `json:"color"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
+}
+
+type UserListCard struct {
+	ID        int64     `json:"id"`
+	ListID    int64     `json:"list_id"`
+	CardID    int64     `json:"card_id"`
+	Quantity  int       `json:"quantity"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	Card      *Card     `json:"card,omitempty"`
+}
+
 // Set represents a set of cards
 type Set struct {
 	ID           int64     `json:"id"`

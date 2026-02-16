@@ -13,6 +13,7 @@ import (
 	"github.com/laiambryant/tui-cardman/internal/runtimecfg"
 	"github.com/laiambryant/tui-cardman/internal/services/cardgame"
 	card "github.com/laiambryant/tui-cardman/internal/services/cards"
+	listservice "github.com/laiambryant/tui-cardman/internal/services/list"
 	"github.com/laiambryant/tui-cardman/internal/services/user"
 	"github.com/laiambryant/tui-cardman/internal/services/usercollection"
 )
@@ -29,6 +30,8 @@ const (
 	ScreenSettings
 	ScreenImport
 	ScreenSplash
+	ScreenCardGameMenu
+	ScreenLists
 )
 
 type splashDoneMsg struct{}
@@ -41,6 +44,7 @@ type Model struct {
 	cardGameService   cardgame.CardGameService
 	cardService       card.CardService
 	collectionService usercollection.UserCollectionService
+	listService       listservice.ListService
 	db                *sql.DB
 	user              *auth.User
 	configManager     *runtimecfg.Manager
@@ -52,6 +56,9 @@ type Model struct {
 	cardGames         []model.CardGame
 	cursor            int
 	cardGameTabs      CardGameTabsModel
+	cardGameMenuModel *CardGameMenuModel
+	listsModel        *ListsModel
+	selectedGame      *model.CardGame
 	settingsModel     *SettingsModel
 	mainFocusPanel    int
 	importModel       *ImportModel
@@ -69,7 +76,7 @@ func NewModel(db *sql.DB, isSSHMode bool) (*Model, error) {
 	cfg := configManager.Get()
 	scheme := runtimecfg.GetColorScheme(cfg.UI.ColorScheme)
 	styleManager := NewStyleManager(scheme)
-	userService, cardGameService, cardService, collectionService, authSvc := initServices(db)
+	userService, cardGameService, cardService, collectionService, listSvc, authSvc := initServices(db)
 	cardGames, err := cardGameService.GetAllCardGames()
 	if err != nil {
 		return nil, &FailedToLoadCardGamesError{Err: err}
@@ -80,6 +87,7 @@ func NewModel(db *sql.DB, isSSHMode bool) (*Model, error) {
 		cardGameService:   cardGameService,
 		cardService:       cardService,
 		collectionService: collectionService,
+		listService:       listSvc,
 		db:                db,
 		isSSHMode:         isSSHMode,
 		configManager:     configManager,
@@ -118,13 +126,14 @@ func NewModel(db *sql.DB, isSSHMode bool) (*Model, error) {
 	return m, nil
 }
 
-func initServices(db *sql.DB) (user.UserService, cardgame.CardGameService, card.CardService, usercollection.UserCollectionService, *auth.Service) {
+func initServices(db *sql.DB) (user.UserService, cardgame.CardGameService, card.CardService, usercollection.UserCollectionService, listservice.ListService, *auth.Service) {
 	userService := user.NewUserService(db)
 	cardGameService := cardgame.NewCardGameService(db)
 	cardService := card.NewCardService(db)
 	collectionService := usercollection.NewUserCollectionService(db)
+	listSvc := listservice.NewListService(db)
 	authSvc := auth.NewService(&dbAdapter{userService: userService})
-	return userService, cardGameService, cardService, collectionService, authSvc
+	return userService, cardGameService, cardService, collectionService, listSvc, authSvc
 }
 
 func (m *Model) onConfigChange(cfg *runtimecfg.RuntimeConfig) {
@@ -234,16 +243,13 @@ func (m *Model) handleLocalUserSetupSelect() (tea.Model, tea.Cmd) {
 func (m *Model) selectCardGame() (tea.Model, tea.Cmd) {
 	if len(m.cardGames) > 0 && m.cursor < len(m.cardGames) {
 		selectedGame := &m.cardGames[m.cursor]
-		cardGameTabs, err := m.createCardGameTabsModel(selectedGame)
-		if err != nil {
-			slog.Error("failed to create card game tabs model", "error", err)
-			m.errorMsg = fmt.Sprintf("Failed to load card game: %v", err)
-			return m, nil
-		}
-		m.cardGameTabs = cardGameTabs
-		m.screen = ScreenCardGameTabs
+		m.selectedGame = selectedGame
+		m.cardGameMenuModel = NewCardGameMenuModel(selectedGame, m.styleManager, m.configManager)
+		m.cardGameMenuModel.width = m.width
+		m.cardGameMenuModel.height = m.height
+		m.screen = ScreenCardGameMenu
 		m.errorMsg = ""
-		return m, m.cardGameTabs.Init()
+		return m, nil
 	}
 	return m, nil
 }
@@ -401,6 +407,10 @@ func (m Model) handleScreenUpdates(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateSettings(msg)
 	case ScreenCardGameTabs:
 		return m.updateCardGameTabs(msg)
+	case ScreenCardGameMenu:
+		return m.updateCardGameMenu(msg)
+	case ScreenLists:
+		return m.updateLists(msg)
 	case ScreenImport:
 		return m.updateImport(msg)
 	case ScreenMain:
@@ -428,9 +438,61 @@ func (m *Model) updateCardGameTabs(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if keyMsg, ok := msg.(tea.KeyMsg); ok {
 		action := GetAction(m.configManager,keyMsg.String())
 		if isBackKey(action, keyMsg.String()) {
-			m.screen = ScreenMain
+			m.screen = ScreenCardGameMenu
 			return m, nil
 		}
+	}
+	return m, cmd
+}
+
+func (m *Model) updateCardGameMenu(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if m.cardGameMenuModel == nil {
+		return m, nil
+	}
+	var cmd tea.Cmd
+	*m.cardGameMenuModel, cmd = m.cardGameMenuModel.Update(msg)
+	if m.cardGameMenuModel.shouldGoBack {
+		m.screen = ScreenMain
+		return m, nil
+	}
+	if m.cardGameMenuModel.optionChosen {
+		m.cardGameMenuModel.optionChosen = false
+		switch m.cardGameMenuModel.selectedOption {
+		case MenuMyCollection:
+			cardGameTabs, err := m.createCardGameTabsModel(m.selectedGame)
+			if err != nil {
+				slog.Error("failed to create card game tabs model", "error", err)
+				m.errorMsg = fmt.Sprintf("Failed to load card game: %v", err)
+				return m, nil
+			}
+			m.cardGameTabs = cardGameTabs
+			m.screen = ScreenCardGameTabs
+			return m, m.cardGameTabs.Init()
+		case MenuMyLists:
+			listsModel, err := m.createListsModel(m.selectedGame)
+			if err != nil {
+				slog.Error("failed to create lists model", "error", err)
+				m.errorMsg = fmt.Sprintf("Failed to load lists: %v", err)
+				return m, nil
+			}
+			m.listsModel = listsModel
+			m.screen = ScreenLists
+			return m, m.listsModel.Init()
+		}
+	}
+	return m, cmd
+}
+
+func (m *Model) updateLists(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if m.listsModel == nil {
+		return m, nil
+	}
+	var cmd tea.Cmd
+	*m.listsModel, cmd = m.listsModel.Update(msg)
+	if m.listsModel.shouldGoBack {
+		m.listsModel.shouldGoBack = false
+		m.screen = ScreenCardGameMenu
+		return m, nil
 	}
 	return m, cmd
 }
@@ -475,6 +537,16 @@ func (m Model) View() string {
 		return m.settingsModel.View()
 	case ScreenCardGameTabs:
 		return m.cardGameTabs.View()
+	case ScreenCardGameMenu:
+		if m.cardGameMenuModel != nil {
+			return m.cardGameMenuModel.View()
+		}
+		return ""
+	case ScreenLists:
+		if m.listsModel != nil {
+			return m.listsModel.View()
+		}
+		return ""
 	case ScreenImport:
 		if m.importModel != nil {
 			return m.importModel.View()
@@ -537,6 +609,26 @@ func (m *Model) createCardGameTabsModel(selectedGame *model.CardGame) (CardGameT
 		}
 	}
 	return cardGameTabs, nil
+}
+
+func (m *Model) createListsModel(selectedGame *model.CardGame) (*ListsModel, error) {
+	cards, err := m.cardService.GetCardsByGameID(selectedGame.ID)
+	if err != nil {
+		return nil, &FailedToLoadCardsError{Err: err}
+	}
+	listsModel := NewListsModel(selectedGame, m.user, m.listService, cards, m.configManager, m.styleManager)
+	listsModel.width = m.width
+	listsModel.height = m.height
+	listsModel.modal = listsModel.modal.SetDimensions(m.width, m.height)
+	if m.user != nil {
+		lists, err := m.listService.GetListsByUserAndGame(m.user.ID, selectedGame.ID)
+		if err != nil {
+			slog.Error("failed to load lists", "error", err)
+		} else {
+			listsModel.lists = lists
+		}
+	}
+	return &listsModel, nil
 }
 
 func (m *Model) createImportModel() (ImportModel, error) {
