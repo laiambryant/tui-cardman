@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-
-	"github.com/charmbracelet/lipgloss"
 )
 
 // RuntimeConfig holds all application configuration
@@ -16,90 +14,7 @@ type RuntimeConfig struct {
 
 // UIConfig holds UI-related settings
 type UIConfig struct {
-	CompactLists bool   `json:"compact_lists"`
-	ColorScheme  string `json:"color_scheme"`
-}
-
-// ColorScheme defines a color palette for the TUI
-type ColorScheme struct {
-	Name                    string
-	Focused                 lipgloss.Color
-	Blurred                 lipgloss.Color
-	Error                   lipgloss.Color
-	Title                   lipgloss.Color
-	Background              lipgloss.Color
-	Foreground              lipgloss.Color
-	TableSelectedForeground lipgloss.Color
-	TableSelectedBackground lipgloss.Color
-	Disabled                lipgloss.Color
-}
-
-// ColorSchemes contains predefined color schemes
-var ColorSchemes = map[string]ColorScheme{
-	"default": {
-		Name:                    "Default",
-		Focused:                 lipgloss.Color("205"),
-		Blurred:                 lipgloss.Color("240"),
-		Error:                   lipgloss.Color("9"),
-		Title:                   lipgloss.Color("170"),
-		Background:              lipgloss.Color(""),
-		Foreground:              lipgloss.Color(""),
-		TableSelectedForeground: lipgloss.Color(""),
-		TableSelectedBackground: lipgloss.Color(""),
-		Disabled:                lipgloss.Color("240"),
-	},
-	"dark": {
-		Name:                    "Dark",
-		Focused:                 lipgloss.Color("15"),
-		Blurred:                 lipgloss.Color("8"),
-		Error:                   lipgloss.Color("1"),
-		Title:                   lipgloss.Color("12"),
-		Background:              lipgloss.Color("0"),
-		Foreground:              lipgloss.Color("15"),
-		TableSelectedForeground: lipgloss.Color(""),
-		TableSelectedBackground: lipgloss.Color(""),
-		Disabled:                lipgloss.Color("8"),
-	},
-	"light": {
-		Name:                    "Light",
-		Focused:                 lipgloss.Color("4"),
-		Blurred:                 lipgloss.Color("7"),
-		Error:                   lipgloss.Color("1"),
-		Title:                   lipgloss.Color("2"),
-		Background:              lipgloss.Color("15"),
-		Foreground:              lipgloss.Color("0"),
-		TableSelectedForeground: lipgloss.Color(""),
-		TableSelectedBackground: lipgloss.Color(""),
-		Disabled:                lipgloss.Color("7"),
-	},
-}
-
-// GetColorScheme returns a color scheme by name, or default if not found
-func GetColorScheme(name string) ColorScheme {
-	allSchemes := GetAllColorSchemes()
-	if scheme, exists := allSchemes[name]; exists {
-		return scheme
-	}
-	return allSchemes["default"]
-}
-
-// GetAllColorSchemes returns all color schemes (hardcoded + loaded from files)
-func GetAllColorSchemes() map[string]ColorScheme {
-	loaded, err := LoadThemesFromDirectory(GetThemesPath())
-	if err != nil {
-		return ColorSchemes
-	}
-	return MergeThemes(ColorSchemes, loaded)
-}
-
-// GetColorSchemeNames returns all available color scheme names
-func GetColorSchemeNames() []string {
-	allSchemes := GetAllColorSchemes()
-	names := make([]string, 0, len(allSchemes))
-	for name := range allSchemes {
-		names = append(names, name)
-	}
-	return names
+	CompactLists bool `json:"compact_lists"`
 }
 
 // Default returns a RuntimeConfig with sensible defaults
@@ -139,7 +54,6 @@ func Default() *RuntimeConfig {
 		},
 		UI: UIConfig{
 			CompactLists: false,
-			ColorScheme:  "default",
 		},
 	}
 }
@@ -159,7 +73,6 @@ func Load(path string) (*RuntimeConfig, error) {
 	}
 	defaults := Default()
 	initializeKeybindings(&cfg, defaults)
-	initializeUISettings(&cfg, defaults)
 	return &cfg, nil
 }
 
@@ -172,12 +85,6 @@ func initializeKeybindings(cfg *RuntimeConfig, defaults *RuntimeConfig) {
 				cfg.Keybindings[action] = key
 			}
 		}
-	}
-}
-
-func initializeUISettings(cfg *RuntimeConfig, defaults *RuntimeConfig) {
-	if cfg.UI.ColorScheme == "" {
-		cfg.UI.ColorScheme = defaults.UI.ColorScheme
 	}
 }
 

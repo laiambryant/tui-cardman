@@ -11,17 +11,6 @@ import (
 	"github.com/laiambryant/tui-cardman/internal/runtimecfg"
 )
 
-type settingsSection int
-
-const (
-	sectionKeybindings settingsSection = iota
-	sectionUI
-)
-
-const (
-	uiSettingTheme = iota
-)
-
 type saveConfirmedMsg struct{}
 type saveCancelledMsg struct{}
 
@@ -32,9 +21,7 @@ type SettingsModel struct {
 	tempConfig     *runtimecfg.RuntimeConfig
 	hasChanges     bool
 	modal          ModalModel
-	section        settingsSection
 	cursor         int
-	uiCursor       int
 	actions        []string
 	editing        bool
 	editingAction  string
@@ -63,11 +50,9 @@ func NewSettingsModel(configManager *runtimecfg.Manager, styleManager *StyleMana
 		originalConfig: cfg,
 		tempConfig:     tempConfig,
 		hasChanges:     false,
-		section:        sectionKeybindings,
 		actions:        actions,
 		input:          input,
 		cursor:         0,
-		uiCursor:       0,
 	}
 	model.modal = NewModalModel(
 		"Save Changes?",
@@ -87,7 +72,6 @@ func NewSettingsModel(configManager *runtimecfg.Manager, styleManager *StyleMana
 	model.modal = model.modal.Hide()
 	return model
 }
-
 
 func (m SettingsModel) Init() tea.Cmd {
 	return nil
@@ -164,12 +148,6 @@ func (m SettingsModel) handleNormalKey(action, s string) (SettingsModel, tea.Cmd
 	case action == "nav_down" || s == "j" || s == "down":
 		m.navigateDown()
 		return m, nil
-	case action == "nav_left" || s == "h" || s == "left":
-		m.navigateHorizontal(-1)
-		return m, nil
-	case action == "nav_right" || s == "l" || s == "right":
-		m.navigateHorizontal(1)
-		return m, nil
 	case action == "select":
 		m.handleSelectKey()
 		return m, nil
@@ -177,53 +155,17 @@ func (m SettingsModel) handleNormalKey(action, s string) (SettingsModel, tea.Cmd
 	return m, nil
 }
 
-func cyclicIndex(current, direction, length int) int {
-	if length == 0 {
-		return 0
-	}
-	return (current + direction + length) % length
-}
-
 func (m *SettingsModel) navigateUp() {
-	if m.section == sectionUI {
-		if m.uiCursor > 0 {
-			m.uiCursor--
-		}
-	} else {
-		if m.cursor > 0 {
-			m.cursor--
-		}
+	if m.cursor > 0 {
+		m.cursor--
 	}
 }
 
 func (m *SettingsModel) navigateDown() {
-	if m.section == sectionUI {
-		// Only one UI setting (theme), so cursor stays at 0
-	} else {
-		maxCursor := len(m.actions) - 1
-		if m.cursor < maxCursor {
-			m.cursor++
-		}
+	maxCursor := len(m.actions) - 1
+	if m.cursor < maxCursor {
+		m.cursor++
 	}
-}
-
-func (m *SettingsModel) navigateHorizontal(direction int) {
-	if m.section == sectionUI {
-		m.handleUISettingChange(direction)
-	} else {
-		if direction > 0 && m.section < sectionUI {
-			m.section++
-			m.resetCursors()
-		} else if direction < 0 && m.section > 0 {
-			m.section--
-			m.resetCursors()
-		}
-	}
-}
-
-func (m *SettingsModel) resetCursors() {
-	m.cursor = 0
-	m.uiCursor = 0
 }
 
 func (m *SettingsModel) stopEditing() {
@@ -233,40 +175,11 @@ func (m *SettingsModel) stopEditing() {
 }
 
 func (m *SettingsModel) handleSelectKey() {
-	if m.section == sectionKeybindings && m.cursor < len(m.actions) {
+	if m.cursor < len(m.actions) {
 		m.editing = true
 		m.editingAction = m.actions[m.cursor]
 		m.errorMsg = ""
-	} else if m.section == sectionUI {
-		m.handleUISettingChange(1)
 	}
-}
-
-func findCurrentIndex(items []string, current string) int {
-	for i, item := range items {
-		if item == current {
-			return i
-		}
-	}
-	return 0
-}
-
-func (m *SettingsModel) handleUISettingChange(direction int) {
-	switch m.uiCursor {
-	case uiSettingTheme:
-		m.cycleTheme(direction)
-	}
-}
-
-func (m *SettingsModel) cycleTheme(direction int) {
-	themes := runtimecfg.GetColorSchemeNames()
-	if len(themes) == 0 {
-		return
-	}
-	currentIndex := findCurrentIndex(themes, m.tempConfig.UI.ColorScheme)
-	newIndex := cyclicIndex(currentIndex, direction, len(themes))
-	m.tempConfig.UI.ColorScheme = themes[newIndex]
-	m.hasChanges = true
 }
 
 func (m SettingsModel) View() string {
@@ -282,7 +195,7 @@ func (m SettingsModel) renderSettingsHeader() string {
 		title += " *"
 	}
 	b.WriteString(m.styleManager.GetTitleStyle().Render(title) + "\n")
-	b.WriteString(RenderTabBar(m.styleManager, []string{"Keybindings", "UI"}, int(m.section)))
+	b.WriteString(RenderTabBar(m.styleManager, []string{"Keybindings"}, 0))
 	return b.String()
 }
 
@@ -296,12 +209,7 @@ func (m SettingsModel) renderSettingsBody(maxLines int) string {
 	if availableLines < 1 {
 		availableLines = 1
 	}
-	switch m.section {
-	case sectionKeybindings:
-		b.WriteString(m.renderKeybindingsSection(availableLines))
-	case sectionUI:
-		b.WriteString(m.renderUISection(availableLines))
-	}
+	b.WriteString(m.renderKeybindingsSection(availableLines))
 	return b.String()
 }
 
@@ -327,10 +235,8 @@ func (m SettingsModel) renderKeybindingsSection(maxLines int) string {
 		return b.String()
 	}
 	cfg := m.tempConfig
-	// Render header with styled spacing
 	headerSpace := m.styleManager.GetNoStyle().Render(strings.Repeat(" ", 25))
 	b.WriteString(m.styleManager.GetTitleStyle().Render("Action") + headerSpace + m.styleManager.GetTitleStyle().Render("Key") + "\n")
-	// Render separator with styled background
 	separator := m.styleManager.GetNoStyle().Render(strings.Repeat("─", 50))
 	b.WriteString(separator + "\n")
 	visibleStart := 0
@@ -381,7 +287,7 @@ func (m SettingsModel) renderKeybindingsSection(maxLines int) string {
 
 func (m SettingsModel) buildHelpText() string {
 	hb := NewHelpBuilder(m.configManager)
-	help := hb.Build(KeyItem{"settings", "F1", "Settings"}) + " • " + hb.Pair("nav_up", "↑", "nav_down", "↓", "Navigate") + " • " + hb.Pair("nav_left", "←", "nav_right", "→", "Switch sections") + " • " + hb.Build(
+	help := hb.Build(KeyItem{"settings", "F1", "Settings"}) + " • " + hb.Pair("nav_up", "↑", "nav_down", "↓", "Navigate") + " • " + hb.Build(
 		KeyItem{"select", "Enter", "Edit"},
 		KeyItem{"quit_alt", "Esc", "Close"},
 	)
@@ -389,30 +295,6 @@ func (m SettingsModel) buildHelpText() string {
 		help += " • Ctrl+S: Save"
 	}
 	return help
-}
-
-func (m SettingsModel) renderUILine(isCursor bool, label, value string) string {
-	prefix := "  "
-	if isCursor {
-		prefix = "→ "
-	}
-	line := prefix + label + value
-	if isCursor {
-		return m.styleManager.GetSettingsSelectedStyle().Render(line)
-	}
-	return line
-}
-
-func (m SettingsModel) renderUISection(maxLines int) string {
-	var b strings.Builder
-	cfg := m.tempConfig
-	b.WriteString(m.styleManager.GetTitleStyle().Render("UI Settings") + "\n")
-	themes := runtimecfg.GetColorSchemeNames()
-	b.WriteString(m.renderUILine(m.uiCursor == uiSettingTheme, "Theme: ", cfg.UI.ColorScheme) + "\n")
-	if maxLines >= 4 {
-		b.WriteString(m.styleManager.GetBlurredStyle().Render("Available themes: "+strings.Join(themes, ", ")) + "\n")
-	}
-	return b.String()
 }
 
 // copyConfig creates a deep copy of a RuntimeConfig

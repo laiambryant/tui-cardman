@@ -73,9 +73,7 @@ func NewModel(db *sql.DB, isSSHMode bool) (*Model, error) {
 	if err != nil {
 		return nil, &FailedToInitializeConfigManagerError{Err: err}
 	}
-	cfg := configManager.Get()
-	scheme := runtimecfg.GetColorScheme(cfg.UI.ColorScheme)
-	styleManager := NewStyleManager(scheme)
+	styleManager := NewStyleManager()
 	userService, cardGameService, cardService, collectionService, listSvc, authSvc := initServices(db)
 	cardGames, err := cardGameService.GetAllCardGames()
 	if err != nil {
@@ -96,7 +94,6 @@ func NewModel(db *sql.DB, isSSHMode bool) (*Model, error) {
 		cardGames:         cardGames,
 		cursor:            0,
 	}
-	configManager.Subscribe(m.onConfigChange)
 	if isSSHMode {
 		m.postSplashScreen = ScreenLogin
 		m.initLoginInputs()
@@ -134,11 +131,6 @@ func initServices(db *sql.DB) (user.UserService, cardgame.CardGameService, card.
 	listSvc := listservice.NewListService(db)
 	authSvc := auth.NewService(&dbAdapter{userService: userService})
 	return userService, cardGameService, cardService, collectionService, listSvc, authSvc
-}
-
-func (m *Model) onConfigChange(cfg *runtimecfg.RuntimeConfig) {
-	scheme := runtimecfg.GetColorScheme(cfg.UI.ColorScheme)
-	m.styleManager.UpdateTheme(scheme)
 }
 
 func isNavigationKey(action, s string) bool {

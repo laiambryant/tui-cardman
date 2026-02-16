@@ -23,7 +23,6 @@
     "tab_search": "3"
   },
   "ui": {
-    "compact_lists": false,
-    "color_scheme": "light"
+    "compact_lists": false
   }
 }

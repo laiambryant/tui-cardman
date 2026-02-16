@@ -4,7 +4,6 @@ import (
 	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/laiambryant/tui-cardman/internal/runtimecfg"
 )
 
 var defaultStyleManager *StyleManager
@@ -18,9 +17,32 @@ var (
 	titleStyle   lipgloss.Style
 )
 
+type colorScheme struct {
+	Focused                 lipgloss.Color
+	Blurred                 lipgloss.Color
+	Error                   lipgloss.Color
+	Title                   lipgloss.Color
+	Background              lipgloss.Color
+	Foreground              lipgloss.Color
+	TableSelectedForeground lipgloss.Color
+	TableSelectedBackground lipgloss.Color
+	Disabled                lipgloss.Color
+}
+
+var defaultScheme = colorScheme{
+	Focused:                 lipgloss.Color("205"),
+	Blurred:                 lipgloss.Color("240"),
+	Error:                   lipgloss.Color("9"),
+	Title:                   lipgloss.Color("170"),
+	Background:              lipgloss.Color(""),
+	Foreground:              lipgloss.Color(""),
+	TableSelectedForeground: lipgloss.Color(""),
+	TableSelectedBackground: lipgloss.Color(""),
+	Disabled:                lipgloss.Color("240"),
+}
+
 func init() {
-	scheme := runtimecfg.ColorSchemes["default"]
-	defaultStyleManager = NewStyleManager(scheme)
+	defaultStyleManager = NewStyleManager()
 	focusedStyle = defaultStyleManager.GetFocusedStyle()
 	blurredStyle = defaultStyleManager.GetBlurredStyle()
 	noStyle = defaultStyleManager.GetNoStyle()
@@ -29,9 +51,9 @@ func init() {
 	titleStyle = defaultStyleManager.GetTitleStyle()
 }
 
-// StyleManager centralizes all TUI styling and applies themes
+// StyleManager centralizes all TUI styling
 type StyleManager struct {
-	scheme       runtimecfg.ColorScheme
+	scheme       colorScheme
 	focusedStyle lipgloss.Style
 	blurredStyle lipgloss.Style
 	titleStyle   lipgloss.Style
@@ -40,9 +62,9 @@ type StyleManager struct {
 	noStyle      lipgloss.Style
 }
 
-// NewStyleManager creates a new style manager with the given color scheme
-func NewStyleManager(scheme runtimecfg.ColorScheme) *StyleManager {
-	sm := &StyleManager{scheme: scheme}
+// NewStyleManager creates a new style manager with the default color scheme
+func NewStyleManager() *StyleManager {
+	sm := &StyleManager{scheme: defaultScheme}
 	sm.initializeStyles()
 	return sm
 }
@@ -113,7 +135,6 @@ func (sm *StyleManager) createRoundedBorderStyle(color lipgloss.Color, pad bool)
 	if pad {
 		s = s.Padding(1, 2)
 	}
-	// do not apply background/foreground here; Box will handle global theming
 	return s
 }
 
@@ -210,18 +231,6 @@ func (sm *StyleManager) ApplyFullBackground(content string, width, height int) s
 		return content
 	}
 	return sm.applyBGFG(lipgloss.NewStyle().Width(width).Height(height)).Render(content)
-}
-
-// UpdateTheme updates the style manager with a new theme
-func (sm *StyleManager) UpdateTheme(scheme runtimecfg.ColorScheme) {
-	sm.scheme = scheme
-	sm.initializeStyles()
-	focusedStyle = sm.GetFocusedStyle()
-	blurredStyle = sm.GetBlurredStyle()
-	noStyle = sm.GetNoStyle()
-	helpStyle = sm.GetHelpStyle()
-	errorStyle = sm.GetErrorStyle()
-	titleStyle = sm.GetTitleStyle()
 }
 
 // ApplyTextInputStyles configures a textinput with theme-aware colors
