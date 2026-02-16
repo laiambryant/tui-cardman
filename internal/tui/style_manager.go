@@ -139,7 +139,7 @@ func (sm *StyleManager) GetTableStyles() table.Styles {
 		s.Cell = s.Cell.Foreground(sm.scheme.Foreground)
 	}
 	fg, bg := sm.getTableSelectionColors()
-	s.Selected = s.Selected.Foreground(fg).Bold(false)
+	s.Selected = s.Selected.Foreground(fg).Bold(true)
 	if sm.scheme.TableSelectedBackground != "" {
 		s.Selected = s.Selected.Background(bg)
 	}

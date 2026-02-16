@@ -62,6 +62,8 @@ type ImportModel struct {
 	cardGames         []model.CardGame
 	width             int
 	height            int
+	modal             ModalModel
+	pendingAction     *ActionItem
 }
 
 func NewImportModel(db *sql.DB, cfg *runtimecfg.Manager, styleManager *StyleManager, cardGames []model.CardGame) (ImportModel, error) {
@@ -134,7 +136,16 @@ func (m ImportModel) Update(msg tea.Msg) (ImportModel, tea.Cmd) {
 	if sizeMsg, ok := msg.(tea.WindowSizeMsg); ok {
 		m.width = sizeMsg.Width
 		m.height = sizeMsg.Height
+		m.modal = m.modal.SetDimensions(sizeMsg.Width, sizeMsg.Height)
 		return m, nil
+	}
+	if m.modal.IsVisible() {
+		var cmd tea.Cmd
+		m.modal, cmd = m.modal.Update(msg)
+		return m, cmd
+	}
+	if _, ok := msg.(importConfirmedMsg); ok {
+		return m.executeConfirmedAction()
 	}
 	if m.isImporting {
 		return m.handleImportingState(msg)
@@ -337,6 +348,35 @@ func (m ImportModel) executeAction(action ActionItem) (ImportModel, tea.Cmd) {
 		m.errorMsg = "This action is disabled"
 		return m, nil
 	}
+	m.pendingAction = &action
+	message := fmt.Sprintf("Are you sure you want to %s?", action.label)
+	if len(m.filteredSets) > 0 && m.cursor < len(m.filteredSets) {
+		selectedSet := m.filteredSets[m.cursor]
+		if action.actionType == ActionImport || action.actionType == ActionDelete || action.actionType == ActionReimport {
+			message = fmt.Sprintf("%s\nSet: %s - %s", message, selectedSet.ID, selectedSet.Name)
+		}
+	}
+	m.modal = NewModalModel(
+		"Confirm "+action.label,
+		message,
+		func() tea.Cmd {
+			return func() tea.Msg { return importConfirmedMsg{} }
+		},
+		func() tea.Cmd { return nil },
+		m.styleManager,
+	)
+	if m.width > 0 && m.height > 0 {
+		m.modal = m.modal.SetDimensions(m.width, m.height)
+	}
+	return m, nil
+}
+
+func (m ImportModel) executeConfirmedAction() (ImportModel, tea.Cmd) {
+	if m.pendingAction == nil {
+		return m, nil
+	}
+	action := *m.pendingAction
+	m.pendingAction = nil
 	switch action.actionType {
 	case ActionImport:
 		if len(m.filteredSets) > 0 && m.cursor < len(m.filteredSets) {
@@ -374,7 +414,12 @@ func (m ImportModel) View() string {
 	if m.isImporting {
 		return m.renderImportProgress()
 	}
-	return m.renderImportView()
+	view := m.renderImportView()
+	if m.modal.IsVisible() {
+		m.modal = m.modal.SetBackgroundContent(view)
+		return m.modal.View()
+	}
+	return view
 }
 
 func (m ImportModel) fetchSetsCmd() tea.Cmd {

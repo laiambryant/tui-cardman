@@ -116,7 +116,7 @@ func RenderProgressBar(percent float64, width int, sm *StyleManager) string {
 		filled = barWidth
 	}
 	empty := barWidth - filled
-	return sm.GetFocusedStyle().Render(strings.Repeat("█", filled)) + sm.GetBlurredStyle().Render(strings.Repeat("░", empty)) + fmt.Sprintf(" %3.0f%%", percent)
+	return strings.Repeat("█", filled) + strings.Repeat("░", empty) + fmt.Sprintf(" %3.0f%%", percent)
 }
 func RenderPanel(sm *StyleManager, content string, width, height int, focused bool, padX, padY int) string {
 	borderColor := sm.scheme.Blurred

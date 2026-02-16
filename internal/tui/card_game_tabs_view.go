@@ -23,7 +23,6 @@ type Tab int
 const (
 	TabCollection Tab = iota
 	TabCardSearch
-	TabUserSearch
 )
 
 type setCompletionData struct {
@@ -59,6 +58,9 @@ type CardGameTabsModel struct {
 	spotlightScroll     int
 	collectionValue     float64
 	rarityBreakdown     string
+	userSearchTable     table.Model
+	userSearchInput     textinput.Model
+	searchTabFocus      int
 }
 
 // NewCardGameTabsModel creates a new card game tabs model
@@ -80,6 +82,19 @@ func NewCardGameTabsModel(selectedGame *model.CardGame, cfg *runtimecfg.Manager,
 
 	cardTable := NewStyledTable(columns, 10, true, styleManager)
 
+	userSearchInput := textinput.New()
+	userSearchInput.Placeholder = "Search collection..."
+	userSearchInput.Width = 30
+	styleManager.ApplyTextInputStyles(&userSearchInput)
+
+	userSearchColumns := []table.Column{
+		{Title: "Name", Width: 25},
+		{Title: "Expansion", Width: 15},
+		{Title: "Rarity", Width: 12},
+		{Title: "Amount", Width: 8},
+	}
+	userSearchTable := NewStyledTable(userSearchColumns, 10, false, styleManager)
+
 	return CardGameTabsModel{
 		selectedGame:        selectedGame,
 		currentTab:          TabCollection,
@@ -90,6 +105,8 @@ func NewCardGameTabsModel(selectedGame *model.CardGame, cfg *runtimecfg.Manager,
 		styleManager:        styleManager,
 		tempQuantityChanges: make(map[int64]int),
 		dbQuantities:        make(map[int64]int),
+		userSearchTable:     userSearchTable,
+		userSearchInput:     userSearchInput,
 	}
 }
 
@@ -247,9 +264,9 @@ func (m CardGameTabsModel) Update(msg tea.Msg) (CardGameTabsModel, tea.Cmd) {
 
 		// Tab navigation
 		if action == "nav_next_tab" || action == "nav_right" || s == "right" {
-			m.currentTab = (m.currentTab + 1) % 3
+			m.currentTab = (m.currentTab + 1) % 2
 			m = m.updateTableForTab()
-			if m.currentTab == TabCardSearch || m.currentTab == TabUserSearch {
+			if m.currentTab == TabCardSearch {
 				m.searchInput.Focus()
 			} else {
 				m.searchInput.Blur()
@@ -259,12 +276,12 @@ func (m CardGameTabsModel) Update(msg tea.Msg) (CardGameTabsModel, tea.Cmd) {
 
 		if action == "nav_prev_tab" || action == "nav_left" || s == "left" {
 			if m.currentTab == 0 {
-				m.currentTab = 2
+				m.currentTab = 1
 			} else {
 				m.currentTab--
 			}
 			m = m.updateTableForTab()
-			if m.currentTab == TabCardSearch || m.currentTab == TabUserSearch {
+			if m.currentTab == TabCardSearch {
 				m.searchInput.Focus()
 			} else {
 				m.searchInput.Blur()
@@ -281,6 +298,21 @@ func (m CardGameTabsModel) Update(msg tea.Msg) (CardGameTabsModel, tea.Cmd) {
 			}
 			return m, nil
 		}
+		if s == "tab" && m.currentTab == TabCardSearch {
+			m.searchTabFocus = (m.searchTabFocus + 1) % 2
+			if m.searchTabFocus == 0 {
+				m.cardTable.Focus()
+				m.userSearchTable.Blur()
+				m.searchInput.Focus()
+				m.userSearchInput.Blur()
+			} else {
+				m.cardTable.Blur()
+				m.userSearchTable.Focus()
+				m.searchInput.Blur()
+				m.userSearchInput.Focus()
+			}
+			return m, nil
+		}
 		if action == "nav_up" || s == "k" || s == "up" {
 			if m.currentTab == TabCollection {
 				if m.collectionTabFocus == 0 {
@@ -291,8 +323,12 @@ func (m CardGameTabsModel) Update(msg tea.Msg) (CardGameTabsModel, tea.Cmd) {
 				}
 				return m, nil
 			}
-			if m.currentTab == TabCardSearch || m.currentTab == TabUserSearch {
-				m.cardTable, _ = m.cardTable.Update(msg)
+			if m.currentTab == TabCardSearch {
+				if m.searchTabFocus == 0 {
+					m.cardTable, _ = m.cardTable.Update(msg)
+				} else {
+					m.userSearchTable, _ = m.userSearchTable.Update(msg)
+				}
 				return m, nil
 			}
 			return m, nil
@@ -307,14 +343,17 @@ func (m CardGameTabsModel) Update(msg tea.Msg) (CardGameTabsModel, tea.Cmd) {
 				}
 				return m, nil
 			}
-			if m.currentTab == TabCardSearch || m.currentTab == TabUserSearch {
-				m.cardTable, _ = m.cardTable.Update(msg)
+			if m.currentTab == TabCardSearch {
+				if m.searchTabFocus == 0 {
+					m.cardTable, _ = m.cardTable.Update(msg)
+				} else {
+					m.userSearchTable, _ = m.userSearchTable.Update(msg)
+				}
 				return m, nil
 			}
 			return m, nil
 		}
-		// Quantity management (only in Card Search tab)
-		if m.currentTab == TabCardSearch {
+		if m.currentTab == TabCardSearch && m.searchTabFocus == 0 {
 			if action == "increment_quantity" {
 				return m.handleIncrementQuantity()
 			}
@@ -326,32 +365,25 @@ func (m CardGameTabsModel) Update(msg tea.Msg) (CardGameTabsModel, tea.Cmd) {
 			}
 		}
 	}
-	// Update search input if in search tabs (but not for navigation keys)
-	if m.currentTab == TabCardSearch || m.currentTab == TabUserSearch {
+	if m.currentTab == TabCardSearch {
 		if keyMsg, ok := msg.(tea.KeyMsg); ok {
 			s := keyMsg.String()
 			action := MatchActionOrDefault(m.configManager, s, "")
-			// Don't pass navigation keys to search input
 			if action != "nav_up" && action != "nav_down" && s != "k" && s != "j" {
-				var cmd tea.Cmd
-				m.searchInput, cmd = m.searchInput.Update(msg)
-				// Filter results based on search
-				switch m.currentTab {
-				case TabCardSearch:
+				if m.searchTabFocus == 0 {
+					var cmd tea.Cmd
+					m.searchInput, cmd = m.searchInput.Update(msg)
 					m.filteredCards = m.filterCards(m.searchInput.Value())
 					m.updateCardTable()
-				case TabUserSearch:
-					m.filteredCollection = m.filterUserCollection(m.searchInput.Value())
-					// Also update table rows for user search
-					var rows []table.Row
-					for _, collection := range m.filteredCollection {
-						rows = append(rows, collectionToRow(collection))
-					}
-					m.cardTable.SetRows(rows)
+					m.cursor = 0
+					m.cardTable.SetCursor(0)
+					return m, cmd
 				}
-				// Reset cursor when search changes
-				m.cursor = 0
-				m.cardTable.SetCursor(0)
+				var cmd tea.Cmd
+				m.userSearchInput, cmd = m.userSearchInput.Update(msg)
+				m.filteredCollection = m.filterUserCollection(m.userSearchInput.Value())
+				m.userSearchTable.SetRows(buildCollectionRows(m.filteredCollection))
+				m.userSearchTable.SetCursor(0)
 				return m, cmd
 			}
 		}
@@ -370,7 +402,7 @@ func (m CardGameTabsModel) renderCardGameTabsHeader() string {
 	if m.selectedGame != nil {
 		b.WriteString(m.styleManager.GetTitleStyle().Render(m.selectedGame.Name+" Collection Manager") + "\n")
 	}
-	b.WriteString(RenderTabBar(m.styleManager, []string{"Collection", "Card Search", "My Collection"}, int(m.currentTab)))
+	b.WriteString(RenderTabBar(m.styleManager, []string{"Collection", "Card Search"}, int(m.currentTab)))
 	return b.String()
 }
 
@@ -380,8 +412,6 @@ func (m CardGameTabsModel) renderCardGameTabsBody(availableHeight int) string {
 		return m.renderCollectionTab(availableHeight)
 	case TabCardSearch:
 		return m.renderCardSearchTab(availableHeight)
-	case TabUserSearch:
-		return m.renderUserSearchTab(availableHeight)
 	}
 	return ""
 }
@@ -392,7 +422,7 @@ func (m CardGameTabsModel) renderCardGameTabsFooter() string {
 func (m CardGameTabsModel) buildHelpText() string {
 	hb := NewHelpBuilder(m.configManager)
 	if m.currentTab == TabCardSearch {
-		return hb.Build(
+		return "Tab: Switch panel • " + hb.Build(
 			KeyItem{"increment_quantity", "+", "Add"},
 			KeyItem{"decrement_quantity", "Delete", "Remove"},
 			KeyItem{"save", "Ctrl+S", "Save"},
@@ -413,9 +443,11 @@ func (m CardGameTabsModel) updateTableForTab() CardGameTabsModel {
 	case TabCardSearch:
 		m.configureTableColumns(m.getCardSearchColumns())
 		m.updateCardTable()
-	case TabUserSearch:
-		m.configureTableColumns(m.getCollectionColumns())
-		m.cardTable.SetRows(buildCollectionRows(m.filteredCollection))
+		m.searchTabFocus = 0
+		m.cardTable.Focus()
+		m.userSearchTable.Blur()
+		m.filteredCollection = m.filterUserCollection(m.userSearchInput.Value())
+		m.userSearchTable.SetRows(buildCollectionRows(m.filteredCollection))
 	case TabCollection:
 		m.setCompletionTable.Focus()
 		m.collectionTabFocus = 0
@@ -430,14 +462,6 @@ func (m CardGameTabsModel) getCardSearchColumns() []table.Column {
 		{Title: "Rarity", Width: 12},
 		{Title: "Card #", Width: 8},
 		{Title: "Quantity", Width: 8},
-	}
-}
-func (m CardGameTabsModel) getCollectionColumns() []table.Column {
-	return []table.Column{
-		{Title: "Name", Width: 25},
-		{Title: "Expansion", Width: 15},
-		{Title: "Rarity", Width: 12},
-		{Title: "Amount", Width: 8},
 	}
 }
 
@@ -458,25 +482,30 @@ func (m CardGameTabsModel) renderCollectionTab(availableHeight int) string {
 	for _, u := range m.userCollections {
 		totalCards += u.Quantity
 	}
-	topLeft := fmt.Sprintf("Total unique: %d  Total: %d\nRarity: %s\nValue: ", len(m.userCollections), totalCards, m.rarityBreakdown)
+	valueStr := "N/A"
 	if m.collectionValue > 0 {
-		topLeft += fmt.Sprintf("$%.2f", m.collectionValue)
-	} else {
-		topLeft += "N/A"
+		valueStr = fmt.Sprintf("$%.2f", m.collectionValue)
 	}
-	topLeftPanel := RenderPanel(m.styleManager, m.styleManager.GetTitleStyle().Render("Your Collection Summary\n")+topLeft, leftWidth, 4, false, 1, 0)
-	bottomLeftHeight := availableHeight - 6
+	ns := m.styleManager.GetNoStyle()
+	topLeft := m.styleManager.GetTitleStyle().Render("Your Collection Summary") + "\n" +
+		ns.Render(fmt.Sprintf("Total unique: %d  Total: %d", len(m.userCollections), totalCards)) + "\n" +
+		ns.Render(fmt.Sprintf("Rarity: %s", m.rarityBreakdown)) + "\n" +
+		ns.Render(fmt.Sprintf("Value: %s", valueStr))
+	topLeftHeight := 6
+	topLeftPanel := RenderPanel(m.styleManager, topLeft, leftWidth, topLeftHeight, false, 1, 0)
+	topLeftRenderedHeight := lipgloss.Height(topLeftPanel)
+	bottomLeftHeight := availableHeight - topLeftRenderedHeight
 	if bottomLeftHeight < 3 {
 		bottomLeftHeight = 3
 	}
-	m.setCompletionTable.SetHeight(bottomLeftHeight - 1)
+	m.setCompletionTable.SetHeight(max(bottomLeftHeight-4, 1))
 	bottomLeft := m.setCompletionTable.View()
 	if len(m.setCompletions) == 0 {
 		bottomLeft = m.styleManager.GetBlurredStyle().Render("No sets found.")
 	}
 	bottomLeftPanel := RenderPanel(m.styleManager, bottomLeft, leftWidth, bottomLeftHeight, m.collectionTabFocus == 0, 1, 0)
 	leftColumn := lipgloss.JoinVertical(lipgloss.Left, topLeftPanel, bottomLeftPanel)
-	spotlightHeight := availableHeight - 2
+	spotlightHeight := availableHeight
 	if spotlightHeight < 3 {
 		spotlightHeight = 3
 	}
@@ -525,11 +554,13 @@ func (m CardGameTabsModel) renderCollectionTab(availableHeight int) string {
 		var sb strings.Builder
 		sb.WriteString(m.styleManager.GetTitleStyle().Render(selected.SetName) + "\n")
 		sb.WriteString(m.styleManager.GetBlurredStyle().Render(fmt.Sprintf("%d/%d (%.0f%%)", selected.Owned, selected.Total, selected.Percent)) + "\n")
+		greenStyle := m.styleManager.applyBGFG(lipgloss.NewStyle().Foreground(lipgloss.Color("34")))
+		redStyle := m.styleManager.applyBGFG(lipgloss.NewStyle().Foreground(lipgloss.Color("160")))
 		for _, sc := range spotCards[start:end] {
 			if sc.owned {
-				sb.WriteString(m.styleManager.GetFocusedStyle().Render("✓ " + sc.name + "\n"))
+				sb.WriteString(greenStyle.Render("✓ "+sc.name) + "\n")
 			} else {
-				sb.WriteString(m.styleManager.GetBlurredStyle().Render("✗ " + sc.name + "\n"))
+				sb.WriteString(redStyle.Render("✗ "+sc.name) + "\n")
 			}
 		}
 		spotContent = sb.String()
@@ -546,60 +577,64 @@ func (m *CardGameTabsModel) updateSpotlightFromSetTable() {
 }
 
 func (m CardGameTabsModel) renderCardSearchTab(availableHeight int) string {
+	contentWidth := m.width - frameBorderSize - framePaddingX*2
+	if contentWidth < 20 {
+		contentWidth = 20
+	}
+	leftWidth := contentWidth / 2
+	rightWidth := contentWidth - leftWidth
+	tableHeight := CalcTableHeight(availableHeight, 4, 3)
+	leftContent := m.renderSearchLeftPanel(tableHeight)
+	leftPanel := RenderPanel(m.styleManager, leftContent, leftWidth, availableHeight, m.searchTabFocus == 0, 1, 0)
+	rightContent := m.renderSearchRightPanel(tableHeight)
+	rightPanel := RenderPanel(m.styleManager, rightContent, rightWidth, availableHeight, m.searchTabFocus == 1, 1, 0)
+	return lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, rightPanel)
+}
+
+func (m CardGameTabsModel) renderSearchLeftPanel(tableHeight int) string {
 	var b strings.Builder
 	b.WriteString(m.styleManager.GetTitleStyle().Render("Search All Cards") + "\n")
 	b.WriteString(m.styleManager.GetBlurredStyle().Render("Search: ") + m.styleManager.GetNoStyle().Render(m.searchInput.View()) + "\n")
 	showAll := m.searchInput.Value() == ""
 	var rows []table.Row
-	var any bool
 	if showAll {
 		for _, card := range m.cards {
 			dbQty := m.dbQuantities[card.ID]
 			tempDelta := m.tempQuantityChanges[card.ID]
 			rows = append(rows, cardToRow(card, dbQty, tempDelta))
 		}
-		any = len(rows) > 0
 	} else {
 		for _, card := range m.filteredCards {
 			dbQty := m.dbQuantities[card.ID]
 			tempDelta := m.tempQuantityChanges[card.ID]
 			rows = append(rows, cardToRow(card, dbQty, tempDelta))
 		}
-		any = len(rows) > 0
 	}
-	if !any {
+	if len(rows) == 0 {
 		if showAll {
 			b.WriteString(m.styleManager.GetBlurredStyle().Render("No cards available.") + "\n")
 		} else {
-			if m.searchInput.Value() == "" {
-				b.WriteString(m.styleManager.GetBlurredStyle().Render("Type to search for cards...") + "\n")
-			} else {
-				b.WriteString(m.styleManager.GetBlurredStyle().Render("No cards match your search.") + "\n")
-			}
+			b.WriteString(m.styleManager.GetBlurredStyle().Render("No cards match your search.") + "\n")
 		}
 		return b.String()
 	}
-	b.WriteString(m.styleManager.GetTitleStyle().Render("Found cards:") + "\n")
-	tableHeight := CalcTableHeight(availableHeight, 3, 3)
 	m.cardTable.SetRows(rows)
 	m.cardTable.SetHeight(tableHeight)
-	b.WriteString(m.styleManager.GetTableBaseStyle().Render(m.cardTable.View()))
+	b.WriteString(m.cardTable.View())
 	return b.String()
 }
 
-func (m CardGameTabsModel) renderUserSearchTab(availableHeight int) string {
+func (m CardGameTabsModel) renderSearchRightPanel(tableHeight int) string {
 	var b strings.Builder
-	b.WriteString(m.styleManager.GetTitleStyle().Render("Search Your Collection") + "\n")
-	b.WriteString(m.styleManager.GetBlurredStyle().Render("Search: ") + m.styleManager.GetNoStyle().Render(m.searchInput.View()) + "\n")
+	b.WriteString(m.styleManager.GetTitleStyle().Render("My Collection") + "\n")
+	b.WriteString(m.styleManager.GetBlurredStyle().Render("Search: ") + m.styleManager.GetNoStyle().Render(m.userSearchInput.View()) + "\n")
 	if len(m.filteredCollection) == 0 {
-		b.WriteString(m.renderEmptySearchMessage(m.searchInput.Value(), "Type to search your collection...", "No cards in your collection match your search."))
-	} else {
-		b.WriteString(m.styleManager.GetTitleStyle().Render("Your matching cards:") + "\n")
-		tableHeight := CalcTableHeight(availableHeight, 3, 3)
-		m.cardTable.SetRows(buildCollectionRows(m.filteredCollection))
-		m.cardTable.SetHeight(tableHeight)
-		b.WriteString(m.styleManager.GetTableBaseStyle().Render(m.cardTable.View()))
+		b.WriteString(m.renderEmptySearchMessage(m.userSearchInput.Value(), "No cards in your collection yet.", "No cards match your search."))
+		return b.String()
 	}
+	m.userSearchTable.SetRows(buildCollectionRows(m.filteredCollection))
+	m.userSearchTable.SetHeight(tableHeight)
+	b.WriteString(m.userSearchTable.View())
 	return b.String()
 }
 
@@ -789,7 +824,7 @@ func (m CardGameTabsModel) performSaveCollection() (CardGameTabsModel, tea.Cmd) 
 		collections, err := m.collectionService.GetUserCollectionByGameID(m.user.ID, m.selectedGame.ID)
 		if err == nil {
 			m.userCollections = collections
-			m.filteredCollection = m.filterUserCollection(m.searchInput.Value())
+			m.filteredCollection = m.filterUserCollection(m.userSearchInput.Value())
 			m.computeCollectionStats()
 		}
 	}

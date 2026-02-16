@@ -66,3 +66,5 @@ type importNewSetsSuccessMsg struct{}
 type importNewSetsErrorMsg struct {
 	err error
 }
+
+type importConfirmedMsg struct{}
