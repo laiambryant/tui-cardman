@@ -8,7 +8,6 @@ import (
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/laiambryant/tui-cardman/internal/runtimecfg"
 )
 
@@ -89,9 +88,6 @@ func NewSettingsModel(configManager *runtimecfg.Manager, styleManager *StyleMana
 	return model
 }
 
-func (m SettingsModel) getAction(s string) string {
-	return MatchActionOrDefault(m.configManager, s, "")
-}
 
 func (m SettingsModel) Init() tea.Cmd {
 	return nil
@@ -130,7 +126,7 @@ func (m SettingsModel) Update(msg tea.Msg) (SettingsModel, tea.Cmd) {
 
 func (m SettingsModel) handleKeyMsg(msg tea.KeyMsg) (SettingsModel, tea.Cmd) {
 	s := msg.String()
-	action := m.getAction(s)
+	action := GetAction(m.configManager, s)
 	if m.editing {
 		return m.handleEditingKey(action, s)
 	}
@@ -276,14 +272,7 @@ func (m *SettingsModel) cycleTheme(direction int) {
 func (m SettingsModel) View() string {
 	header := m.renderSettingsHeader()
 	footer := m.renderSettingsFooter()
-	layout := calculateFrameLayout(lipgloss.Height(header), lipgloss.Height(footer), m.width, m.height)
-	body := m.renderSettingsBody(layout.BodyContentHeight)
-	content := renderFramedViewWithLayout(header, body, footer, layout, m.styleManager)
-	if m.modal.IsVisible() {
-		m.modal = m.modal.SetBackgroundContent(content)
-		return m.modal.View()
-	}
-	return content
+	return RenderFramedWithModal(header, footer, m.renderSettingsBody, m.width, m.height, m.styleManager, &m.modal)
 }
 
 func (m SettingsModel) renderSettingsHeader() string {
@@ -293,18 +282,7 @@ func (m SettingsModel) renderSettingsHeader() string {
 		title += " *"
 	}
 	b.WriteString(m.styleManager.GetTitleStyle().Render(title) + "\n")
-	tabs := []string{"Keybindings", "UI"}
-	var renderedTabs []string
-	for i, tab := range tabs {
-		if settingsSection(i) == m.section {
-			renderedTabs = append(renderedTabs, m.styleManager.GetTitleStyle().Render("[ "+tab+" ]"))
-		} else {
-			renderedTabs = append(renderedTabs, m.styleManager.GetBlurredStyle().Render("  "+tab+"  "))
-		}
-	}
-	// Join tabs with styled space separator
-	separator := m.styleManager.GetNoStyle().Render(" ")
-	b.WriteString(strings.Join(renderedTabs, separator))
+	b.WriteString(RenderTabBar(m.styleManager, []string{"Keybindings", "UI"}, int(m.section)))
 	return b.String()
 }
 
@@ -402,14 +380,11 @@ func (m SettingsModel) renderKeybindingsSection(maxLines int) string {
 }
 
 func (m SettingsModel) buildHelpText() string {
-	settingsKey := ResolveKeyBinding(m.configManager, "settings", "F1")
-	navUp := ResolveKeyBinding(m.configManager, "nav_up", "↑")
-	navDown := ResolveKeyBinding(m.configManager, "nav_down", "↓")
-	navLeft := ResolveKeyBinding(m.configManager, "nav_left", "←")
-	navRight := ResolveKeyBinding(m.configManager, "nav_right", "→")
-	editKey := ResolveKeyBinding(m.configManager, "select", "Enter")
-	closeKey := ResolveKeyBinding(m.configManager, "quit_alt", "Esc")
-	help := fmt.Sprintf("%s: Settings • %s/%s: Navigate • %s/%s: Switch sections • %s: Edit • %s: Close", settingsKey, navUp, navDown, navLeft, navRight, editKey, closeKey)
+	hb := NewHelpBuilder(m.configManager)
+	help := hb.Build(KeyItem{"settings", "F1", "Settings"}) + " • " + hb.Pair("nav_up", "↑", "nav_down", "↓", "Navigate") + " • " + hb.Pair("nav_left", "←", "nav_right", "→", "Switch sections") + " • " + hb.Build(
+		KeyItem{"select", "Enter", "Edit"},
+		KeyItem{"quit_alt", "Esc", "Close"},
+	)
 	if m.hasChanges {
 		help += " • Ctrl+S: Save"
 	}

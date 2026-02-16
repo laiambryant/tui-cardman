@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -57,20 +56,12 @@ func (m *Model) handleRegister() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m Model) renderButton(isFocused bool, label string) string {
-	if isFocused {
-		return titleStyle.Render(label)
-	}
-	return label
-}
-
 func (m Model) buildAuthViewHelpText() string {
-	settingsKey := ResolveKeyBinding(m.configManager, "settings", "F1")
-	navNext := ResolveKeyBinding(m.configManager, "nav_next_tab", "Tab")
-	navPrev := ResolveKeyBinding(m.configManager, "nav_prev_tab", "Shift+Tab")
-	submitKey := ResolveKeyBinding(m.configManager, "select", "Enter")
-	quitKey := ResolveKeyBinding(m.configManager, "quit", "Ctrl+C")
-	return fmt.Sprintf("%s: Settings • %s/%s: Navigate • %s: Submit • %s: Quit", settingsKey, navPrev, navNext, submitKey, quitKey)
+	hb := NewHelpBuilder(m.configManager)
+	return hb.Build(KeyItem{"settings", "F1", "Settings"}) + " • " + hb.Pair("nav_prev_tab", "Shift+Tab", "nav_next_tab", "Tab", "Navigate") + " • " + hb.Build(
+		KeyItem{"select", "Enter", "Submit"},
+		KeyItem{"quit", "Ctrl+C", "Quit"},
+	)
 }
 
 func (m Model) registerView() string {
@@ -93,14 +84,14 @@ func (m Model) renderRegisterBody() string {
 	if m.errorMsg != "" {
 		b.WriteString("\n" + errorStyle.Render("Error: "+m.errorMsg))
 	}
-	b.WriteString("\n" + m.renderButton(m.focusIndex == len(m.inputs), "[ Register ]"))
+	b.WriteString("\n" + RenderButton(m.focusIndex == len(m.inputs), "[ Register ]"))
 	return b.String()
 }
 
 func (m Model) renderRegisterFooter() string {
 	var b strings.Builder
 	b.WriteString(helpStyle.Render("Already have an account? Press Enter on the button below") + "\n")
-	b.WriteString(m.renderButton(m.focusIndex == len(m.inputs)+1, "[ Back to Login ]") + "\n")
+	b.WriteString(RenderButton(m.focusIndex == len(m.inputs)+1, "[ Back to Login ]") + "\n")
 	b.WriteString(helpStyle.Render(m.buildAuthViewHelpText()))
 	return b.String()
 }

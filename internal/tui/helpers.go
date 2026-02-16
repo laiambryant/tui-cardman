@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/bubbles/table"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/laiambryant/tui-cardman/internal/runtimecfg"
 )
 
@@ -36,6 +37,12 @@ type KeyItem struct {
 	Action      string
 	DefaultKey  string
 	Description string
+}
+
+func (h *HelpBuilder) Pair(action1, default1, action2, default2, description string) string {
+	k1 := h.resolveKey(action1, default1)
+	k2 := h.resolveKey(action2, default2)
+	return fmt.Sprintf("%s/%s: %s", k1, k2, description)
 }
 
 // Build constructs help text from a list of key items
@@ -111,11 +118,58 @@ func RenderProgressBar(percent float64, width int, sm *StyleManager) string {
 	empty := barWidth - filled
 	return sm.GetFocusedStyle().Render(strings.Repeat("█", filled)) + sm.GetBlurredStyle().Render(strings.Repeat("░", empty)) + fmt.Sprintf(" %3.0f%%", percent)
 }
-func RenderActiveTab(label string) string {
-	return titleStyle.Copy().Padding(0, 2).Render("[ " + label + " ]")
+func RenderPanel(sm *StyleManager, content string, width, height int, focused bool, padX, padY int) string {
+	borderColor := sm.scheme.Blurred
+	if focused {
+		borderColor = sm.scheme.Focused
+	}
+	borderOverhead := 2
+	innerWidth := max(width-borderOverhead-padX*2, 1)
+	innerHeight := max(height-borderOverhead-padY*2, 1)
+	return sm.Box(borderColor, innerWidth, innerHeight, 0, padX, padY).Render(content)
 }
-func RenderInactiveTab(label string) string {
-	return blurredStyle.Copy().Padding(0, 2).Render("  " + label + "  ")
+func RenderTabBar(sm *StyleManager, tabs []string, activeIndex int) string {
+	var rendered []string
+	for i, tab := range tabs {
+		if i == activeIndex {
+			rendered = append(rendered, sm.GetTitleStyle().Inline(true).Render("[ "+tab+" ]"))
+		} else {
+			rendered = append(rendered, sm.GetBlurredStyle().Inline(true).Render("  "+tab+"  "))
+		}
+	}
+	return strings.Join(rendered, sm.GetNoStyle().Render(" "))
+}
+func RenderFramedWithModal(header, footer string, bodyFn func(availableHeight int) string, width, height int, sm *StyleManager, modal *ModalModel) string {
+	layout := calculateFrameLayout(lipgloss.Height(header), lipgloss.Height(footer), width, height)
+	body := bodyFn(layout.BodyContentHeight)
+	content := renderFramedViewWithLayout(header, body, footer, layout, sm)
+	if modal != nil && modal.IsVisible() {
+		*modal = modal.SetBackgroundContent(content)
+		return modal.View()
+	}
+	return content
+}
+func CalcTableHeight(availableHeight, headerLines, minHeight int) int {
+	if availableHeight <= 0 {
+		return max(10, minHeight)
+	}
+	return max(availableHeight-headerLines, minHeight)
+}
+func RenderButton(isFocused bool, label string) string {
+	if isFocused {
+		return titleStyle.Render(label)
+	}
+	return blurredStyle.Render(label)
+}
+func GetAction(cfg *runtimecfg.Manager, s string) string {
+	return MatchActionOrDefault(cfg, s, "")
+}
+func RenderListItem(line string, isSelected bool) string {
+	prefix := getCursorPrefix(isSelected)
+	if isSelected {
+		return titleStyle.Render(prefix+line) + "\n"
+	}
+	return blurredStyle.Render(prefix+line) + "\n"
 }
 func RenderTitle(title string) string {
 	return titleStyle.Render(title) + "\n\n"

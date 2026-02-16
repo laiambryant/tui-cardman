@@ -79,14 +79,14 @@ func (m Model) renderLoginBody() string {
 	if m.errorMsg != "" {
 		b.WriteString("\n" + errorStyle.Render("Error: "+m.errorMsg))
 	}
-	b.WriteString("\n" + m.renderButton(m.focusIndex == len(m.inputs), "[ Login ]"))
+	b.WriteString("\n" + RenderButton(m.focusIndex == len(m.inputs), "[ Login ]"))
 	return b.String()
 }
 
 func (m Model) renderLoginFooter() string {
 	var b strings.Builder
 	b.WriteString(helpStyle.Render("Don't have an account? Press Enter on the button below") + "\n")
-	b.WriteString(m.renderButton(m.focusIndex == len(m.inputs)+1, "[ Register ]") + "\n")
+	b.WriteString(RenderButton(m.focusIndex == len(m.inputs)+1, "[ Register ]") + "\n")
 	b.WriteString(helpStyle.Render(m.buildAuthViewHelpText()))
 	return b.String()
 }

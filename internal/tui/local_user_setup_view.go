@@ -18,12 +18,6 @@ func (m *Model) initLocalUserSetupInputs() {
 	m.focusIndex = 0
 }
 
-func (m Model) renderSubmitButton(label string) string {
-	if m.focusIndex == len(m.inputs) {
-		return titleStyle.Render(label)
-	}
-	return blurredStyle.Render(label)
-}
 
 func (m Model) localUserSetupView() string {
 	header := titleStyle.Render("Welcome to CardMan!")
@@ -47,7 +41,7 @@ func (m Model) renderLocalUserSetupBody() string {
 			b.WriteString("\n")
 		}
 	}
-	b.WriteString("\n" + m.renderSubmitButton("[ Create Profile ]"))
+	b.WriteString("\n" + RenderButton(m.focusIndex == len(m.inputs), "[ Create Profile ]"))
 	return b.String()
 }
 
@@ -56,12 +50,11 @@ func (m Model) renderLocalUserSetupFooter() string {
 }
 
 func (m Model) buildLocalSetupHelpText() string {
-	settingsKey := ResolveKeyBinding(m.configManager, "settings", "F1")
-	navUp := ResolveKeyBinding(m.configManager, "nav_up", "↑")
-	navDown := ResolveKeyBinding(m.configManager, "nav_down", "↓")
-	submitKey := ResolveKeyBinding(m.configManager, "select", "Enter")
-	quitKey := ResolveKeyBinding(m.configManager, "quit", "Ctrl+C")
-	return fmt.Sprintf("%s: Settings • %s/%s: Navigate • %s: Submit • %s: Quit", settingsKey, navUp, navDown, submitKey, quitKey)
+	hb := NewHelpBuilder(m.configManager)
+	return hb.Build(KeyItem{"settings", "F1", "Settings"}) + " • " + hb.Pair("nav_up", "↑", "nav_down", "↓", "Navigate") + " • " + hb.Build(
+		KeyItem{"select", "Enter", "Submit"},
+		KeyItem{"quit", "Ctrl+C", "Quit"},
+	)
 }
 
 func (m *Model) validateLocalUserSetupInputs(name, surname, email string) string {

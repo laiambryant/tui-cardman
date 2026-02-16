@@ -51,30 +51,10 @@ func (m Model) renderCardGamesPanel(width, height int) string {
 		b.WriteString(errorStyle.Render("No card games found.") + "\n")
 	} else {
 		for i, game := range m.cardGames {
-			prefix := getCursorPrefix(m.cursor == i)
-			line := fmt.Sprintf("%s%s", prefix, game.Name)
-			if m.cursor == i && m.mainFocusPanel == 0 {
-				b.WriteString(titleStyle.Render(line) + "\n")
-			} else {
-				b.WriteString(blurredStyle.Render(line) + "\n")
-			}
+			b.WriteString(RenderListItem(game.Name, m.cursor == i && m.mainFocusPanel == 0))
 		}
 	}
-
-	borderColor := m.styleManager.scheme.Blurred
-	if m.mainFocusPanel == 0 {
-		borderColor = m.styleManager.scheme.Focused
-	}
-
-	innerWidth := width - 6
-	if innerWidth < 1 {
-		innerWidth = 1
-	}
-	innerHeight := height - 4
-	if innerHeight < 1 {
-		innerHeight = 1
-	}
-	return m.styleManager.Box(borderColor, innerWidth, innerHeight, 0, 2, 1).Render(b.String())
+	return RenderPanel(m.styleManager, b.String(), width, height, m.mainFocusPanel == 0, 2, 1)
 }
 
 func (m Model) renderImportPanelMain(width, height int) string {
@@ -85,11 +65,10 @@ func (m Model) renderImportPanelMain(width, height int) string {
 }
 
 func (m Model) renderMainMenuHelp() string {
-	settingsKey := ResolveKeyBinding(m.configManager, "settings", "F1")
-	navUp := ResolveKeyBinding(m.configManager, "nav_up", "↑")
-	navDown := ResolveKeyBinding(m.configManager, "nav_down", "↓")
-	selectKey := ResolveKeyBinding(m.configManager, "select", "Enter")
-	quitKey := ResolveKeyBinding(m.configManager, "quit", "Ctrl+C")
-	help := fmt.Sprintf("%s: Settings • Left/Right: Switch Panel • %s/%s: Navigate • %s: Select • %s: Quit", settingsKey, navUp, navDown, selectKey, quitKey)
+	hb := NewHelpBuilder(m.configManager)
+	help := hb.Build(KeyItem{"settings", "F1", "Settings"}) + " • Left/Right: Switch Panel • " + hb.Pair("nav_up", "↑", "nav_down", "↓", "Navigate") + " • " + hb.Build(
+		KeyItem{"select", "Enter", "Select"},
+		KeyItem{"quit", "Ctrl+C", "Quit"},
+	)
 	return helpStyle.Render(help)
 }

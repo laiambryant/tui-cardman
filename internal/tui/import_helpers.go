@@ -86,22 +86,7 @@ func (m ImportModel) renderImportPanel(width, height int, isFocused bool) string
 	if m.statusMsg != "" {
 		b.WriteString("\n" + focusedStyle.Render(m.statusMsg))
 	}
-
-	borderColor := m.styleManager.scheme.Blurred
-	if isFocused {
-		borderColor = m.styleManager.scheme.Focused
-	}
-
-	innerWidth := width - 6
-	if innerWidth < 1 {
-		innerWidth = 1
-	}
-	innerHeight := height - 4
-	if innerHeight < 1 {
-		innerHeight = 1
-	}
-	panel := m.styleManager.Box(borderColor, innerWidth, innerHeight, 0, 2, 1).Render(b.String())
-	return panel
+	return RenderPanel(m.styleManager, b.String(), width, height, isFocused, 2, 1)
 }
 
 func (m ImportModel) renderImportView() string {
@@ -206,13 +191,9 @@ func (m ImportModel) renderSetsListContent(itemsPerPage int) string {
 }
 func (m ImportModel) renderSetListItem(index int) string {
 	set := m.filteredSets[index]
-	prefix := getCursorPrefix(m.cursor == index)
 	status := getSetStatusIcon(m.databaseSetIDs[set.ID])
-	line := fmt.Sprintf("%s%s %s - %s (%d cards)", prefix, status, set.ID, set.Name, set.Total)
-	if m.cursor == index && !m.focusOnActions {
-		return titleStyle.Render(line) + "\n"
-	}
-	return blurredStyle.Render(line) + "\n"
+	line := fmt.Sprintf("%s %s - %s (%d cards)", status, set.ID, set.Name, set.Total)
+	return RenderListItem(line, m.cursor == index && !m.focusOnActions)
 }
 
 func (m ImportModel) renderActionsPanelContent(width int) string {
@@ -298,11 +279,11 @@ func (m ImportModel) renderStatusBar(contentWidth int) string {
 }
 
 func (m ImportModel) renderHelp() string {
-	upKey := ResolveKeyBinding(m.configManager, "nav_up", "↑")
-	downKey := ResolveKeyBinding(m.configManager, "nav_down", "↓")
-	enterKey := ResolveKeyBinding(m.configManager, "select", "Enter")
-	backKey := ResolveKeyBinding(m.configManager, "back", "Q")
-	help := fmt.Sprintf("Tab: Switch Panel • %s/%s: Navigate • %s: Execute • %s: Back", upKey, downKey, enterKey, backKey)
+	hb := NewHelpBuilder(m.configManager)
+	help := "Tab: Switch Panel • " + hb.Pair("nav_up", "↑", "nav_down", "↓", "Navigate") + " • " + hb.Build(
+		KeyItem{"select", "Enter", "Execute"},
+		KeyItem{"back", "Q", "Back"},
+	)
 	return helpStyle.Render(help)
 }
 

@@ -148,12 +148,6 @@ func isQuitKey(action, s string) bool {
 	return action == "quit" || action == "quit_alt" || s == "ctrl+c"
 }
 
-func (m *Model) getAction(s string) string {
-	if m.configManager != nil {
-		return m.configManager.MatchAction(s)
-	}
-	return ""
-}
 
 func (m *Model) updateInputFocus(cmds []tea.Cmd) tea.Cmd {
 	for i := 0; i <= len(m.inputs)-1; i++ {
@@ -310,7 +304,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleScreenUpdates(msg)
 	case tea.KeyMsg:
 		s := msg.String()
-		action := m.getAction(s)
+		action := GetAction(m.configManager,s)
 		slog.Debug("tui key pressed", "key", s, "action", action, "screen", m.screen)
 		if newModel, cmd := m.handleSettingsKey(action); cmd != nil {
 			return newModel, cmd
@@ -432,7 +426,7 @@ func (m *Model) updateCardGameTabs(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	m.cardGameTabs, cmd = m.cardGameTabs.Update(msg)
 	if keyMsg, ok := msg.(tea.KeyMsg); ok {
-		action := m.getAction(keyMsg.String())
+		action := GetAction(m.configManager,keyMsg.String())
 		if isBackKey(action, keyMsg.String()) {
 			m.screen = ScreenMain
 			return m, nil
@@ -446,7 +440,7 @@ func (m *Model) updateImport(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		*m.importModel, cmd = m.importModel.Update(msg)
 		if keyMsg, ok := msg.(tea.KeyMsg); ok {
-			action := m.getAction(keyMsg.String())
+			action := GetAction(m.configManager,keyMsg.String())
 			if isBackKey(action, keyMsg.String()) && !m.importModel.isImporting {
 				m.screen = ScreenMain
 				return m, nil

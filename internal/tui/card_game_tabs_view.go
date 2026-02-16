@@ -362,14 +362,7 @@ func (m CardGameTabsModel) Update(msg tea.Msg) (CardGameTabsModel, tea.Cmd) {
 func (m CardGameTabsModel) View() string {
 	header := m.renderCardGameTabsHeader()
 	footer := m.renderCardGameTabsFooter()
-	layout := calculateFrameLayout(lipgloss.Height(header), lipgloss.Height(footer), m.width, m.height)
-	body := m.renderCardGameTabsBody(layout.BodyContentHeight)
-	content := renderFramedViewWithLayout(header, body, footer, layout, m.styleManager)
-	if m.modal.IsVisible() {
-		m.modal = m.modal.SetBackgroundContent(content)
-		return m.modal.View()
-	}
-	return content
+	return RenderFramedWithModal(header, footer, m.renderCardGameTabsBody, m.width, m.height, m.styleManager, &m.modal)
 }
 
 func (m CardGameTabsModel) renderCardGameTabsHeader() string {
@@ -377,18 +370,7 @@ func (m CardGameTabsModel) renderCardGameTabsHeader() string {
 	if m.selectedGame != nil {
 		b.WriteString(m.styleManager.GetTitleStyle().Render(m.selectedGame.Name+" Collection Manager") + "\n")
 	}
-	tabs := []string{"Collection", "Card Search", "My Collection"}
-	var tabStyles []string
-	for i, tab := range tabs {
-		if Tab(i) == m.currentTab {
-			tabStyles = append(tabStyles, m.styleManager.GetTitleStyle().Inline(true).Render("[ "+tab+" ]"))
-		} else {
-			tabStyles = append(tabStyles, m.styleManager.GetBlurredStyle().Inline(true).Render("  "+tab+"  "))
-		}
-	}
-	// Join tabs with styled space separator
-	separator := m.styleManager.GetNoStyle().Render(" ")
-	b.WriteString(strings.Join(tabStyles, separator))
+	b.WriteString(RenderTabBar(m.styleManager, []string{"Collection", "Card Search", "My Collection"}, int(m.currentTab)))
 	return b.String()
 }
 
@@ -408,37 +390,21 @@ func (m CardGameTabsModel) renderCardGameTabsFooter() string {
 	return m.styleManager.GetHelpStyle().Render(m.buildHelpText())
 }
 func (m CardGameTabsModel) buildHelpText() string {
+	hb := NewHelpBuilder(m.configManager)
 	if m.currentTab == TabCardSearch {
-		return m.buildCardSearchHelpText()
+		return hb.Build(
+			KeyItem{"increment_quantity", "+", "Add"},
+			KeyItem{"decrement_quantity", "Delete", "Remove"},
+			KeyItem{"save", "Ctrl+S", "Save"},
+		) + " • " + hb.Pair("nav_up", "↑", "nav_down", "↓", "Navigate") + " • " + hb.Build(KeyItem{"back", "Q", "Back"})
 	}
 	if m.currentTab == TabCollection {
-		navUp := ResolveKeyBinding(m.configManager, "nav_up", "↑")
-		navDown := ResolveKeyBinding(m.configManager, "nav_down", "↓")
-		nextTab := ResolveKeyBinding(m.configManager, "nav_next_tab", "Tab")
-		prevTab := ResolveKeyBinding(m.configManager, "nav_prev_tab", "Shift+Tab")
-		backKey := ResolveKeyBinding(m.configManager, "back", "Q")
-		return fmt.Sprintf("Tab: Switch panel • %s/%s: Navigate • %s/%s: Switch tabs • %s: Back", navUp, navDown, prevTab, nextTab, backKey)
+		return "Tab: Switch panel • " + hb.Pair("nav_up", "↑", "nav_down", "↓", "Navigate") + " • " + hb.Pair("nav_prev_tab", "Shift+Tab", "nav_next_tab", "Tab", "Switch tabs") + " • " + hb.Build(KeyItem{"back", "Q", "Back"})
 	}
-	return m.buildDefaultHelpText()
-}
-func (m CardGameTabsModel) buildCardSearchHelpText() string {
-	incrementKey := ResolveKeyBinding(m.configManager, "increment_quantity", "+")
-	decrementKey := ResolveKeyBinding(m.configManager, "decrement_quantity", "Delete")
-	saveKey := ResolveKeyBinding(m.configManager, "save", "Ctrl+S")
-	navUp := ResolveKeyBinding(m.configManager, "nav_up", "↑")
-	navDown := ResolveKeyBinding(m.configManager, "nav_down", "↓")
-	backKey := ResolveKeyBinding(m.configManager, "back", "Q")
-	return fmt.Sprintf("%s: Add • %s: Remove • %s: Save • %s/%s: Navigate • %s: Back", incrementKey, decrementKey, saveKey, navUp, navDown, backKey)
-}
-func (m CardGameTabsModel) buildDefaultHelpText() string {
-	settingsKey := ResolveKeyBinding(m.configManager, "settings", "F1")
-	nextTab := ResolveKeyBinding(m.configManager, "nav_next_tab", "Tab")
-	prevTab := ResolveKeyBinding(m.configManager, "nav_prev_tab", "Shift+Tab")
-	navUp := ResolveKeyBinding(m.configManager, "nav_up", "↑")
-	navDown := ResolveKeyBinding(m.configManager, "nav_down", "↓")
-	backKey := ResolveKeyBinding(m.configManager, "back", "Q")
-	quitKey := ResolveKeyBinding(m.configManager, "quit", "Ctrl+C")
-	return fmt.Sprintf("%s: Settings • %s/%s: Switch tabs • %s/%s: Navigate • %s: Back • %s: Quit", settingsKey, prevTab, nextTab, navUp, navDown, backKey, quitKey)
+	return hb.Build(KeyItem{"settings", "F1", "Settings"}) + " • " + hb.Pair("nav_prev_tab", "Shift+Tab", "nav_next_tab", "Tab", "Switch tabs") + " • " + hb.Pair("nav_up", "↑", "nav_down", "↓", "Navigate") + " • " + hb.Build(
+		KeyItem{"back", "Q", "Back"},
+		KeyItem{"quit", "Ctrl+C", "Quit"},
+	)
 }
 
 func (m CardGameTabsModel) updateTableForTab() CardGameTabsModel {
@@ -498,7 +464,7 @@ func (m CardGameTabsModel) renderCollectionTab(availableHeight int) string {
 	} else {
 		topLeft += "N/A"
 	}
-	topLeftPanel := m.renderPanel(m.styleManager.GetTitleStyle().Render("Your Collection Summary\n")+topLeft, leftWidth, 4, false)
+	topLeftPanel := RenderPanel(m.styleManager, m.styleManager.GetTitleStyle().Render("Your Collection Summary\n")+topLeft, leftWidth, 4, false, 1, 0)
 	bottomLeftHeight := availableHeight - 6
 	if bottomLeftHeight < 3 {
 		bottomLeftHeight = 3
@@ -508,7 +474,7 @@ func (m CardGameTabsModel) renderCollectionTab(availableHeight int) string {
 	if len(m.setCompletions) == 0 {
 		bottomLeft = m.styleManager.GetBlurredStyle().Render("No sets found.")
 	}
-	bottomLeftPanel := m.renderPanel(bottomLeft, leftWidth, bottomLeftHeight, m.collectionTabFocus == 0)
+	bottomLeftPanel := RenderPanel(m.styleManager, bottomLeft, leftWidth, bottomLeftHeight, m.collectionTabFocus == 0, 1, 0)
 	leftColumn := lipgloss.JoinVertical(lipgloss.Left, topLeftPanel, bottomLeftPanel)
 	spotlightHeight := availableHeight - 2
 	if spotlightHeight < 3 {
@@ -568,29 +534,8 @@ func (m CardGameTabsModel) renderCollectionTab(availableHeight int) string {
 		}
 		spotContent = sb.String()
 	}
-	rightPanel := m.renderPanel(spotContent, rightWidth, spotlightHeight, m.collectionTabFocus == 1)
+	rightPanel := RenderPanel(m.styleManager, spotContent, rightWidth, spotlightHeight, m.collectionTabFocus == 1, 1, 0)
 	return lipgloss.JoinHorizontal(lipgloss.Top, leftColumn, rightPanel)
-}
-func (m CardGameTabsModel) renderPanel(content string, width, height int, focused bool) string {
-	borderColor := m.styleManager.scheme.Blurred
-	if focused {
-		borderColor = m.styleManager.scheme.Focused
-	}
-	contentWidth := width - 4
-	if contentWidth < 1 {
-		contentWidth = 1
-	}
-	if height < 1 {
-		height = 1
-	}
-	style := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(borderColor).Padding(0, 1).Width(contentWidth).Height(height)
-	if m.styleManager.scheme.Background != "" {
-		style = style.Background(m.styleManager.scheme.Background).BorderBackground(m.styleManager.scheme.Background)
-	}
-	if m.styleManager.scheme.Foreground != "" {
-		style = style.Foreground(m.styleManager.scheme.Foreground)
-	}
-	return style.Render(content)
 }
 func (m *CardGameTabsModel) updateSpotlightFromSetTable() {
 	idx := m.setCompletionTable.Cursor()
@@ -635,13 +580,7 @@ func (m CardGameTabsModel) renderCardSearchTab(availableHeight int) string {
 		return b.String()
 	}
 	b.WriteString(m.styleManager.GetTitleStyle().Render("Found cards:") + "\n")
-	tableHeight := 10
-	if availableHeight > 0 {
-		tableHeight = availableHeight - 3
-	}
-	if tableHeight < 3 {
-		tableHeight = 3
-	}
+	tableHeight := CalcTableHeight(availableHeight, 3, 3)
 	m.cardTable.SetRows(rows)
 	m.cardTable.SetHeight(tableHeight)
 	b.WriteString(m.styleManager.GetTableBaseStyle().Render(m.cardTable.View()))
@@ -656,13 +595,7 @@ func (m CardGameTabsModel) renderUserSearchTab(availableHeight int) string {
 		b.WriteString(m.renderEmptySearchMessage(m.searchInput.Value(), "Type to search your collection...", "No cards in your collection match your search."))
 	} else {
 		b.WriteString(m.styleManager.GetTitleStyle().Render("Your matching cards:") + "\n")
-		tableHeight := 10
-		if availableHeight > 0 {
-			tableHeight = availableHeight - 3
-		}
-		if tableHeight < 3 {
-			tableHeight = 3
-		}
+		tableHeight := CalcTableHeight(availableHeight, 3, 3)
 		m.cardTable.SetRows(buildCollectionRows(m.filteredCollection))
 		m.cardTable.SetHeight(tableHeight)
 		b.WriteString(m.styleManager.GetTableBaseStyle().Render(m.cardTable.View()))

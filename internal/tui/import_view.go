@@ -107,9 +107,6 @@ func (m ImportModel) Init() tea.Cmd {
 	)
 }
 
-func (m ImportModel) getAction(s string) string {
-	return MatchActionOrDefault(m.configManager, s, "")
-}
 
 func (m ImportModel) handleImportSetResult(success bool, setID string, err error) (ImportModel, tea.Cmd) {
 	if success {
@@ -212,7 +209,7 @@ func (m ImportModel) handleImportingState(msg tea.Msg) (ImportModel, tea.Cmd) {
 
 func (m ImportModel) handleKeyMsg(msg tea.KeyMsg) (ImportModel, tea.Cmd) {
 	s := msg.String()
-	action := m.getAction(s)
+	action := GetAction(m.configManager, s)
 	if action == "quit" || s == "ctrl+c" {
 		return m, tea.Quit
 	}
@@ -231,7 +228,7 @@ func (m ImportModel) handleKeyMsg(msg tea.KeyMsg) (ImportModel, tea.Cmd) {
 
 func (m ImportModel) handleSetListNavigation(msg tea.KeyMsg) (ImportModel, tea.Cmd) {
 	s := msg.String()
-	action := m.getAction(s)
+	action := GetAction(m.configManager, s)
 	if action == "nav_up" || s == "up" || s == "k" {
 		if m.cursor > 0 {
 			m.cursor--
@@ -256,7 +253,7 @@ func (m ImportModel) handleSetListNavigation(msg tea.KeyMsg) (ImportModel, tea.C
 
 func (m ImportModel) handleActionNavigation(msg tea.KeyMsg) (ImportModel, tea.Cmd) {
 	s := msg.String()
-	action := m.getAction(s)
+	action := GetAction(m.configManager, s)
 	actions := m.getAvailableActions()
 	if action == "nav_up" || s == "up" || s == "k" {
 		if m.actionCursor > 0 {
