@@ -314,15 +314,15 @@ func (m ImportModel) renderProgressContent() string {
 	if m.importProgress.totalSets > 0 {
 		content.WriteString(m.renderProgressBar())
 	} else {
-		content.WriteString(blurredStyle.Render("Processing...") + "\n\n")
+		content.WriteString(m.spinner.View() + " " + blurredStyle.Render("Processing...") + "\n\n")
 	}
 	return content.String()
 }
 func (m ImportModel) renderCurrentSetStatus() string {
 	if m.importProgress.setID != "" {
-		return titleStyle.Render(fmt.Sprintf("Current: %s", m.importProgress.setID)) + "\n\n"
+		return m.spinner.View() + " " + titleStyle.Render(fmt.Sprintf("Downloading: %s", m.importProgress.setID)) + "\n\n"
 	}
-	return titleStyle.Render("Starting import...") + "\n\n"
+	return m.spinner.View() + " " + titleStyle.Render("Starting import...") + "\n\n"
 }
 func (m ImportModel) renderProgressBar() string {
 	var b strings.Builder

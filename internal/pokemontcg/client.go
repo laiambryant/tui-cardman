@@ -141,8 +141,92 @@ func mapTCGDexCardToCard(tcgdexCard tcgdexModels.Card) Card {
 		Number:     tcgdexCard.LocalID,
 		Artist:     getStringOrEmpty(tcgdexCard.Illustrator),
 		Rarity:     tcgdexCard.Rarity,
-		TCGPlayer:  nil,
-		CardMarket: nil,
+		TCGPlayer:  mapTCGPlayerPrices(tcgdexCard.Pricing),
+		CardMarket: mapCardMarketPrices(tcgdexCard.Pricing),
+	}
+}
+
+func getFloat(f *float64) float64 {
+	if f == nil {
+		return 0
+	}
+	return *f
+}
+
+func mapTCGPlayerPrices(pricing *tcgdexModels.Pricing) *TCGPlayerPrices {
+	if pricing == nil || pricing.TCGPlayer == nil {
+		return nil
+	}
+	tp := pricing.TCGPlayer
+	prices := make(map[string]TCGPlayerPrice)
+	if tp.Normal != nil {
+		prices["normal"] = TCGPlayerPrice{
+			Low:       getFloat(tp.Normal.LowPrice),
+			Mid:       getFloat(tp.Normal.MidPrice),
+			High:      getFloat(tp.Normal.HighPrice),
+			Market:    getFloat(tp.Normal.MarketPrice),
+			DirectLow: getFloat(tp.Normal.DirectLowPrice),
+		}
+	}
+	if tp.Reverse != nil {
+		prices["reverse"] = TCGPlayerPrice{
+			Low:       getFloat(tp.Reverse.LowPrice),
+			Mid:       getFloat(tp.Reverse.MidPrice),
+			High:      getFloat(tp.Reverse.HighPrice),
+			Market:    getFloat(tp.Reverse.MarketPrice),
+			DirectLow: getFloat(tp.Reverse.DirectLowPrice),
+		}
+	}
+	if len(prices) == 0 {
+		return nil
+	}
+	updatedAt := ""
+	if tp.Updated != nil {
+		updatedAt = tp.Updated.Format("2006/01/02")
+	}
+	return &TCGPlayerPrices{
+		UpdatedAt: updatedAt,
+		Prices:    prices,
+	}
+}
+
+func mapCardMarketPrices(pricing *tcgdexModels.Pricing) *CardMarketPrices {
+	if pricing == nil || pricing.Cardmarket == nil {
+		return nil
+	}
+	cm := pricing.Cardmarket
+	prices := make(map[string]CardMarketPrice)
+	if cm.Avg != nil || cm.Low != nil || cm.Trend != nil {
+		prices["normal"] = CardMarketPrice{
+			Avg:   getFloat(cm.Avg),
+			Low:   getFloat(cm.Low),
+			Trend: getFloat(cm.Trend),
+		}
+	}
+	if cm.AvgHolo != nil || cm.LowHolo != nil || cm.TrendHolo != nil {
+		prices["holo"] = CardMarketPrice{
+			Avg:   getFloat(cm.AvgHolo),
+			Low:   getFloat(cm.LowHolo),
+			Trend: getFloat(cm.TrendHolo),
+		}
+	}
+	if cm.AvgReverseHolo != nil || cm.LowReverseHolo != nil || cm.TrendReverseHolo != nil {
+		prices["reverseHolo"] = CardMarketPrice{
+			Avg:   getFloat(cm.AvgReverseHolo),
+			Low:   getFloat(cm.LowReverseHolo),
+			Trend: getFloat(cm.TrendReverseHolo),
+		}
+	}
+	if len(prices) == 0 {
+		return nil
+	}
+	updatedAt := ""
+	if cm.Updated != nil {
+		updatedAt = cm.Updated.Format("2006/01/02")
+	}
+	return &CardMarketPrices{
+		UpdatedAt: updatedAt,
+		Prices:    prices,
 	}
 }
 

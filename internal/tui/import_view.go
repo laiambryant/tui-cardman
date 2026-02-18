@@ -4,8 +4,13 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log/slog"
+	"strings"
+
+	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/laiambryant/tui-cardman/internal/config"
 	"github.com/laiambryant/tui-cardman/internal/model"
 	"github.com/laiambryant/tui-cardman/internal/pokemontcg"
@@ -14,8 +19,6 @@ import (
 	"github.com/laiambryant/tui-cardman/internal/services/importruns"
 	"github.com/laiambryant/tui-cardman/internal/services/prices"
 	"github.com/laiambryant/tui-cardman/internal/services/sets"
-	"log/slog"
-	"strings"
 )
 
 type ActionType int
@@ -64,6 +67,7 @@ type ImportModel struct {
 	height            int
 	modal             ModalModel
 	pendingAction     *ActionItem
+	spinner           spinner.Model
 }
 
 func NewImportModel(db *sql.DB, cfg *runtimecfg.Manager, styleManager *StyleManager, cardGames []model.CardGame) (ImportModel, error) {
@@ -82,6 +86,9 @@ func NewImportModel(db *sql.DB, cfg *runtimecfg.Manager, styleManager *StyleMana
 		importRunService, setService, cardService,
 		tcgPlayerPriceService, cardMarketPriceService,
 	)
+	s := spinner.New()
+	s.Spinner = ImportSpinner
+	s.Style = focusedStyle
 	selectedGame := &cardGames[0]
 	return ImportModel{
 		selectedCardGame: selectedGame,
@@ -98,6 +105,7 @@ func NewImportModel(db *sql.DB, cfg *runtimecfg.Manager, styleManager *StyleMana
 		databaseSetIDs:   make(map[string]bool),
 		cardGames:        cardGames,
 		cardGameCursor:   0,
+		spinner:          s,
 	}, nil
 }
 
@@ -199,6 +207,10 @@ func (m ImportModel) handleImportingState(msg tea.Msg) (ImportModel, tea.Cmd) {
 		if msg.String() == "ctrl+c" {
 			return m, tea.Quit
 		}
+	case spinner.TickMsg:
+		var cmd tea.Cmd
+		m.spinner, cmd = m.spinner.Update(msg)
+		return m, cmd
 	case importProgressMsg:
 		m.importProgress = msg
 		return m, nil
@@ -383,7 +395,7 @@ func (m ImportModel) executeConfirmedAction() (ImportModel, tea.Cmd) {
 			selectedSet := m.filteredSets[m.cursor]
 			m.isImporting = true
 			m.importProgress = importProgressMsg{setID: selectedSet.ID}
-			return m, m.importSetCmd(selectedSet.ID)
+			return m, tea.Batch(m.spinner.Tick, m.importSetCmd(selectedSet.ID))
 		}
 	case ActionDelete:
 		if len(m.filteredSets) > 0 && m.cursor < len(m.filteredSets) {
@@ -395,17 +407,17 @@ func (m ImportModel) executeConfirmedAction() (ImportModel, tea.Cmd) {
 			selectedSet := m.filteredSets[m.cursor]
 			m.isImporting = true
 			m.importProgress = importProgressMsg{setID: selectedSet.ID}
-			return m, tea.Sequence(
+			return m, tea.Batch(m.spinner.Tick, tea.Sequence(
 				m.deleteSetCmd(selectedSet.ID),
 				m.importSetCmd(selectedSet.ID),
-			)
+			))
 		}
 	case ActionImportAll:
 		m.isImporting = true
-		return m, m.importAllSetsCmd()
+		return m, tea.Batch(m.spinner.Tick, m.importAllSetsCmd())
 	case ActionImportUpdates:
 		m.isImporting = true
-		return m, m.importNewSetsCmd()
+		return m, tea.Batch(m.spinner.Tick, m.importNewSetsCmd())
 	}
 	return m, nil
 }
