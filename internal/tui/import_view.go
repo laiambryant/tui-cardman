@@ -68,6 +68,9 @@ type ImportModel struct {
 	modal             ModalModel
 	pendingAction     *ActionItem
 	spinner           spinner.Model
+	importQueue       []importQueueItem
+	queueProcessing   bool
+	queueCurrentIndex int
 }
 
 func NewImportModel(db *sql.DB, cfg *runtimecfg.Manager, styleManager *StyleManager, cardGames []model.CardGame) (ImportModel, error) {
@@ -117,8 +120,10 @@ func (m ImportModel) Init() tea.Cmd {
 	)
 }
 
-
 func (m ImportModel) handleImportSetResult(success bool, setID string, err error) (ImportModel, tea.Cmd) {
+	if m.queueProcessing {
+		return m.handleQueueItemResult(success, setID, err)
+	}
 	if success {
 		m.isImporting = false
 		m.statusMsg = fmt.Sprintf("Successfully imported set: %s", setID)
@@ -127,6 +132,42 @@ func (m ImportModel) handleImportSetResult(success bool, setID string, err error
 	m.isImporting = false
 	m.errorMsg = fmt.Sprintf("Failed to import set %s: %v", setID, err)
 	return m, nil
+}
+
+func (m ImportModel) handleQueueItemResult(success bool, setID string, err error) (ImportModel, tea.Cmd) {
+	if m.queueCurrentIndex < len(m.importQueue) {
+		if success {
+			m.importQueue[m.queueCurrentIndex].status = queueStatusCompleted
+		} else {
+			m.importQueue[m.queueCurrentIndex].status = queueStatusError
+			m.importQueue[m.queueCurrentIndex].err = err
+		}
+	}
+	m.queueCurrentIndex++
+	if m.queueCurrentIndex < len(m.importQueue) {
+		next := m.importQueue[m.queueCurrentIndex]
+		m.importQueue[m.queueCurrentIndex].status = queueStatusImporting
+		m.importProgress = importProgressMsg{
+			setID:         next.setID,
+			setsCompleted: m.queueCurrentIndex,
+			totalSets:     len(m.importQueue),
+		}
+		return m, m.importSetCmd(next.setID)
+	}
+	m.queueProcessing = false
+	m.isImporting = false
+	completed := 0
+	errored := 0
+	for _, item := range m.importQueue {
+		if item.status == queueStatusCompleted {
+			completed++
+		}
+		if item.status == queueStatusError {
+			errored++
+		}
+	}
+	m.statusMsg = fmt.Sprintf("Queue complete: %d imported, %d errors", completed, errored)
+	return m, tea.Batch(m.fetchDatabaseSetsCmd(), m.checkSelectedSetInDB())
 }
 
 func (m ImportModel) handleImportAllResult(success bool, operation string, err error) (ImportModel, tea.Cmd) {
@@ -264,6 +305,28 @@ func (m ImportModel) handleSetListNavigation(msg tea.KeyMsg) (ImportModel, tea.C
 			return m, m.checkSelectedSetInDB()
 		}
 	}
+	if s == "a" && len(m.filteredSets) > 0 && m.cursor < len(m.filteredSets) {
+		set := m.filteredSets[m.cursor]
+		if !m.databaseSetIDs[set.ID] {
+			m.addToQueue(set.ID, set.Name)
+			m.statusMsg = fmt.Sprintf("Added %s to queue (%d pending)", set.Name, m.queuePendingCount())
+		}
+		return m, nil
+	}
+	if s == "r" && len(m.filteredSets) > 0 && m.cursor < len(m.filteredSets) {
+		set := m.filteredSets[m.cursor]
+		m.removeFromQueue(set.ID)
+		m.statusMsg = fmt.Sprintf("Removed %s from queue (%d pending)", set.Name, m.queuePendingCount())
+		return m, nil
+	}
+	if s == "s" && len(m.importQueue) > 0 && !m.queueProcessing {
+		return m.startQueueProcessing()
+	}
+	if s == "c" && !m.queueProcessing {
+		m.clearCompletedFromQueue()
+		m.statusMsg = "Cleared completed items from queue"
+		return m, nil
+	}
 	var cmd tea.Cmd
 	m.searchInput, cmd = m.searchInput.Update(msg)
 	if m.searchInput.Value() != "" {
@@ -272,6 +335,30 @@ func (m ImportModel) handleSetListNavigation(msg tea.KeyMsg) (ImportModel, tea.C
 		m.filteredSets = m.availableSets
 	}
 	return m, cmd
+}
+
+func (m ImportModel) startQueueProcessing() (ImportModel, tea.Cmd) {
+	m.queueCurrentIndex = 0
+	for m.queueCurrentIndex < len(m.importQueue) {
+		if m.importQueue[m.queueCurrentIndex].status == queueStatusPending {
+			break
+		}
+		m.queueCurrentIndex++
+	}
+	if m.queueCurrentIndex >= len(m.importQueue) {
+		m.statusMsg = "No pending items in queue"
+		return m, nil
+	}
+	m.queueProcessing = true
+	m.isImporting = true
+	m.importQueue[m.queueCurrentIndex].status = queueStatusImporting
+	first := m.importQueue[m.queueCurrentIndex]
+	m.importProgress = importProgressMsg{
+		setID:         first.setID,
+		setsCompleted: 0,
+		totalSets:     len(m.importQueue),
+	}
+	return m, tea.Batch(m.spinner.Tick, m.importSetCmd(first.setID))
 }
 
 func (m ImportModel) handleActionNavigation(msg tea.KeyMsg) (ImportModel, tea.Cmd) {
@@ -413,11 +500,21 @@ func (m ImportModel) executeConfirmedAction() (ImportModel, tea.Cmd) {
 			))
 		}
 	case ActionImportAll:
-		m.isImporting = true
-		return m, tea.Batch(m.spinner.Tick, m.importAllSetsCmd())
+		for _, set := range m.availableSets {
+			m.addToQueue(set.ID, set.Name)
+		}
+		m.statusMsg = fmt.Sprintf("Added %d sets to queue. Press 's' to start.", len(m.availableSets))
+		return m, nil
 	case ActionImportUpdates:
-		m.isImporting = true
-		return m, tea.Batch(m.spinner.Tick, m.importNewSetsCmd())
+		added := 0
+		for _, set := range m.availableSets {
+			if !m.databaseSetIDs[set.ID] {
+				m.addToQueue(set.ID, set.Name)
+				added++
+			}
+		}
+		m.statusMsg = fmt.Sprintf("Added %d new sets to queue. Press 's' to start.", added)
+		return m, nil
 	}
 	return m, nil
 }

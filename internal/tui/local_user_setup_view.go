@@ -18,7 +18,6 @@ func (m *Model) initLocalUserSetupInputs() {
 	m.focusIndex = 0
 }
 
-
 func (m Model) localUserSetupView() string {
 	header := titleStyle.Render("Welcome to CardMan!")
 	body := m.renderLocalUserSetupBody()

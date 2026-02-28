@@ -17,6 +17,7 @@ type ListService interface {
 	DeleteList(ctx context.Context, listID int64) error
 	GetAllQuantitiesForList(listID int64) (map[int64]int, error)
 	UpsertListCardBatch(ctx context.Context, listID int64, updates map[int64]int) error
+	GetListsContainingCard(userID, cardID int64) ([]model.UserList, error)
 }
 
 type ListServiceImpl struct {
@@ -65,6 +66,12 @@ const (
 		DELETE FROM user_list_cards
 		WHERE list_id = ? AND card_id = ?
 	`
+	selectListsContainingCardQuery = `
+		SELECT ul.id, ul.user_id, ul.card_game_id, ul.name, ul.description, ul.color, ul.created_at, ul.updated_at
+		FROM user_lists ul
+		JOIN user_list_cards ulc ON ul.id = ulc.list_id
+		WHERE ulc.card_id = ? AND ul.user_id = ?
+	`
 )
 
 func (s *ListServiceImpl) CreateList(ctx context.Context, userID, cardGameID int64, name, description, color string) (*model.UserList, error) {
@@ -78,12 +85,12 @@ func (s *ListServiceImpl) CreateList(ctx context.Context, userID, cardGameID int
 		return nil, &FailedToCreateListError{Err: err}
 	}
 	return &model.UserList{
-		ID:         id,
-		UserID:     userID,
-		CardGameID: cardGameID,
-		Name:       name,
+		ID:          id,
+		UserID:      userID,
+		CardGameID:  cardGameID,
+		Name:        name,
 		Description: description,
-		Color:      color,
+		Color:       color,
 	}, nil
 }
 
@@ -179,4 +186,24 @@ func (s *ListServiceImpl) UpsertListCardBatch(ctx context.Context, listID int64,
 		slog.Debug("batch upserted list cards", "list_id", listID, "update_count", len(updates))
 		return nil
 	})
+}
+
+func (s *ListServiceImpl) GetListsContainingCard(userID, cardID int64) ([]model.UserList, error) {
+	rows, err := db.Query(s.db, selectListsContainingCardQuery, cardID, userID)
+	if err != nil {
+		return nil, &FailedToQueryListsError{Err: err}
+	}
+	defer rows.Close()
+	var lists []model.UserList
+	for rows.Next() {
+		var l model.UserList
+		if err := rows.Scan(&l.ID, &l.UserID, &l.CardGameID, &l.Name, &l.Description, &l.Color, &l.CreatedAt, &l.UpdatedAt); err != nil {
+			return nil, &FailedToScanListError{Err: err}
+		}
+		lists = append(lists, l)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, &FailedToQueryListsError{Err: err}
+	}
+	return lists, nil
 }

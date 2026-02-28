@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"log/slog"
+	"time"
 
 	"github.com/laiambryant/tui-cardman/internal/db"
 	"github.com/laiambryant/tui-cardman/internal/logging"
@@ -21,6 +22,13 @@ type UserCollectionService interface {
 	UpsertCollectionBatch(ctx context.Context, userID int64, updates map[int64]int) error
 	GetAllQuantitiesForGame(userID, gameID int64) (map[int64]int, error)
 	GetCollectionValue(userID, gameID int64) (float64, error)
+	GetCollectionValueHistory(userID, gameID int64) ([]ValueSnapshot, error)
+	SnapshotCollectionValue(ctx context.Context, userID, gameID int64) error
+}
+
+type ValueSnapshot struct {
+	Date  time.Time
+	Value float64
 }
 
 // UserCollectionServiceImpl implements the UserCollectionService interface
@@ -94,6 +102,18 @@ const (
 		JOIN prices_tcgplayer p ON p.card_id = uc.card_id
 		JOIN cards c ON uc.card_id = c.id
 		WHERE uc.user_id = ? AND c.card_game_id = ?
+	`
+	selectValueHistoryQuery = `
+		SELECT snapshot_date, total_value
+		FROM collection_value_snapshots
+		WHERE user_id = ? AND card_game_id = ?
+		ORDER BY snapshot_date ASC
+	`
+	upsertValueSnapshotQuery = `
+		INSERT INTO collection_value_snapshots (user_id, card_game_id, total_value, snapshot_date)
+		VALUES (?, ?, ?, DATE('now'))
+		ON CONFLICT(user_id, card_game_id, snapshot_date)
+		DO UPDATE SET total_value = excluded.total_value, created_at = CURRENT_TIMESTAMP
 	`
 )
 
@@ -341,4 +361,38 @@ func (s *UserCollectionServiceImpl) UpsertCollectionBatch(ctx context.Context, u
 		slog.Debug("batch upserted collection", "user_id", userID, "update_count", len(updates))
 		return nil
 	})
+}
+
+func (s *UserCollectionServiceImpl) GetCollectionValueHistory(userID, gameID int64) ([]ValueSnapshot, error) {
+	rows, err := db.Query(s.db, selectValueHistoryQuery, userID, gameID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var snapshots []ValueSnapshot
+	for rows.Next() {
+		var snap ValueSnapshot
+		if err := rows.Scan(&snap.Date, &snap.Value); err != nil {
+			slog.Error("failed to scan value snapshot", "error", err)
+			continue
+		}
+		snapshots = append(snapshots, snap)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return snapshots, nil
+}
+
+func (s *UserCollectionServiceImpl) SnapshotCollectionValue(ctx context.Context, userID, gameID int64) error {
+	value, err := s.GetCollectionValue(userID, gameID)
+	if err != nil {
+		return err
+	}
+	_, err = db.ExecContext(ctx, s.db, upsertValueSnapshotQuery, userID, gameID, value)
+	if err != nil {
+		slog.Error("failed to snapshot collection value", "user_id", userID, "game_id", gameID, "error", err)
+		return err
+	}
+	return nil
 }

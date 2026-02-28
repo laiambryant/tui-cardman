@@ -161,6 +161,26 @@ func RenderButton(isFocused bool, label string) string {
 	}
 	return blurredStyle.Render(label)
 }
+func RenderButtonItem(sm *StyleManager, label string, isSelected bool, maxWidth int) string {
+	labelWidth := lipgloss.Width(label)
+	btnWidth := min(labelWidth+4, max(maxWidth, 10))
+	if isSelected {
+		return sm.applyBGFG(lipgloss.NewStyle().
+			Width(btnWidth).
+			Align(lipgloss.Center).
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(sm.scheme.Focused).
+			Foreground(sm.scheme.Focused).
+			Bold(true).
+			Padding(0, 1)).Render(label) + "\n"
+	}
+	return sm.applyBGFG(lipgloss.NewStyle().
+		Width(btnWidth).
+		Align(lipgloss.Center).
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(sm.scheme.Blurred).
+		Padding(0, 1)).Render(label) + "\n"
+}
 func GetAction(cfg *runtimecfg.Manager, s string) string {
 	return MatchActionOrDefault(cfg, s, "")
 }

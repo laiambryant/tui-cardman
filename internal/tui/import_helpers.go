@@ -193,6 +193,9 @@ func (m ImportModel) renderSetListItem(index int) string {
 	set := m.filteredSets[index]
 	status := getSetStatusIcon(m.databaseSetIDs[set.ID])
 	line := fmt.Sprintf("%s %s - %s (%d cards)", status, set.ID, set.Name, set.Total)
+	if m.isInQueue(set.ID) {
+		line += " [Q]"
+	}
 	return RenderListItem(line, m.cursor == index && !m.focusOnActions)
 }
 
@@ -203,9 +206,37 @@ func (m ImportModel) renderActionsPanelContent(width int) string {
 		b.WriteString(m.renderSelectedSetInfo())
 	}
 	b.WriteString(m.renderActionsList())
-
+	if len(m.importQueue) > 0 {
+		b.WriteString("\n" + titleStyle.Render("Queue") + "\n")
+		b.WriteString(m.renderQueueList())
+	}
 	panel := m.styleManager.Box(m.styleManager.scheme.Blurred, 0, 0, width, 2, 1).Render(b.String())
 	return panel
+}
+
+func (m ImportModel) renderQueueList() string {
+	var b strings.Builder
+	maxItems := 8
+	shown := 0
+	for _, item := range m.importQueue {
+		if shown >= maxItems {
+			remaining := len(m.importQueue) - shown
+			b.WriteString(blurredStyle.Render(fmt.Sprintf("  ... and %d more", remaining)) + "\n")
+			break
+		}
+		icon := queueItemIcon(item.status)
+		line := fmt.Sprintf("  %s %s", icon, item.setName)
+		if item.status == queueStatusError && item.err != nil {
+			line += " " + errorStyle.Render("(failed)")
+		}
+		if item.status == queueStatusImporting {
+			b.WriteString(focusedStyle.Render(line) + "\n")
+		} else {
+			b.WriteString(blurredStyle.Render(line) + "\n")
+		}
+		shown++
+	}
+	return b.String()
 }
 func (m ImportModel) renderSelectedSetInfo() string {
 	var b strings.Builder
@@ -284,6 +315,7 @@ func (m ImportModel) renderHelp() string {
 		KeyItem{"select", "Enter", "Execute"},
 		KeyItem{"back", "Q", "Back"},
 	)
+	help += "\n" + helpStyle.Render("a: Queue • r: Unqueue • s: Start Queue • c: Clear Done")
 	return helpStyle.Render(help)
 }
 
@@ -319,6 +351,10 @@ func (m ImportModel) renderProgressContent() string {
 	return content.String()
 }
 func (m ImportModel) renderCurrentSetStatus() string {
+	if m.queueProcessing && m.importProgress.setID != "" {
+		queueStatus := fmt.Sprintf("(%d/%d) Downloading: %s", m.queueCurrentIndex+1, len(m.importQueue), m.importProgress.setID)
+		return m.spinner.View() + " " + titleStyle.Render(queueStatus) + "\n\n"
+	}
 	if m.importProgress.setID != "" {
 		return m.spinner.View() + " " + titleStyle.Render(fmt.Sprintf("Downloading: %s", m.importProgress.setID)) + "\n\n"
 	}

@@ -51,7 +51,7 @@ func (m Model) renderCardGamesPanel(width, height int) string {
 		b.WriteString(errorStyle.Render("No card games found.") + "\n")
 	} else {
 		for i, game := range m.cardGames {
-			b.WriteString(RenderListItem(game.Name, m.cursor == i && m.mainFocusPanel == 0))
+			b.WriteString(RenderButtonItem(m.styleManager, game.Name, m.cursor == i && m.mainFocusPanel == 0, 40))
 		}
 	}
 	return RenderPanel(m.styleManager, b.String(), width, height, m.mainFocusPanel == 0, 2, 1)

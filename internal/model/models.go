@@ -54,14 +54,14 @@ type ButtonConfiguration struct {
 }
 
 type UserList struct {
-	ID         int64     `json:"id"`
-	UserID     int64     `json:"user_id"`
-	CardGameID int64     `json:"card_game_id"`
-	Name       string    `json:"name"`
-	Description string   `json:"description"`
-	Color      string    `json:"color"`
-	CreatedAt  time.Time `json:"created_at"`
-	UpdatedAt  time.Time `json:"updated_at"`
+	ID          int64     `json:"id"`
+	UserID      int64     `json:"user_id"`
+	CardGameID  int64     `json:"card_game_id"`
+	Name        string    `json:"name"`
+	Description string    `json:"description"`
+	Color       string    `json:"color"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }
 
 type UserListCard struct {
@@ -74,7 +74,44 @@ type UserListCard struct {
 	Card      *Card     `json:"card,omitempty"`
 }
 
-// Set represents a set of cards
+type TCGPlayerPriceRow struct {
+	PriceType  string
+	Low        float64
+	Mid        float64
+	High       float64
+	Market     float64
+	DirectLow  float64
+	URL        string
+	SnapshotAt time.Time
+}
+
+type CardMarketPriceRow struct {
+	AvgPrice   float64
+	TrendPrice float64
+	URL        string
+	SnapshotAt time.Time
+}
+
+type Deck struct {
+	ID         int64
+	UserID     int64
+	CardGameID int64
+	Name       string
+	Format     string
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
+}
+
+type DeckCard struct {
+	ID        int64
+	DeckID    int64
+	CardID    int64
+	Quantity  int
+	CreatedAt time.Time
+	UpdatedAt time.Time
+	Card      *Card
+}
+
 type Set struct {
 	ID           int64     `json:"id"`
 	APIID        string    `json:"api_id"`

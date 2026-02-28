@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"log/slog"
@@ -13,7 +14,9 @@ import (
 	"github.com/laiambryant/tui-cardman/internal/runtimecfg"
 	"github.com/laiambryant/tui-cardman/internal/services/cardgame"
 	card "github.com/laiambryant/tui-cardman/internal/services/cards"
+	"github.com/laiambryant/tui-cardman/internal/services/deck"
 	listservice "github.com/laiambryant/tui-cardman/internal/services/list"
+	"github.com/laiambryant/tui-cardman/internal/services/prices"
 	"github.com/laiambryant/tui-cardman/internal/services/user"
 	"github.com/laiambryant/tui-cardman/internal/services/usercollection"
 )
@@ -32,6 +35,7 @@ const (
 	ScreenSplash
 	ScreenCardGameMenu
 	ScreenLists
+	ScreenDeckBuilder
 )
 
 type splashDoneMsg struct{}
@@ -45,6 +49,9 @@ type Model struct {
 	cardService       card.CardService
 	collectionService usercollection.UserCollectionService
 	listService       listservice.ListService
+	deckService       deck.DeckService
+	tcgPriceService   prices.TCGPlayerPriceService
+	cmPriceService    prices.CardMarketPriceService
 	db                *sql.DB
 	user              *auth.User
 	configManager     *runtimecfg.Manager
@@ -58,6 +65,7 @@ type Model struct {
 	cardGameTabs      CardGameTabsModel
 	cardGameMenuModel *CardGameMenuModel
 	listsModel        *ListsModel
+	deckBuilderModel  *DeckBuilderModel
 	selectedGame      *model.CardGame
 	settingsModel     *SettingsModel
 	mainFocusPanel    int
@@ -74,7 +82,7 @@ func NewModel(db *sql.DB, isSSHMode bool) (*Model, error) {
 		return nil, &FailedToInitializeConfigManagerError{Err: err}
 	}
 	styleManager := NewStyleManager()
-	userService, cardGameService, cardService, collectionService, listSvc, authSvc := initServices(db)
+	userService, cardGameService, cardService, collectionService, listSvc, deckSvc, tcgPriceSvc, cmPriceSvc, authSvc := initServices(db)
 	cardGames, err := cardGameService.GetAllCardGames()
 	if err != nil {
 		return nil, &FailedToLoadCardGamesError{Err: err}
@@ -86,6 +94,9 @@ func NewModel(db *sql.DB, isSSHMode bool) (*Model, error) {
 		cardService:       cardService,
 		collectionService: collectionService,
 		listService:       listSvc,
+		deckService:       deckSvc,
+		tcgPriceService:   tcgPriceSvc,
+		cmPriceService:    cmPriceSvc,
 		db:                db,
 		isSSHMode:         isSSHMode,
 		configManager:     configManager,
@@ -123,14 +134,17 @@ func NewModel(db *sql.DB, isSSHMode bool) (*Model, error) {
 	return m, nil
 }
 
-func initServices(db *sql.DB) (user.UserService, cardgame.CardGameService, card.CardService, usercollection.UserCollectionService, listservice.ListService, *auth.Service) {
+func initServices(db *sql.DB) (user.UserService, cardgame.CardGameService, card.CardService, usercollection.UserCollectionService, listservice.ListService, deck.DeckService, prices.TCGPlayerPriceService, prices.CardMarketPriceService, *auth.Service) {
 	userService := user.NewUserService(db)
 	cardGameService := cardgame.NewCardGameService(db)
 	cardService := card.NewCardService(db)
 	collectionService := usercollection.NewUserCollectionService(db)
 	listSvc := listservice.NewListService(db)
+	deckSvc := deck.NewDeckService(db)
+	tcgPriceSvc := prices.NewTCGPlayerPriceService(db)
+	cmPriceSvc := prices.NewCardMarketPriceService(db)
 	authSvc := auth.NewService(&dbAdapter{userService: userService})
-	return userService, cardGameService, cardService, collectionService, listSvc, authSvc
+	return userService, cardGameService, cardService, collectionService, listSvc, deckSvc, tcgPriceSvc, cmPriceSvc, authSvc
 }
 
 func isNavigationKey(action, s string) bool {
@@ -148,7 +162,6 @@ func isBackKey(action, s string) bool {
 func isQuitKey(action, s string) bool {
 	return action == "quit" || action == "quit_alt" || s == "ctrl+c"
 }
-
 
 func (m *Model) updateInputFocus(cmds []tea.Cmd) tea.Cmd {
 	for i := 0; i <= len(m.inputs)-1; i++ {
@@ -302,7 +315,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleScreenUpdates(msg)
 	case tea.KeyMsg:
 		s := msg.String()
-		action := GetAction(m.configManager,s)
+		action := GetAction(m.configManager, s)
 		slog.Debug("tui key pressed", "key", s, "action", action, "screen", m.screen)
 		if newModel, cmd := m.handleSettingsKey(action); cmd != nil {
 			return newModel, cmd
@@ -392,6 +405,28 @@ func (m *Model) handleMainScreenSelect() (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleScreenUpdates(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if m.importModel != nil && m.importModel.queueProcessing && m.screen != ScreenImport && m.screen != ScreenMain {
+		if m.isImportMessage(msg) {
+			var importCmd tea.Cmd
+			*m.importModel, importCmd = m.importModel.Update(msg)
+			screenModel, screenCmd := m.dispatchScreenUpdate(msg)
+			return screenModel, tea.Batch(importCmd, screenCmd)
+		}
+	}
+	return m.dispatchScreenUpdate(msg)
+}
+
+func (m *Model) isImportMessage(msg tea.Msg) bool {
+	switch msg.(type) {
+	case importSetSuccessMsg, importSetErrorMsg, importProgressMsg,
+		importAllSetsSuccessMsg, importAllSetsErrorMsg,
+		importNewSetsSuccessMsg, importNewSetsErrorMsg:
+		return true
+	}
+	return false
+}
+
+func (m Model) dispatchScreenUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch m.screen {
 	case ScreenLogin, ScreenRegister, ScreenLocalUserSetup:
 		return m, m.updateInputs(msg)
@@ -403,6 +438,8 @@ func (m Model) handleScreenUpdates(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateCardGameMenu(msg)
 	case ScreenLists:
 		return m.updateLists(msg)
+	case ScreenDeckBuilder:
+		return m.updateDeckBuilder(msg)
 	case ScreenImport:
 		return m.updateImport(msg)
 	case ScreenMain:
@@ -428,7 +465,7 @@ func (m *Model) updateCardGameTabs(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	m.cardGameTabs, cmd = m.cardGameTabs.Update(msg)
 	if keyMsg, ok := msg.(tea.KeyMsg); ok {
-		action := GetAction(m.configManager,keyMsg.String())
+		action := GetAction(m.configManager, keyMsg.String())
 		if isBackKey(action, keyMsg.String()) {
 			m.screen = ScreenCardGameMenu
 			return m, nil
@@ -470,6 +507,16 @@ func (m *Model) updateCardGameMenu(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.listsModel = listsModel
 			m.screen = ScreenLists
 			return m, m.listsModel.Init()
+		case MenuMyDecks:
+			deckModel, err := m.createDeckBuilderModel(m.selectedGame)
+			if err != nil {
+				slog.Error("failed to create deck builder model", "error", err)
+				m.errorMsg = fmt.Sprintf("Failed to load decks: %v", err)
+				return m, nil
+			}
+			m.deckBuilderModel = deckModel
+			m.screen = ScreenDeckBuilder
+			return m, m.deckBuilderModel.Init()
 		}
 	}
 	return m, cmd
@@ -489,12 +536,26 @@ func (m *Model) updateLists(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
+func (m *Model) updateDeckBuilder(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if m.deckBuilderModel == nil {
+		return m, nil
+	}
+	var cmd tea.Cmd
+	*m.deckBuilderModel, cmd = m.deckBuilderModel.Update(msg)
+	if m.deckBuilderModel.shouldGoBack {
+		m.deckBuilderModel.shouldGoBack = false
+		m.screen = ScreenCardGameMenu
+		return m, nil
+	}
+	return m, cmd
+}
+
 func (m *Model) updateImport(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if m.importModel != nil {
 		var cmd tea.Cmd
 		*m.importModel, cmd = m.importModel.Update(msg)
 		if keyMsg, ok := msg.(tea.KeyMsg); ok {
-			action := GetAction(m.configManager,keyMsg.String())
+			action := GetAction(m.configManager, keyMsg.String())
 			if isBackKey(action, keyMsg.String()) && !m.importModel.isImporting {
 				m.screen = ScreenMain
 				return m, nil
@@ -539,6 +600,11 @@ func (m Model) View() string {
 			return m.listsModel.View()
 		}
 		return ""
+	case ScreenDeckBuilder:
+		if m.deckBuilderModel != nil {
+			return m.deckBuilderModel.View()
+		}
+		return ""
 	case ScreenImport:
 		if m.importModel != nil {
 			return m.importModel.View()
@@ -573,6 +639,17 @@ func (m *Model) createCardGameTabsModel(selectedGame *model.CardGame) (CardGameT
 	cardGameTabs.modal = cardGameTabs.modal.SetDimensions(m.width, m.height)
 	cardGameTabs.collectionService = m.collectionService
 	cardGameTabs.user = m.user
+	cardGameTabs.cardDetail = &CardDetailModel{
+		styleManager: m.styleManager,
+		tcgService:   m.tcgPriceService,
+		cmService:    m.cmPriceService,
+		listService:  m.listService,
+		width:        m.width,
+		height:       m.height,
+	}
+	if m.user != nil {
+		cardGameTabs.cardDetail.userID = m.user.ID
+	}
 	cards, err := m.cardService.GetCardsByGameID(selectedGame.ID)
 	if err != nil {
 		return cardGameTabs, &FailedToLoadCardsError{Err: err}
@@ -593,6 +670,13 @@ func (m *Model) createCardGameTabsModel(selectedGame *model.CardGame) (CardGameT
 			cardGameTabs.dbQuantities = quantities
 		}
 		cardGameTabs.computeCollectionStats()
+		_ = m.collectionService.SnapshotCollectionValue(context.Background(), m.user.ID, selectedGame.ID)
+		valueHistory, err := m.collectionService.GetCollectionValueHistory(m.user.ID, selectedGame.ID)
+		if err != nil {
+			slog.Error("failed to load value history", "error", err)
+		} else {
+			cardGameTabs.valueHistory = valueHistory
+		}
 		value, err := m.collectionService.GetCollectionValue(m.user.ID, selectedGame.ID)
 		if err != nil {
 			slog.Error("failed to load collection value", "user_id", m.user.ID, "game_id", selectedGame.ID, "error", err)
@@ -621,6 +705,26 @@ func (m *Model) createListsModel(selectedGame *model.CardGame) (*ListsModel, err
 		}
 	}
 	return &listsModel, nil
+}
+
+func (m *Model) createDeckBuilderModel(selectedGame *model.CardGame) (*DeckBuilderModel, error) {
+	cards, err := m.cardService.GetCardsByGameID(selectedGame.ID)
+	if err != nil {
+		return nil, &FailedToLoadCardsError{Err: err}
+	}
+	deckModel := NewDeckBuilderModel(selectedGame, m.user, m.deckService, cards, m.configManager, m.styleManager)
+	deckModel.width = m.width
+	deckModel.height = m.height
+	deckModel.modal = deckModel.modal.SetDimensions(m.width, m.height)
+	if m.user != nil {
+		decks, err := m.deckService.GetDecksByUserAndGame(m.user.ID, selectedGame.ID)
+		if err != nil {
+			slog.Error("failed to load decks", "error", err)
+		} else {
+			deckModel.decks = decks
+		}
+	}
+	return &deckModel, nil
 }
 
 func (m *Model) createImportModel() (ImportModel, error) {

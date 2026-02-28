@@ -49,3 +49,27 @@ func (e *FailedToInsertCardMarketPriceError) Error() string {
 func (e *FailedToInsertCardMarketPriceError) Unwrap() error {
 	return e.Err
 }
+
+type FailedToQueryTCGPlayerPricesError struct {
+	Err error
+}
+
+func (e *FailedToQueryTCGPlayerPricesError) Error() string {
+	return fmt.Sprintf("failed to query TCGPlayer prices: %v", e.Err)
+}
+
+func (e *FailedToQueryTCGPlayerPricesError) Unwrap() error {
+	return e.Err
+}
+
+type FailedToQueryCardMarketPricesError struct {
+	Err error
+}
+
+func (e *FailedToQueryCardMarketPricesError) Error() string {
+	return fmt.Sprintf("failed to query CardMarket prices: %v", e.Err)
+}
+
+func (e *FailedToQueryCardMarketPricesError) Unwrap() error {
+	return e.Err
+}

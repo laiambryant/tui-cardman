@@ -12,6 +12,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/laiambryant/tui-cardman/internal/auth"
+	"github.com/laiambryant/tui-cardman/internal/export"
 	"github.com/laiambryant/tui-cardman/internal/model"
 	"github.com/laiambryant/tui-cardman/internal/runtimecfg"
 	"github.com/laiambryant/tui-cardman/internal/services/usercollection"
@@ -23,6 +24,8 @@ type Tab int
 const (
 	TabCollection Tab = iota
 	TabCardSearch
+	TabValueHistory
+	tabCount
 )
 
 type setCompletionData struct {
@@ -61,6 +64,9 @@ type CardGameTabsModel struct {
 	userSearchTable     table.Model
 	userSearchInput     textinput.Model
 	searchTabFocus      int
+	cardDetail          *CardDetailModel
+	valueHistory        []usercollection.ValueSnapshot
+	exportState         ExportState
 }
 
 // NewCardGameTabsModel creates a new card game tabs model
@@ -238,6 +244,21 @@ func (m CardGameTabsModel) Update(msg tea.Msg) (CardGameTabsModel, tea.Cmd) {
 		m.width = sizeMsg.Width
 		m.height = sizeMsg.Height
 		m.modal = m.modal.SetDimensions(sizeMsg.Width, sizeMsg.Height)
+		if m.cardDetail != nil {
+			m.cardDetail.width = sizeMsg.Width
+			m.cardDetail.height = sizeMsg.Height
+		}
+		return m, nil
+	}
+	if m.cardDetail != nil && m.cardDetail.visible {
+		if _, ok := msg.(cardDetailLoadedMsg); ok {
+			cmd := m.cardDetail.Update(msg)
+			return m, cmd
+		}
+		if keyMsg, ok := msg.(tea.KeyMsg); ok {
+			cmd := m.cardDetail.Update(keyMsg)
+			return m, cmd
+		}
 		return m, nil
 	}
 	if m.modal.IsVisible() {
@@ -245,7 +266,21 @@ func (m CardGameTabsModel) Update(msg tea.Msg) (CardGameTabsModel, tea.Cmd) {
 		m.modal, cmd = m.modal.Update(msg)
 		return m, cmd
 	}
+	if m.exportState.active {
+		if keyMsg, ok := msg.(tea.KeyMsg); ok {
+			cmd := m.exportState.HandleKey(keyMsg.String())
+			return m, cmd
+		}
+	}
 	switch msg := msg.(type) {
+	case exportDoneMsg:
+		m.exportState.HandleResult(msg)
+		return m, nil
+	case cardDetailLoadedMsg:
+		if m.cardDetail != nil {
+			m.cardDetail.Update(msg)
+		}
+		return m, nil
 	case saveCollectionMsg:
 		return m.performSaveCollection()
 	case tea.KeyMsg:
@@ -264,7 +299,7 @@ func (m CardGameTabsModel) Update(msg tea.Msg) (CardGameTabsModel, tea.Cmd) {
 
 		// Tab navigation
 		if action == "nav_next_tab" || action == "nav_right" || s == "right" {
-			m.currentTab = (m.currentTab + 1) % 2
+			m.currentTab = (m.currentTab + 1) % tabCount
 			m = m.updateTableForTab()
 			if m.currentTab == TabCardSearch {
 				m.searchInput.Focus()
@@ -276,7 +311,7 @@ func (m CardGameTabsModel) Update(msg tea.Msg) (CardGameTabsModel, tea.Cmd) {
 
 		if action == "nav_prev_tab" || action == "nav_left" || s == "left" {
 			if m.currentTab == 0 {
-				m.currentTab = 1
+				m.currentTab = tabCount - 1
 			} else {
 				m.currentTab--
 			}
@@ -353,6 +388,10 @@ func (m CardGameTabsModel) Update(msg tea.Msg) (CardGameTabsModel, tea.Cmd) {
 			}
 			return m, nil
 		}
+		if s == "x" && m.currentTab == TabCardSearch {
+			m.exportState = NewExportState("collection", m.selectedGame.Name, false, "", m.buildCollectionExportRows)
+			return m, nil
+		}
 		if m.currentTab == TabCardSearch && m.searchTabFocus == 0 {
 			if action == "increment_quantity" {
 				return m.handleIncrementQuantity()
@@ -362,6 +401,14 @@ func (m CardGameTabsModel) Update(msg tea.Msg) (CardGameTabsModel, tea.Cmd) {
 			}
 			if action == "save" {
 				return m.handleSaveCollection()
+			}
+			if (action == "select" || s == "enter") && m.cardDetail != nil {
+				card, ok := m.getSelectedCard()
+				if ok {
+					qty := m.dbQuantities[card.ID] + m.tempQuantityChanges[card.ID]
+					cmd := m.cardDetail.Open(card, qty)
+					return m, cmd
+				}
 			}
 		}
 	}
@@ -392,6 +439,9 @@ func (m CardGameTabsModel) Update(msg tea.Msg) (CardGameTabsModel, tea.Cmd) {
 }
 
 func (m CardGameTabsModel) View() string {
+	if m.cardDetail != nil && m.cardDetail.visible {
+		return m.cardDetail.View()
+	}
 	header := m.renderCardGameTabsHeader()
 	footer := m.renderCardGameTabsFooter()
 	return RenderFramedWithModal(header, footer, m.renderCardGameTabsBody, m.width, m.height, m.styleManager, &m.modal)
@@ -402,7 +452,7 @@ func (m CardGameTabsModel) renderCardGameTabsHeader() string {
 	if m.selectedGame != nil {
 		b.WriteString(m.styleManager.GetTitleStyle().Render(m.selectedGame.Name+" Collection Manager") + "\n")
 	}
-	b.WriteString(RenderTabBar(m.styleManager, []string{"Collection", "Card Search"}, int(m.currentTab)))
+	b.WriteString(RenderTabBar(m.styleManager, []string{"Collection", "Card Search", "Value"}, int(m.currentTab)))
 	return b.String()
 }
 
@@ -412,12 +462,62 @@ func (m CardGameTabsModel) renderCardGameTabsBody(availableHeight int) string {
 		return m.renderCollectionTab(availableHeight)
 	case TabCardSearch:
 		return m.renderCardSearchTab(availableHeight)
+	case TabValueHistory:
+		return m.renderValueHistoryTab(availableHeight)
 	}
 	return ""
 }
 
+func (m CardGameTabsModel) renderValueHistoryTab(availableHeight int) string {
+	contentWidth := m.width - frameBorderSize - framePaddingX*2
+	if contentWidth < 20 {
+		contentWidth = 20
+	}
+	var b strings.Builder
+	ts := m.styleManager.GetTitleStyle()
+	ns := m.styleManager.GetNoStyle()
+	b.WriteString(ts.Render("Collection Value History") + "\n\n")
+	valueStr := "N/A"
+	if m.collectionValue > 0 {
+		valueStr = fmt.Sprintf("$%.2f", m.collectionValue)
+	}
+	b.WriteString(ts.Render(valueStr) + "\n")
+	if len(m.valueHistory) >= 2 {
+		if change7d, ok := calcValueChange(m.valueHistory, 7); ok {
+			changeStyle := m.styleManager.applyBGFG(lipgloss.NewStyle().Foreground(lipgloss.Color("34")))
+			if change7d < 0 {
+				changeStyle = m.styleManager.applyBGFG(lipgloss.NewStyle().Foreground(lipgloss.Color("160")))
+			}
+			b.WriteString(ns.Render("7d: ") + changeStyle.Render(fmt.Sprintf("%+.1f%%", change7d)))
+			b.WriteString("  ")
+		}
+		if change30d, ok := calcValueChange(m.valueHistory, 30); ok {
+			changeStyle := m.styleManager.applyBGFG(lipgloss.NewStyle().Foreground(lipgloss.Color("34")))
+			if change30d < 0 {
+				changeStyle = m.styleManager.applyBGFG(lipgloss.NewStyle().Foreground(lipgloss.Color("160")))
+			}
+			b.WriteString(ns.Render("30d: ") + changeStyle.Render(fmt.Sprintf("%+.1f%%", change30d)))
+		}
+		b.WriteString("\n")
+	}
+	b.WriteString("\n")
+	chartHeight := availableHeight - 8
+	if chartHeight < 3 {
+		chartHeight = 3
+	}
+	b.WriteString(renderValueChart(m.valueHistory, contentWidth, chartHeight, m.styleManager))
+	return b.String()
+}
+
 func (m CardGameTabsModel) renderCardGameTabsFooter() string {
-	return m.styleManager.GetHelpStyle().Render(m.buildHelpText())
+	if m.exportState.active {
+		return m.exportState.Render(m.styleManager)
+	}
+	footer := m.styleManager.GetHelpStyle().Render(m.buildHelpText())
+	if m.exportState.statusMsg != "" {
+		footer = m.styleManager.GetHelpStyle().Render(m.exportState.statusMsg) + "  " + footer
+	}
+	return footer
 }
 func (m CardGameTabsModel) buildHelpText() string {
 	hb := NewHelpBuilder(m.configManager)
@@ -426,7 +526,7 @@ func (m CardGameTabsModel) buildHelpText() string {
 			KeyItem{"increment_quantity", "+", "Add"},
 			KeyItem{"decrement_quantity", "Delete", "Remove"},
 			KeyItem{"save", "Ctrl+S", "Save"},
-		) + " • " + hb.Pair("nav_up", "↑", "nav_down", "↓", "Navigate") + " • " + hb.Build(KeyItem{"back", "Q", "Back"})
+		) + " • x: Export • " + hb.Pair("nav_up", "↑", "nav_down", "↓", "Navigate") + " • " + hb.Build(KeyItem{"back", "Q", "Back"})
 	}
 	if m.currentTab == TabCollection {
 		return "Tab: Switch panel • " + hb.Pair("nav_up", "↑", "nav_down", "↓", "Navigate") + " • " + hb.Pair("nav_prev_tab", "Shift+Tab", "nav_next_tab", "Tab", "Switch tabs") + " • " + hb.Build(KeyItem{"back", "Q", "Back"})
@@ -524,45 +624,21 @@ func (m CardGameTabsModel) renderCollectionTab(availableHeight int) string {
 				ownedCards[uc.Card.ID] = true
 			}
 		}
-		var spotCards []struct {
-			name  string
-			owned bool
-		}
+		var setCards []model.Card
 		for i := range m.cards {
 			if m.cards[i].Set != nil && m.cards[i].Set.ID == m.spotlightSetID {
-				spotCards = append(spotCards, struct {
-					name  string
-					owned bool
-				}{m.cards[i].Name, ownedCards[m.cards[i].ID]})
+				setCards = append(setCards, m.cards[i])
 			}
-		}
-		visibleLines := spotlightHeight - 3
-		if visibleLines < 1 {
-			visibleLines = 1
-		}
-		start := m.spotlightScroll
-		if start > len(spotCards)-visibleLines {
-			start = len(spotCards) - visibleLines
-		}
-		if start < 0 {
-			start = 0
-		}
-		end := start + visibleLines
-		if end > len(spotCards) {
-			end = len(spotCards)
 		}
 		var sb strings.Builder
 		sb.WriteString(m.styleManager.GetTitleStyle().Render(selected.SetName) + "\n")
+		sb.WriteString(RenderProgressBar(selected.Percent, min(rightWidth-8, 20), m.styleManager) + " ")
 		sb.WriteString(m.styleManager.GetBlurredStyle().Render(fmt.Sprintf("%d/%d (%.0f%%)", selected.Owned, selected.Total, selected.Percent)) + "\n")
-		greenStyle := m.styleManager.applyBGFG(lipgloss.NewStyle().Foreground(lipgloss.Color("34")))
-		redStyle := m.styleManager.applyBGFG(lipgloss.NewStyle().Foreground(lipgloss.Color("160")))
-		for _, sc := range spotCards[start:end] {
-			if sc.owned {
-				sb.WriteString(greenStyle.Render("✓ "+sc.name) + "\n")
-			} else {
-				sb.WriteString(redStyle.Render("✗ "+sc.name) + "\n")
-			}
+		gridWidth := rightWidth - 6
+		if gridWidth < 10 {
+			gridWidth = 10
 		}
+		sb.WriteString(renderSetProgressGrid(setCards, ownedCards, gridWidth, spotlightHeight-4, m.styleManager))
 		spotContent = sb.String()
 	}
 	rightPanel := RenderPanel(m.styleManager, spotContent, rightWidth, spotlightHeight, m.collectionTabFocus == 1, 1, 0)
@@ -829,4 +905,28 @@ func (m CardGameTabsModel) performSaveCollection() (CardGameTabsModel, tea.Cmd) 
 		}
 	}
 	return m, nil
+}
+
+func (m *CardGameTabsModel) buildCollectionExportRows() []export.CardRow {
+	var rows []export.CardRow
+	for _, uc := range m.userCollections {
+		if uc.Card == nil || uc.Quantity <= 0 {
+			continue
+		}
+		setName := ""
+		setCode := ""
+		if uc.Card.Set != nil {
+			setName = uc.Card.Set.Name
+			setCode = uc.Card.Set.Code
+		}
+		rows = append(rows, export.CardRow{
+			Name:     uc.Card.Name,
+			SetName:  setName,
+			SetCode:  setCode,
+			Number:   uc.Card.Number,
+			Rarity:   uc.Card.Rarity,
+			Quantity: uc.Quantity,
+		})
+	}
+	return rows
 }

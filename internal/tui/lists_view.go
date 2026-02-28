@@ -11,6 +11,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/laiambryant/tui-cardman/internal/auth"
+	"github.com/laiambryant/tui-cardman/internal/export"
 	"github.com/laiambryant/tui-cardman/internal/model"
 	"github.com/laiambryant/tui-cardman/internal/runtimecfg"
 	listservice "github.com/laiambryant/tui-cardman/internal/services/list"
@@ -51,31 +52,32 @@ type createListMsg struct{}
 type updateListMsg struct{}
 
 type ListsModel struct {
-	selectedGame  *model.CardGame
-	user          *auth.User
-	listService   listservice.ListService
-	styleManager  *StyleManager
-	configManager *runtimecfg.Manager
-	width         int
-	height        int
-	lists         []model.UserList
-	listCursor    int
-	selectedList  *model.UserList
-	mode          ListsMode
-	nameInput     textinput.Model
-	descInput     textinput.Model
-	colorIndex    int
-	formFocus     int
-	cards         []model.Card
-	filteredCards []model.Card
-	searchInput   textinput.Model
-	cardTable     table.Model
-	focus         ListsFocus
+	selectedGame        *model.CardGame
+	user                *auth.User
+	listService         listservice.ListService
+	styleManager        *StyleManager
+	configManager       *runtimecfg.Manager
+	width               int
+	height              int
+	lists               []model.UserList
+	listCursor          int
+	selectedList        *model.UserList
+	mode                ListsMode
+	nameInput           textinput.Model
+	descInput           textinput.Model
+	colorIndex          int
+	formFocus           int
+	cards               []model.Card
+	filteredCards       []model.Card
+	searchInput         textinput.Model
+	cardTable           table.Model
+	focus               ListsFocus
 	tempQuantityChanges map[int64]int
 	dbQuantities        map[int64]int
-	modal         ModalModel
-	shouldGoBack  bool
-	editingListID int64
+	modal               ModalModel
+	shouldGoBack        bool
+	editingListID       int64
+	exportState         ExportState
 }
 
 func NewListsModel(game *model.CardGame, user *auth.User, listSvc listservice.ListService, cards []model.Card, cfg *runtimecfg.Manager, sm *StyleManager) ListsModel {
@@ -108,7 +110,7 @@ func NewListsModel(game *model.CardGame, user *auth.User, listSvc listservice.Li
 		styleManager:        sm,
 		configManager:       cfg,
 		cards:               cards,
-		filteredCards:        cards,
+		filteredCards:       cards,
 		searchInput:         searchInput,
 		nameInput:           nameInput,
 		descInput:           descInput,
@@ -134,7 +136,16 @@ func (m ListsModel) Update(msg tea.Msg) (ListsModel, tea.Cmd) {
 		m.modal, cmd = m.modal.Update(msg)
 		return m, cmd
 	}
+	if m.exportState.active {
+		if keyMsg, ok := msg.(tea.KeyMsg); ok {
+			cmd := m.exportState.HandleKey(keyMsg.String())
+			return m, cmd
+		}
+	}
 	switch msg := msg.(type) {
+	case exportDoneMsg:
+		m.exportState.HandleResult(msg)
+		return m, nil
 	case saveListCardsMsg:
 		return m.performSaveListCards()
 	case deleteListMsg:
@@ -271,6 +282,10 @@ func (m ListsModel) handleCardPanelKeys(msg tea.KeyMsg, s, action string) (Lists
 	if action == "save" {
 		return m.handleSaveListCards()
 	}
+	if s == "x" && m.selectedList != nil {
+		m.exportState = NewExportState("list", m.selectedList.Name, false, "", m.buildListExportRows)
+		return m, nil
+	}
 	var cmd tea.Cmd
 	m.searchInput, cmd = m.searchInput.Update(msg)
 	m.filteredCards = m.filterListCards(m.searchInput.Value())
@@ -387,7 +402,7 @@ func (m ListsModel) View() string {
 func (m ListsModel) renderHeader() string {
 	var b strings.Builder
 	if m.selectedGame != nil {
-		b.WriteString(m.styleManager.GetTitleStyle().Render(m.selectedGame.Name+" - Lists"))
+		b.WriteString(m.styleManager.GetTitleStyle().Render(m.selectedGame.Name + " - Lists"))
 	}
 	return b.String()
 }
@@ -502,22 +517,30 @@ func (m ListsModel) renderCardPanel(width, height int) string {
 }
 
 func (m ListsModel) renderFooter() string {
-	hb := NewHelpBuilder(m.configManager)
-	if m.mode == ListsModeCreate || m.mode == ListsModeEdit {
-		return m.styleManager.GetHelpStyle().Render("Tab: next field • Enter: confirm • Esc: cancel")
+	if m.exportState.active {
+		return m.exportState.Render(m.styleManager)
 	}
-	if m.focus == ListsFocusCardPanel {
-		return m.styleManager.GetHelpStyle().Render(
+	hb := NewHelpBuilder(m.configManager)
+	var footer string
+	if m.mode == ListsModeCreate || m.mode == ListsModeEdit {
+		footer = m.styleManager.GetHelpStyle().Render("Tab: next field • Enter: confirm • Esc: cancel")
+	} else if m.focus == ListsFocusCardPanel {
+		footer = m.styleManager.GetHelpStyle().Render(
 			hb.Build(
 				KeyItem{"increment_quantity", "+", "Add"},
 				KeyItem{"decrement_quantity", "Delete", "Remove"},
 				KeyItem{"save", "Ctrl+S", "Save"},
-			) + " • " + hb.Pair("nav_up", "↑", "nav_down", "↓", "Navigate") + " • Left/Shift+Tab: Lists panel",
+			) + " • x: Export • " + hb.Pair("nav_up", "↑", "nav_down", "↓", "Navigate") + " • Left/Shift+Tab: Lists panel",
+		)
+	} else {
+		footer = m.styleManager.GetHelpStyle().Render(
+			hb.Pair("nav_up", "↑", "nav_down", "↓", "Navigate") + " • Enter: Select list • n: New • e: Edit • d: Delete • Right/Tab: Cards panel • " + hb.Build(KeyItem{"back", "Q", "Back"}),
 		)
 	}
-	return m.styleManager.GetHelpStyle().Render(
-		hb.Pair("nav_up", "↑", "nav_down", "↓", "Navigate") + " • Enter: Select list • n: New • e: Edit • d: Delete • Right/Tab: Cards panel • " + hb.Build(KeyItem{"back", "Q", "Back"}),
-	)
+	if m.exportState.statusMsg != "" {
+		footer = m.styleManager.GetHelpStyle().Render(m.exportState.statusMsg) + "  " + footer
+	}
+	return footer
 }
 
 func (m ListsModel) getSelectedCard() (model.Card, bool) {
@@ -715,4 +738,29 @@ func (m ListsModel) findColorIndex(color string) int {
 		}
 	}
 	return 0
+}
+
+func (m *ListsModel) buildListExportRows() []export.CardRow {
+	var rows []export.CardRow
+	for _, c := range m.cards {
+		qty := m.dbQuantities[c.ID]
+		if qty <= 0 {
+			continue
+		}
+		setName := ""
+		setCode := ""
+		if c.Set != nil {
+			setName = c.Set.Name
+			setCode = c.Set.Code
+		}
+		rows = append(rows, export.CardRow{
+			Name:     c.Name,
+			SetName:  setName,
+			SetCode:  setCode,
+			Number:   c.Number,
+			Rarity:   c.Rarity,
+			Quantity: qty,
+		})
+	}
+	return rows
 }
