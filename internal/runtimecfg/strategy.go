@@ -3,6 +3,7 @@ package runtimecfg
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"os"
 
@@ -33,14 +34,14 @@ func NewLocalStrategy(configPath string) *LocalStrategy {
 func (s *LocalStrategy) Load() (*RuntimeConfig, error) {
 	cfg, err := Load(s.configPath)
 	if err != nil {
-		return nil, &FailedToSaveConfigError{err}
+		return nil, err
 	}
 	return cfg, nil
 }
 
 func (s *LocalStrategy) Save(config *RuntimeConfig) error {
 	if err := Save(config, s.configPath); err != nil {
-		return &FailedToSaveConfigError{err}
+		return fmt.Errorf("failed to save config: %w", err)
 	}
 	return nil
 }
@@ -126,11 +127,11 @@ func populateKeybindings(dbConfig RuntimeConfig, s *RemoteStrategy) {
 
 func (s *RemoteStrategy) Save(config *RuntimeConfig) error {
 	if s.service == nil {
-		return &NoRemoteServiceAvailable{}
+		return ErrNoRemoteServiceAvailable
 	}
 	slog.Info("saving configuration to database", "user_id", s.userID)
 	if err := s.service.Save(context.Background(), s.userID, config); err != nil {
-		return &FailedToSaveConfigError{err}
+		return fmt.Errorf("failed to save config: %w", err)
 	}
 	s.hasUnsavedChanges = false
 	slog.Info("configuration saved to database", "user_id", s.userID)

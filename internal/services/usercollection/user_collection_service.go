@@ -3,6 +3,7 @@ package usercollection
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -121,7 +122,7 @@ const (
 func (s *UserCollectionServiceImpl) GetUserCollectionByUserID(userID int64) ([]model.UserCollection, error) {
 	rows, err := db.Query(s.db, selectUserCollectionByUserIDQuery, userID)
 	if err != nil {
-		return nil, &FailedToQueryUserCollectionError{Err: err}
+		return nil, fmt.Errorf("failed to query user collection: %w", err)
 	}
 	defer rows.Close()
 
@@ -138,7 +139,7 @@ func (s *UserCollectionServiceImpl) GetUserCollectionByUserID(userID int64) ([]m
 func (s *UserCollectionServiceImpl) GetUserCollectionByGameID(userID, gameID int64) ([]model.UserCollection, error) {
 	rows, err := db.Query(s.db, selectUserCollectionByGameIDQuery, userID, gameID)
 	if err != nil {
-		return nil, &FailedToQueryUserCollectionByGameError{Err: err}
+		return nil, fmt.Errorf("failed to query user collection by game: %w", err)
 	}
 	defer rows.Close()
 
@@ -175,7 +176,7 @@ func (s *UserCollectionServiceImpl) scanUserCollections(rows *sql.Rows) ([]model
 			&setID, &setName, &setCode, // Scan new fields
 		)
 		if err != nil {
-			return nil, &FailedToScanUserCollectionError{Err: err}
+			return nil, fmt.Errorf("failed to scan user collection: %w", err)
 		}
 
 		// Handle nullable dates
@@ -206,7 +207,7 @@ func (s *UserCollectionServiceImpl) scanUserCollections(rows *sql.Rows) ([]model
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, &ErrorIteratingUserCollectionsError{Err: err}
+		return nil, fmt.Errorf("error iterating user collections: %w", err)
 	}
 
 	return collections, nil
@@ -240,7 +241,7 @@ func (s *UserCollectionServiceImpl) CreateSampleCollectionData(userID int64) err
 		_, err := s.db.Exec(query, userID, data.cardID, data.quantity, data.condition, data.notes)
 		if err != nil {
 			slog.Error("failed to create sample collection data", "user_id", userID, "card_id", data.cardID, "error", err)
-			return &FailedToCreateSampleCollectionDataError{Err: err}
+			return fmt.Errorf("failed to create sample collection data: %w", err)
 		}
 	}
 
@@ -257,7 +258,7 @@ func (s *UserCollectionServiceImpl) GetCardQuantity(userID, cardID int64) (int, 
 	}
 	if err != nil {
 		slog.Error("failed to get card quantity", "user_id", userID, "card_id", cardID, "error", err)
-		return 0, &FailedToGetQuantityError{Err: err}
+		return 0, fmt.Errorf("failed to get card quantity: %w", err)
 	}
 	return quantity, nil
 }
@@ -267,7 +268,7 @@ func (s *UserCollectionServiceImpl) GetAllQuantitiesForGame(userID, gameID int64
 	rows, err := db.Query(s.db, selectAllQuantitiesForGameQuery, userID, gameID)
 	if err != nil {
 		slog.Error("failed to get all quantities for game", "user_id", userID, "game_id", gameID, "error", err)
-		return nil, &FailedToGetQuantityError{Err: err}
+		return nil, fmt.Errorf("failed to get quantities for game: %w", err)
 	}
 	defer rows.Close()
 	quantities := make(map[int64]int)
@@ -282,7 +283,7 @@ func (s *UserCollectionServiceImpl) GetAllQuantitiesForGame(userID, gameID int64
 	}
 	if err := rows.Err(); err != nil {
 		slog.Error("error iterating quantity rows", "error", err)
-		return nil, &FailedToGetQuantityError{Err: err}
+		return nil, fmt.Errorf("error iterating quantity rows: %w", err)
 	}
 	slog.Debug("retrieved all quantities for game", "user_id", userID, "game_id", gameID, "count", len(quantities))
 	return quantities, nil
@@ -298,7 +299,7 @@ func (s *UserCollectionServiceImpl) IncrementQuantity(ctx context.Context, userI
 	_, err = db.ExecContext(ctx, s.db, upsertCollectionQuery, userID, cardID, newQty)
 	if err != nil {
 		slog.Error("failed to increment quantity", "user_id", userID, "card_id", cardID, "error", err)
-		return &FailedToIncrementQuantityError{Err: err}
+		return fmt.Errorf("failed to increment quantity: %w", err)
 	}
 	slog.Debug("incremented card quantity", "user_id", userID, "card_id", cardID, "new_quantity", newQty)
 	return nil
@@ -318,7 +319,7 @@ func (s *UserCollectionServiceImpl) DecrementQuantity(ctx context.Context, userI
 		_, err = db.ExecContext(ctx, s.db, deleteCollectionQuery, userID, cardID)
 		if err != nil {
 			slog.Error("failed to delete card from collection", "user_id", userID, "card_id", cardID, "error", err)
-			return &FailedToDecrementQuantityError{Err: err}
+			return fmt.Errorf("failed to decrement quantity: %w", err)
 		}
 		slog.Debug("removed card from collection", "user_id", userID, "card_id", cardID)
 		return nil
@@ -326,7 +327,7 @@ func (s *UserCollectionServiceImpl) DecrementQuantity(ctx context.Context, userI
 	_, err = db.ExecContext(ctx, s.db, upsertCollectionQuery, userID, cardID, newQty)
 	if err != nil {
 		slog.Error("failed to decrement quantity", "user_id", userID, "card_id", cardID, "error", err)
-		return &FailedToDecrementQuantityError{Err: err}
+		return fmt.Errorf("failed to decrement quantity: %w", err)
 	}
 	slog.Debug("decremented card quantity", "user_id", userID, "card_id", cardID, "new_quantity", newQty)
 	return nil
@@ -348,14 +349,14 @@ func (s *UserCollectionServiceImpl) UpsertCollectionBatch(ctx context.Context, u
 				_, err := db.ExecContextTx(ctx, tx, deleteCollectionQuery, userID, cardID)
 				if err != nil {
 					slog.Error("failed to delete card in batch", "user_id", userID, "card_id", cardID, "error", err)
-					return &FailedToUpsertCollectionError{Err: err}
+					return fmt.Errorf("failed to upsert collection: %w", err)
 				}
 				continue
 			}
 			_, err := db.ExecContextTx(ctx, tx, upsertCollectionQuery, userID, cardID, quantity)
 			if err != nil {
 				slog.Error("failed to upsert card in batch", "user_id", userID, "card_id", cardID, "error", err)
-				return &FailedToUpsertCollectionError{Err: err}
+				return fmt.Errorf("failed to upsert collection: %w", err)
 			}
 		}
 		slog.Debug("batch upserted collection", "user_id", userID, "update_count", len(updates))

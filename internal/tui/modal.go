@@ -34,6 +34,12 @@ func NewModalModel(title, message string, onConfirm, onCancel func() tea.Cmd, st
 	}
 }
 
+// newModal is a convenience wrapper that creates a modal and immediately sets
+// its dimensions so it renders correctly centred over the current view.
+func newModal(title, message string, onConfirm, onCancel func() tea.Cmd, sm *StyleManager, width, height int) ModalModel {
+	return NewModalModel(title, message, onConfirm, onCancel, sm).SetDimensions(width, height)
+}
+
 func (m ModalModel) Init() tea.Cmd {
 	return nil
 }
@@ -182,25 +188,6 @@ func (m ModalModel) overlayContent(background, foreground string) string {
 		}
 	}
 	return strings.ReplaceAll(cellbuf.Render(bgBuf), "\r\n", "\n")
-}
-
-func stripANSI(s string) string {
-	var result strings.Builder
-	inEscape := false
-	for _, r := range s {
-		if r == '\x1b' {
-			inEscape = true
-			continue
-		}
-		if inEscape {
-			if (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') {
-				inEscape = false
-			}
-			continue
-		}
-		result.WriteRune(r)
-	}
-	return result.String()
 }
 
 func lineCount(s string) int {

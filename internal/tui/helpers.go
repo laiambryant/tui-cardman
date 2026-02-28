@@ -6,6 +6,8 @@ import (
 
 	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/laiambryant/tui-cardman/internal/export"
+	"github.com/laiambryant/tui-cardman/internal/model"
 	"github.com/laiambryant/tui-cardman/internal/runtimecfg"
 )
 
@@ -62,11 +64,6 @@ func Truncate(s string, max int) string {
 	return s
 }
 
-// FormatNameWithQty formats a name with quantity suffix
-func FormatNameWithQty(name string, qty int) string {
-	return fmt.Sprintf("%s x%d", name, qty)
-}
-
 // NewStyledTable creates a table with consistent styling
 func NewStyledTable(columns []table.Column, height int, focused bool, styleManager *StyleManager) table.Model {
 	t := table.New(
@@ -79,18 +76,6 @@ func NewStyledTable(columns []table.Column, height int, focused bool, styleManag
 	return t
 }
 
-type ConfigManagerProvider interface {
-	GetConfigManager() *runtimecfg.Manager
-}
-
-func ResolveKeyBinding(cfg *runtimecfg.Manager, action string, defaultKey string) string {
-	if cfg != nil {
-		if k := cfg.KeyForAction(action); k != "" {
-			return k
-		}
-	}
-	return defaultKey
-}
 func MatchActionOrDefault(cfg *runtimecfg.Manager, keyString string, fallback string) string {
 	if cfg != nil {
 		return cfg.MatchAction(keyString)
@@ -163,7 +148,9 @@ func RenderButton(isFocused bool, label string) string {
 }
 func RenderButtonItem(sm *StyleManager, label string, isSelected bool, maxWidth int) string {
 	labelWidth := lipgloss.Width(label)
-	btnWidth := min(labelWidth+4, max(maxWidth, 10))
+	// Width() sets content area; border(1+1) + padding(1+1) = 4 overhead on top.
+	// So content width = maxWidth - 4, but never narrower than the label itself.
+	btnWidth := max(maxWidth-4, labelWidth)
 	if isSelected {
 		return sm.applyBGFG(lipgloss.NewStyle().
 			Width(btnWidth).
@@ -191,21 +178,53 @@ func RenderListItem(line string, isSelected bool) string {
 	}
 	return blurredStyle.Render(prefix+line) + "\n"
 }
-func RenderTitle(title string) string {
-	return titleStyle.Render(title) + "\n\n"
-}
-func RenderSectionTitle(title string) string {
-	return titleStyle.Render(title) + "\n"
-}
-func RenderFocusedLabel(label string) string {
-	return focusedStyle.Render(label)
-}
-func RenderBlurredLabel(label string) string {
-	return blurredStyle.Render(label)
-}
 func RenderConditionalLabel(isFocused bool, label string) string {
 	if isFocused {
-		return RenderFocusedLabel(label)
+		return focusedStyle.Render(label)
 	}
-	return RenderBlurredLabel(label)
+	return blurredStyle.Render(label)
+}
+
+// filterCardsByQuery filters a card slice by name, number, or rarity (case-insensitive).
+// Returns the original slice unchanged when query is empty.
+func filterCardsByQuery(cards []model.Card, query string) []model.Card {
+	if query == "" {
+		return cards
+	}
+	q := strings.ToLower(query)
+	var filtered []model.Card
+	for _, c := range cards {
+		if strings.Contains(strings.ToLower(c.Name), q) ||
+			strings.Contains(strings.ToLower(c.Number), q) ||
+			strings.Contains(strings.ToLower(c.Rarity), q) {
+			filtered = append(filtered, c)
+		}
+	}
+	return filtered
+}
+
+// buildCardExportRows produces a CSV-ready row slice from a card list and quantity maps.
+// Cards with a combined quantity of zero or below are omitted.
+func buildCardExportRows(cards []model.Card, dbQtys, tempDeltas map[int64]int) []export.CardRow {
+	var rows []export.CardRow
+	for _, c := range cards {
+		qty := dbQtys[c.ID] + tempDeltas[c.ID]
+		if qty <= 0 {
+			continue
+		}
+		setName, setCode := "", ""
+		if c.Set != nil {
+			setName = c.Set.Name
+			setCode = c.Set.Code
+		}
+		rows = append(rows, export.CardRow{
+			Name:     c.Name,
+			SetName:  setName,
+			SetCode:  setCode,
+			Number:   c.Number,
+			Rarity:   c.Rarity,
+			Quantity: qty,
+		})
+	}
+	return rows
 }

@@ -3,6 +3,7 @@ package prices
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -48,7 +49,7 @@ const (
 func (s *TCGPlayerPriceServiceImpl) DeletePrices(ctx context.Context, tx *sql.Tx, cardID int64) error {
 	if _, err := db.ExecContextTx(ctx, tx, deletePricesTCGQuery, cardID); err != nil {
 		slog.Error("failed to delete TCGPlayer prices", "card_id", cardID, "error", err)
-		return &FailedToDeleteTCGPlayerPricesError{Err: err}
+		return fmt.Errorf("failed to delete TCGPlayer prices for card %d: %w", cardID, err)
 	}
 	return nil
 }
@@ -60,7 +61,7 @@ func (s *TCGPlayerPriceServiceImpl) InsertPrice(ctx context.Context, tx *sql.Tx,
 		nullFloat64(market), nullFloat64(directLow),
 		url, updatedAt, time.Now()); err != nil {
 		slog.Error("failed to insert TCGPlayer price", "card_id", cardID, "price_type", priceType, "error", err)
-		return &FailedToInsertTCGPlayerPriceError{Err: err}
+		return fmt.Errorf("failed to insert TCGPlayer price for card %d: %w", cardID, err)
 	}
 	return nil
 }
@@ -68,7 +69,7 @@ func (s *TCGPlayerPriceServiceImpl) InsertPrice(ctx context.Context, tx *sql.Tx,
 func (s *TCGPlayerPriceServiceImpl) GetLatestPricesForCard(cardID int64) ([]model.TCGPlayerPriceRow, error) {
 	rows, err := db.Query(s.db, selectLatestTCGPricesQuery, cardID)
 	if err != nil {
-		return nil, &FailedToQueryTCGPlayerPricesError{Err: err}
+		return nil, fmt.Errorf("failed to query TCGPlayer prices for card %d: %w", cardID, err)
 	}
 	defer rows.Close()
 	var prices []model.TCGPlayerPriceRow
@@ -81,7 +82,7 @@ func (s *TCGPlayerPriceServiceImpl) GetLatestPricesForCard(cardID int64) ([]mode
 		prices = append(prices, p)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, &FailedToQueryTCGPlayerPricesError{Err: err}
+		return nil, fmt.Errorf("failed to query TCGPlayer prices for card %d: %w", cardID, err)
 	}
 	return prices, nil
 }

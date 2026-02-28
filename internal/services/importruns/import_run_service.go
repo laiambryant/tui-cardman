@@ -3,6 +3,7 @@ package importruns
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -40,12 +41,12 @@ func (s *ImportRunServiceImpl) CreateImportRun(ctx context.Context, importType s
 	result, err := db.ExecContext(ctx, s.db, createImportRunQuery, importType, "running", time.Now())
 	if err != nil {
 		slog.Error("failed to create import run", "import_type", importType, "error", err)
-		return 0, &FailedToCreateImportRunError{Err: err}
+		return 0, fmt.Errorf("failed to create import run: %w", err)
 	}
 	runID, err := result.LastInsertId()
 	if err != nil {
 		slog.Error("failed to get last insert id for import run", "import_type", importType, "error", err)
-		return 0, &FailedToGetLastInsertIDError{Err: err}
+		return 0, fmt.Errorf("failed to get last insert id for import run: %w", err)
 	}
 	slog.Debug("created import run", "run_id", runID, "import_type", importType)
 	return runID, nil
@@ -56,7 +57,7 @@ func (s *ImportRunServiceImpl) UpdateImportRun(ctx context.Context, runID int64,
 	_, err := db.ExecContext(ctx, s.db, updateImportRunQuery, status, setsProcessed, cardsImported, errorsCount, time.Now(), notes, runID)
 	if err != nil {
 		slog.Error("failed to update import run", "run_id", runID, "status", status, "error", err)
-		return &FailedToUpdateImportRunError{Err: err}
+		return fmt.Errorf("failed to update import run %d: %w", runID, err)
 	}
 	slog.Debug("updated import run", "run_id", runID, "status", status, "sets_processed", setsProcessed, "cards_imported", cardsImported, "errors_count", errorsCount)
 	return nil

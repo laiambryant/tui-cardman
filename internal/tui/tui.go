@@ -79,13 +79,13 @@ func NewModel(db *sql.DB, isSSHMode bool) (*Model, error) {
 	configPath := runtimecfg.GetConfigPath()
 	configManager, err := runtimecfg.NewManager(true, configPath, nil, 0)
 	if err != nil {
-		return nil, &FailedToInitializeConfigManagerError{Err: err}
+		return nil, fmt.Errorf("failed to initialize config manager: %w", err)
 	}
 	styleManager := NewStyleManager()
 	userService, cardGameService, cardService, collectionService, listSvc, deckSvc, tcgPriceSvc, cmPriceSvc, authSvc := initServices(db)
 	cardGames, err := cardGameService.GetAllCardGames()
 	if err != nil {
-		return nil, &FailedToLoadCardGamesError{Err: err}
+		return nil, fmt.Errorf("failed to load card games: %w", err)
 	}
 	m := &Model{
 		authService:       authSvc,
@@ -111,7 +111,7 @@ func NewModel(db *sql.DB, isSSHMode bool) (*Model, error) {
 	} else {
 		hasUsers, err := userService.HasUsers()
 		if err != nil {
-			return nil, &FailedToCheckForExistingUsersError{Err: err}
+			return nil, fmt.Errorf("failed to check for existing users: %w", err)
 		}
 		if !hasUsers {
 			m.postSplashScreen = ScreenLocalUserSetup
@@ -119,7 +119,7 @@ func NewModel(db *sql.DB, isSSHMode bool) (*Model, error) {
 		} else {
 			firstUser, err := userService.GetFirstUser()
 			if err != nil {
-				return nil, &FailedToGetFirstUserForLocalModeError{Err: err}
+				return nil, fmt.Errorf("failed to get first user for local mode: %w", err)
 			}
 			m.user = firstUser
 			err = userService.UpdateLastLogin(firstUser.ID)
@@ -652,14 +652,14 @@ func (m *Model) createCardGameTabsModel(selectedGame *model.CardGame) (CardGameT
 	}
 	cards, err := m.cardService.GetCardsByGameID(selectedGame.ID)
 	if err != nil {
-		return cardGameTabs, &FailedToLoadCardsError{Err: err}
+		return cardGameTabs, fmt.Errorf("failed to load cards: %w", err)
 	}
 	cardGameTabs.cards = cards
 	cardGameTabs.filteredCards = cards
 	if m.user != nil {
 		collections, err := m.collectionService.GetUserCollectionByGameID(m.user.ID, selectedGame.ID)
 		if err != nil {
-			return cardGameTabs, &FailedToLoadUserCollectionError{Err: err}
+			return cardGameTabs, fmt.Errorf("failed to load user collection: %w", err)
 		}
 		cardGameTabs.userCollections = collections
 		cardGameTabs.filteredCollection = collections
@@ -690,9 +690,9 @@ func (m *Model) createCardGameTabsModel(selectedGame *model.CardGame) (CardGameT
 func (m *Model) createListsModel(selectedGame *model.CardGame) (*ListsModel, error) {
 	cards, err := m.cardService.GetCardsByGameID(selectedGame.ID)
 	if err != nil {
-		return nil, &FailedToLoadCardsError{Err: err}
+		return nil, fmt.Errorf("failed to load cards: %w", err)
 	}
-	listsModel := NewListsModel(selectedGame, m.user, m.listService, cards, m.configManager, m.styleManager)
+	listsModel := NewListsModel(selectedGame, m.user, m.listService, m.cardService, cards, m.configManager, m.styleManager)
 	listsModel.width = m.width
 	listsModel.height = m.height
 	listsModel.modal = listsModel.modal.SetDimensions(m.width, m.height)
@@ -710,9 +710,9 @@ func (m *Model) createListsModel(selectedGame *model.CardGame) (*ListsModel, err
 func (m *Model) createDeckBuilderModel(selectedGame *model.CardGame) (*DeckBuilderModel, error) {
 	cards, err := m.cardService.GetCardsByGameID(selectedGame.ID)
 	if err != nil {
-		return nil, &FailedToLoadCardsError{Err: err}
+		return nil, fmt.Errorf("failed to load cards: %w", err)
 	}
-	deckModel := NewDeckBuilderModel(selectedGame, m.user, m.deckService, cards, m.configManager, m.styleManager)
+	deckModel := NewDeckBuilderModel(selectedGame, m.user, m.deckService, m.cardService, cards, m.configManager, m.styleManager)
 	deckModel.width = m.width
 	deckModel.height = m.height
 	deckModel.modal = deckModel.modal.SetDimensions(m.width, m.height)

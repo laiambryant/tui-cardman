@@ -4,6 +4,7 @@ import (
 	"encoding/csv"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -124,4 +125,55 @@ func GenerateFilename(exportType, name, format string) string {
 	sanitized := strings.ReplaceAll(strings.ToLower(name), " ", "_")
 	date := time.Now().Format("2006-01-02")
 	return fmt.Sprintf("%s_%s_%s.%s", exportType, sanitized, date, format)
+}
+
+// FromCSV reads a CSV file exported by ToCSV and returns a slice of CardRow.
+// The file must have a header row matching: Name, Set, Set Code, Number, Rarity, Quantity
+func FromCSV(filepath string) ([]CardRow, error) {
+	f, err := os.Open(filepath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open file: %w", err)
+	}
+	defer f.Close()
+
+	r := csv.NewReader(f)
+	records, err := r.ReadAll()
+	if err != nil {
+		return nil, fmt.Errorf("failed to read CSV: %w", err)
+	}
+	if len(records) == 0 {
+		return nil, fmt.Errorf("CSV file is empty")
+	}
+
+	// Validate header
+	expected := []string{"Name", "Set", "Set Code", "Number", "Rarity", "Quantity"}
+	header := records[0]
+	if len(header) != len(expected) {
+		return nil, fmt.Errorf("unexpected header: got %d columns, want %d", len(header), len(expected))
+	}
+	for i, col := range expected {
+		if !strings.EqualFold(header[i], col) {
+			return nil, fmt.Errorf("unexpected column %d: got %q, want %q", i+1, header[i], col)
+		}
+	}
+
+	var rows []CardRow
+	for lineNum, record := range records[1:] {
+		if len(record) != 6 {
+			return nil, fmt.Errorf("line %d: expected 6 columns, got %d", lineNum+2, len(record))
+		}
+		qty, err := strconv.Atoi(strings.TrimSpace(record[5]))
+		if err != nil {
+			return nil, fmt.Errorf("line %d: invalid quantity %q: %w", lineNum+2, record[5], err)
+		}
+		rows = append(rows, CardRow{
+			Name:     strings.TrimSpace(record[0]),
+			SetName:  strings.TrimSpace(record[1]),
+			SetCode:  strings.TrimSpace(record[2]),
+			Number:   strings.TrimSpace(record[3]),
+			Rarity:   strings.TrimSpace(record[4]),
+			Quantity: qty,
+		})
+	}
+	return rows, nil
 }

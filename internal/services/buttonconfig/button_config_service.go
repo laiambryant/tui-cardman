@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"os"
 	"time"
@@ -55,7 +56,7 @@ func (b *ButtonConfigServiceImpl) GetByUserID(ctx context.Context, userID int64)
 		&config.UpdatedAt,
 	)
 	if err != nil {
-		return handle_no_config_err(err, userID)
+		return handleNoConfigErr(err, userID)
 	}
 	slog.Info("retrieved button configuration", "user_id", userID, "config_id", config.ID)
 	return &config, nil
@@ -65,17 +66,17 @@ func (b *ButtonConfigServiceImpl) Save(ctx context.Context, userID int64, config
 	configJSON, err := json.Marshal(config)
 	if err != nil {
 		slog.Error("failed to marshal configuration", "user_id", userID, "error", err)
-		return &FailedToMarshalConfigurationError{Err: err}
+		return fmt.Errorf("failed to marshal configuration: %w", err)
 	}
 	result, err := db.ExecContext(ctx, b.db, saveConfigQuery, userID, string(configJSON), time.Now())
 	if err != nil {
 		slog.Error("failed to save button configuration", "user_id", userID, "error", err)
-		return &FailedToSaveButtonConfigurationError{Err: err}
+		return fmt.Errorf("failed to save button configuration: %w", err)
 	}
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
 		slog.Error("failed to get rows affected", "error", err)
-		return &FailedToGetRowsAffectedError{Err: err}
+		return fmt.Errorf("failed to get rows affected: %w", err)
 	}
 	slog.Info("saved button configuration", "user_id", userID, "rows_affected", rowsAffected)
 	return nil
@@ -93,15 +94,15 @@ func (b *ButtonConfigServiceImpl) MigrateLocalToDB(ctx context.Context, userID i
 		return nil
 	}
 	if err != sql.ErrNoRows {
-		return &FailedToCheckExistingConfigError{Err: err}
+		return fmt.Errorf("failed to check existing config: %w", err)
 	}
 	localConfig, err := runtimecfg.Load(localPath)
 	if err != nil {
-		return &FailedToLoadLocalConfigForMigrationError{Err: err}
+		return fmt.Errorf("failed to load local config for migration: %w", err)
 	}
 	err = b.Save(ctx, userID, localConfig)
 	if err != nil {
-		return &FailedToMigrateConfigToDatabaseError{Err: err}
+		return fmt.Errorf("failed to migrate config to database: %w", err)
 	}
 	if err := os.Remove(localPath); err != nil {
 		slog.Warn("failed to remove local config after migration", "path", localPath, "error", err)
@@ -110,11 +111,11 @@ func (b *ButtonConfigServiceImpl) MigrateLocalToDB(ctx context.Context, userID i
 	return nil
 }
 
-func handle_no_config_err(err error, userID int64) (*model.ButtonConfiguration, error) {
+func handleNoConfigErr(err error, userID int64) (*model.ButtonConfiguration, error) {
 	if err == sql.ErrNoRows {
 		slog.Debug("no button configuration found for user", "user_id", userID)
 		return nil, sql.ErrNoRows
 	}
 	slog.Error("failed to get button configuration", "user_id", userID, "error", err)
-	return nil, &FailedToGetButtonConfigurationError{Err: err}
+	return nil, fmt.Errorf("failed to get button configuration: %w", err)
 }

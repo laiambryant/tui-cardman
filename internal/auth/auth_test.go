@@ -36,7 +36,7 @@ func TestValidateEmail_Characterization(t *testing.T) {
 		),
 		// Empty email
 		ctesting.NewCharacterizationTest[error](
-			&EmailRequiredError{},
+			ErrEmailRequired,
 			nil,
 			func() (error, error) {
 				return ValidateEmail(""), nil

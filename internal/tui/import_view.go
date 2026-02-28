@@ -455,18 +455,15 @@ func (m ImportModel) executeAction(action ActionItem) (ImportModel, tea.Cmd) {
 			message = fmt.Sprintf("%s\nSet: %s - %s", message, selectedSet.ID, selectedSet.Name)
 		}
 	}
-	m.modal = NewModalModel(
+	m.modal = newModal(
 		"Confirm "+action.label,
 		message,
 		func() tea.Cmd {
 			return func() tea.Msg { return importConfirmedMsg{} }
 		},
 		func() tea.Cmd { return nil },
-		m.styleManager,
+		m.styleManager, m.width, m.height,
 	)
-	if m.width > 0 && m.height > 0 {
-		m.modal = m.modal.SetDimensions(m.width, m.height)
-	}
 	return m, nil
 }
 
@@ -594,27 +591,5 @@ func (m ImportModel) deleteSetCmd(setID string) tea.Cmd {
 			return deleteSetErrorMsg{setID, err}
 		}
 		return deleteSetSuccessMsg{setID}
-	}
-}
-
-func (m ImportModel) importAllSetsCmd() tea.Cmd {
-	return func() tea.Msg {
-		ctx := context.Background()
-		err := m.importService.ImportAllSets(ctx)
-		if err != nil {
-			return importAllSetsErrorMsg{err}
-		}
-		return importAllSetsSuccessMsg{}
-	}
-}
-
-func (m ImportModel) importNewSetsCmd() tea.Cmd {
-	return func() tea.Msg {
-		ctx := context.Background()
-		err := m.importService.ImportNewSets(ctx)
-		if err != nil {
-			return importNewSetsErrorMsg{err}
-		}
-		return importNewSetsSuccessMsg{}
 	}
 }

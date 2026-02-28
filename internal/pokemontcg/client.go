@@ -2,6 +2,7 @@ package pokemontcg
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -51,7 +52,7 @@ type rateLimitedHTTPClient struct {
 
 func (c *rateLimitedHTTPClient) Do(req *http.Request) (*http.Response, error) {
 	if err := c.limiter.Wait(req.Context()); err != nil {
-		return nil, &RateLimiterError{Err: err}
+		return nil, fmt.Errorf("rate limiter error: %w", err)
 	}
 	if c.apiKey != "" {
 		req.Header.Set("X-Api-Key", c.apiKey)
@@ -70,7 +71,7 @@ type PaginatedResponse struct {
 func (c *Client) GetSets(ctx context.Context) ([]Set, error) {
 	tcgdexSets, err := c.sdk.Set.List(ctx, nil)
 	if err != nil {
-		return nil, &FailedToFetchSetsError{Err: err}
+		return nil, fmt.Errorf("failed to fetch sets: %w", err)
 	}
 	sets := make([]Set, 0, len(tcgdexSets))
 	for _, tcgdexSet := range tcgdexSets {
@@ -86,7 +87,7 @@ func (c *Client) GetCardsForSet(ctx context.Context, setID string, page int) (*P
 		Paginate(page, MaxPageSize)
 	tcgdexCards, err := c.sdk.Card.List(ctx, q)
 	if err != nil {
-		return nil, nil, &FailedToFetchCardsError{Err: err}
+		return nil, nil, fmt.Errorf("failed to fetch cards: %w", err)
 	}
 	cards := make([]Card, 0, len(tcgdexCards))
 	for _, tcgdexCard := range tcgdexCards {
@@ -109,7 +110,7 @@ func (c *Client) GetCardsForSet(ctx context.Context, setID string, page int) (*P
 func (c *Client) GetCard(ctx context.Context, cardID string) (*Card, error) {
 	tcgdexCard, err := c.sdk.Card.Get(ctx, cardID)
 	if err != nil {
-		return nil, &FailedToFetchCardError{Err: err}
+		return nil, fmt.Errorf("failed to fetch card %s: %w", cardID, err)
 	}
 	card := mapTCGDexCardToCard(tcgdexCard)
 	return &card, nil

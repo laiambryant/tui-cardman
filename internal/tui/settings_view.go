@@ -321,9 +321,8 @@ func (m *SettingsModel) initiateSave() {
 }
 
 func (m *SettingsModel) confirmSaveChanges() error {
-	err := m.configManager.Set(m.tempConfig)
-	if err != nil {
-		return &FailedToSaveConfigurationError{Err: err}
+	if err := m.configManager.Set(m.tempConfig); err != nil {
+		return fmt.Errorf("failed to save configuration: %w", err)
 	}
 	m.originalConfig = copyConfig(m.tempConfig)
 	m.hasChanges = false

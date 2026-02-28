@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"log/slog"
 
 	"github.com/laiambryant/tui-cardman/internal/logging"
@@ -14,7 +15,7 @@ func QueryContext(ctx context.Context, db *sql.DB, query string, args ...any) (*
 	rows, err := db.QueryContext(ctx, query, args...)
 	if err != nil {
 		slog.Error("query failed", "query", logging.SanitizeQuery(query), "error", err)
-		return nil, &QueryFailedError{Err: err}
+		return nil, fmt.Errorf("query failed: %w", err)
 	}
 	return rows, nil
 }
@@ -25,7 +26,7 @@ func QueryContextTx(ctx context.Context, tx *sql.Tx, query string, args ...any) 
 	rows, err := tx.QueryContext(ctx, query, args...)
 	if err != nil {
 		slog.Error("query failed (tx)", "query", logging.SanitizeQuery(query), "error", err)
-		return nil, &QueryFailedError{Err: err}
+		return nil, fmt.Errorf("query failed: %w", err)
 	}
 	return rows, nil
 }
@@ -48,7 +49,7 @@ func ExecContext(ctx context.Context, db *sql.DB, query string, args ...any) (sq
 	result, err := db.ExecContext(ctx, query, args...)
 	if err != nil {
 		slog.Error("exec failed", "query", logging.SanitizeQuery(query), "error", err)
-		return nil, &ExecFailedError{Err: err}
+		return nil, fmt.Errorf("exec failed: %w", err)
 	}
 	return result, nil
 }
@@ -59,7 +60,7 @@ func ExecContextTx(ctx context.Context, tx *sql.Tx, query string, args ...any) (
 	result, err := tx.ExecContext(ctx, query, args...)
 	if err != nil {
 		slog.Error("exec failed (tx)", "query", logging.SanitizeQuery(query), "error", err)
-		return nil, &ExecFailedError{Err: err}
+		return nil, fmt.Errorf("exec failed: %w", err)
 	}
 	return result, nil
 }
@@ -70,7 +71,7 @@ func WithTransaction(ctx context.Context, db *sql.DB, fn func(*sql.Tx) error) er
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		slog.Error("failed to begin transaction", "error", err)
-		return &FailedToBeginTransactionError{Err: err}
+		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	if err := fn(tx); err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
@@ -80,7 +81,7 @@ func WithTransaction(ctx context.Context, db *sql.DB, fn func(*sql.Tx) error) er
 	}
 	if err := tx.Commit(); err != nil {
 		slog.Error("failed to commit transaction", "error", err)
-		return &FailedToCommitTransactionError{Err: err}
+		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
 	return nil
 }
@@ -91,7 +92,7 @@ func Query(db *sql.DB, query string, args ...any) (*sql.Rows, error) {
 	rows, err := db.Query(query, args...)
 	if err != nil {
 		slog.Error("query failed", "query", logging.SanitizeQuery(query), "error", err)
-		return nil, &QueryFailedError{Err: err}
+		return nil, fmt.Errorf("query failed: %w", err)
 	}
 	return rows, nil
 }
@@ -108,7 +109,7 @@ func Exec(db *sql.DB, query string, args ...any) (sql.Result, error) {
 	result, err := db.Exec(query, args...)
 	if err != nil {
 		slog.Error("exec failed", "query", logging.SanitizeQuery(query), "error", err)
-		return nil, &ExecFailedError{Err: err}
+		return nil, fmt.Errorf("exec failed: %w", err)
 	}
 	return result, nil
 }

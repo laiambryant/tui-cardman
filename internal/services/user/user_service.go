@@ -2,6 +2,7 @@ package user
 
 import (
 	"database/sql"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -53,13 +54,13 @@ func (s *UserServiceImpl) CreateUser(req auth.RegisterRequest, passwordHash stri
 	result, err := db.Exec(s.db, insertUserQuery, req.Name, req.Surname, req.Email, passwordHash, now, now)
 	if err != nil {
 		slog.Error("failed to create user", "email", req.Email, "error", err)
-		return nil, &FailedToCreateUserError{Err: err}
+		return nil, fmt.Errorf("failed to create user: %w", err)
 	}
 
 	id, err := result.LastInsertId()
 	if err != nil {
 		slog.Error("failed to get last insert id for user", "email", req.Email, "error", err)
-		return nil, &FailedToGetUserIDError{Err: err}
+		return nil, fmt.Errorf("failed to get user id: %w", err)
 	}
 
 	user := &auth.User{
@@ -95,10 +96,10 @@ func (s *UserServiceImpl) GetUserByEmail(email string) (*auth.User, error) {
 	if err != nil {
 		if err == sql.ErrNoRows {
 			slog.Debug("user not found by email", "email", email)
-			return nil, &UserNotFoundError{}
+			return nil, ErrUserNotFound
 		}
 		slog.Error("failed to get user by email", "email", email, "error", err)
-		return nil, &FailedToGetUserError{Err: err}
+		return nil, fmt.Errorf("failed to get user by email: %w", err)
 	}
 
 	if lastLogin.Valid {
@@ -114,7 +115,7 @@ func (s *UserServiceImpl) UpdateLastLogin(userID int64) error {
 	_, err := db.Exec(s.db, updateLastLoginQuery, time.Now(), userID)
 	if err != nil {
 		slog.Error("failed to update last login", "user_id", userID, "error", err)
-		return &FailedToUpdateLastLoginError{Err: err}
+		return fmt.Errorf("failed to update last login: %w", err)
 	}
 	slog.Debug("updated last login", "user_id", userID)
 	return nil
@@ -127,7 +128,7 @@ func (s *UserServiceImpl) HasUsers() (bool, error) {
 	err := db.QueryRow(s.db, query).Scan(&count)
 	if err != nil {
 		slog.Error("failed to count users", "error", err)
-		return false, &FailedToCountUsersError{Err: err}
+		return false, fmt.Errorf("failed to count users: %w", err)
 	}
 	hasUsers := count > 0
 	slog.Debug("checked if users exist", "count", count, "has_users", hasUsers)
@@ -153,10 +154,10 @@ func (s *UserServiceImpl) GetFirstUser() (*auth.User, error) {
 	if err != nil {
 		if err == sql.ErrNoRows {
 			slog.Debug("no users found")
-			return nil, &NoUsersFoundError{}
+			return nil, ErrNoUsersFound
 		}
 		slog.Error("failed to get first user", "error", err)
-		return nil, &FailedToGetFirstUserError{Err: err}
+		return nil, fmt.Errorf("failed to get first user: %w", err)
 	}
 
 	if lastLogin.Valid {

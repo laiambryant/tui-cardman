@@ -3,7 +3,9 @@ package deck
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 
 	"github.com/laiambryant/tui-cardman/internal/db"
@@ -78,11 +80,11 @@ func (s *DeckServiceImpl) CreateDeck(ctx context.Context, userID, cardGameID int
 	result, err := db.ExecContext(ctx, s.db, insertDeckQuery, userID, cardGameID, name, format)
 	if err != nil {
 		slog.Error("failed to create deck", "user_id", userID, "name", name, "error", err)
-		return nil, &FailedToCreateDeckError{Err: err}
+		return nil, fmt.Errorf("failed to create deck: %w", err)
 	}
 	id, err := result.LastInsertId()
 	if err != nil {
-		return nil, &FailedToCreateDeckError{Err: err}
+		return nil, fmt.Errorf("failed to get last insert id for deck: %w", err)
 	}
 	return &model.Deck{
 		ID:         id,
@@ -96,19 +98,19 @@ func (s *DeckServiceImpl) CreateDeck(ctx context.Context, userID, cardGameID int
 func (s *DeckServiceImpl) GetDecksByUserAndGame(userID, cardGameID int64) ([]model.Deck, error) {
 	rows, err := db.Query(s.db, selectDecksByUserAndGameQuery, userID, cardGameID)
 	if err != nil {
-		return nil, &FailedToQueryDecksError{Err: err}
+		return nil, fmt.Errorf("failed to query decks: %w", err)
 	}
 	defer rows.Close()
 	var decks []model.Deck
 	for rows.Next() {
 		var d model.Deck
 		if err := rows.Scan(&d.ID, &d.UserID, &d.CardGameID, &d.Name, &d.Format, &d.CreatedAt, &d.UpdatedAt); err != nil {
-			return nil, &FailedToScanDeckError{Err: err}
+			return nil, fmt.Errorf("failed to scan deck: %w", err)
 		}
 		decks = append(decks, d)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, &FailedToQueryDecksError{Err: err}
+		return nil, fmt.Errorf("failed to query decks: %w", err)
 	}
 	return decks, nil
 }
@@ -117,7 +119,7 @@ func (s *DeckServiceImpl) GetDeckByID(deckID int64) (*model.Deck, error) {
 	var d model.Deck
 	err := db.QueryRow(s.db, selectDeckByIDQuery, deckID).Scan(&d.ID, &d.UserID, &d.CardGameID, &d.Name, &d.Format, &d.CreatedAt, &d.UpdatedAt)
 	if err != nil {
-		return nil, &FailedToQueryDecksError{Err: err}
+		return nil, fmt.Errorf("failed to query deck by id: %w", err)
 	}
 	return &d, nil
 }
@@ -126,7 +128,7 @@ func (s *DeckServiceImpl) UpdateDeck(ctx context.Context, deckID int64, name, fo
 	_, err := db.ExecContext(ctx, s.db, updateDeckQuery, name, format, deckID)
 	if err != nil {
 		slog.Error("failed to update deck", "deck_id", deckID, "error", err)
-		return &FailedToUpdateDeckError{Err: err}
+		return fmt.Errorf("failed to update deck: %w", err)
 	}
 	return nil
 }
@@ -135,7 +137,7 @@ func (s *DeckServiceImpl) DeleteDeck(ctx context.Context, deckID int64) error {
 	_, err := db.ExecContext(ctx, s.db, deleteDeckQuery, deckID)
 	if err != nil {
 		slog.Error("failed to delete deck", "deck_id", deckID, "error", err)
-		return &FailedToDeleteDeckError{Err: err}
+		return fmt.Errorf("failed to delete deck: %w", err)
 	}
 	return nil
 }
@@ -143,7 +145,7 @@ func (s *DeckServiceImpl) DeleteDeck(ctx context.Context, deckID int64) error {
 func (s *DeckServiceImpl) GetAllQuantitiesForDeck(deckID int64) (map[int64]int, error) {
 	rows, err := db.Query(s.db, selectAllQuantitiesForDeckQuery, deckID)
 	if err != nil {
-		return nil, &FailedToGetDeckQuantitiesError{Err: err}
+		return nil, fmt.Errorf("failed to get deck quantities: %w", err)
 	}
 	defer rows.Close()
 	quantities := make(map[int64]int)
@@ -157,7 +159,7 @@ func (s *DeckServiceImpl) GetAllQuantitiesForDeck(deckID int64) (map[int64]int, 
 		quantities[cardID] = quantity
 	}
 	if err := rows.Err(); err != nil {
-		return nil, &FailedToGetDeckQuantitiesError{Err: err}
+		return nil, fmt.Errorf("failed to get deck quantities: %w", err)
 	}
 	return quantities, nil
 }
@@ -168,13 +170,13 @@ func (s *DeckServiceImpl) UpsertDeckCardBatch(ctx context.Context, deckID int64,
 			if quantity <= 0 {
 				_, err := db.ExecContextTx(ctx, tx, deleteDeckCardQuery, deckID, cardID)
 				if err != nil {
-					return &FailedToUpsertDeckCardError{Err: err}
+					return fmt.Errorf("failed to upsert deck card: %w", err)
 				}
 				continue
 			}
 			_, err := db.ExecContextTx(ctx, tx, upsertDeckCardQuery, deckID, cardID, quantity)
 			if err != nil {
-				return &FailedToUpsertDeckCardError{Err: err}
+				return fmt.Errorf("failed to upsert deck card: %w", err)
 			}
 		}
 		return nil
@@ -201,54 +203,41 @@ func (s *DeckServiceImpl) ValidateDeck(cards []model.Card, quantities map[int64]
 	if totalCards != 60 {
 		errors = append(errors, DeckValidationError{
 			Type:    "card_count",
-			Message: strings.Replace("Deck must have exactly 60 cards (currently COUNT)", "COUNT", strings.Replace(strings.Replace("X", "X", string(rune('0'+totalCards/10)), 1), string(rune('0'+totalCards/10)), "", 0), 1),
+			Message: "Deck must have exactly 60 cards (currently " + strconv.Itoa(totalCards) + ")",
 		})
-		errors[len(errors)-1].Message = "Deck must have exactly 60 cards (currently " + itoa(totalCards) + ")"
 	}
 	for name, qty := range nameQty {
 		if qty > 4 && !isBasicEnergy(name) {
 			errors = append(errors, DeckValidationError{
 				Type:    "duplicate_limit",
-				Message: name + ": max 4 copies allowed (" + itoa(qty) + " found)",
+				Message: name + ": max 4 copies allowed (" + strconv.Itoa(qty) + " found)",
 			})
 		}
 	}
 	return errors
 }
 
-func isBasicEnergy(name string) bool {
-	energyNames := []string{
-		"Grass Energy", "Fire Energy", "Water Energy",
-		"Lightning Energy", "Psychic Energy", "Fighting Energy",
-		"Darkness Energy", "Metal Energy", "Fairy Energy",
-		"Basic Grass Energy", "Basic Fire Energy", "Basic Water Energy",
-		"Basic Lightning Energy", "Basic Psychic Energy", "Basic Fighting Energy",
-		"Basic Darkness Energy", "Basic Metal Energy", "Basic Fairy Energy",
-	}
-	lower := strings.ToLower(name)
-	for _, e := range energyNames {
-		if strings.ToLower(e) == lower {
-			return true
-		}
-	}
-	return false
+var basicEnergyNames = map[string]bool{
+	"grass energy":           true,
+	"fire energy":            true,
+	"water energy":           true,
+	"lightning energy":       true,
+	"psychic energy":         true,
+	"fighting energy":        true,
+	"darkness energy":        true,
+	"metal energy":           true,
+	"fairy energy":           true,
+	"basic grass energy":     true,
+	"basic fire energy":      true,
+	"basic water energy":     true,
+	"basic lightning energy": true,
+	"basic psychic energy":   true,
+	"basic fighting energy":  true,
+	"basic darkness energy":  true,
+	"basic metal energy":     true,
+	"basic fairy energy":     true,
 }
 
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	s := ""
-	neg := n < 0
-	if neg {
-		n = -n
-	}
-	for n > 0 {
-		s = string(rune('0'+n%10)) + s
-		n /= 10
-	}
-	if neg {
-		s = "-" + s
-	}
-	return s
+func isBasicEnergy(name string) bool {
+	return basicEnergyNames[strings.ToLower(name)]
 }

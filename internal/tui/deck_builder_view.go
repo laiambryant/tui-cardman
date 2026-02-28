@@ -14,6 +14,7 @@ import (
 	"github.com/laiambryant/tui-cardman/internal/export"
 	"github.com/laiambryant/tui-cardman/internal/model"
 	"github.com/laiambryant/tui-cardman/internal/runtimecfg"
+	cardservice "github.com/laiambryant/tui-cardman/internal/services/cards"
 	"github.com/laiambryant/tui-cardman/internal/services/deck"
 )
 
@@ -38,6 +39,7 @@ type DeckBuilderModel struct {
 	selectedGame        *model.CardGame
 	user                *auth.User
 	deckService         deck.DeckService
+	cardService         cardservice.CardService
 	styleManager        *StyleManager
 	configManager       *runtimecfg.Manager
 	width               int
@@ -60,13 +62,14 @@ type DeckBuilderModel struct {
 	shouldGoBack        bool
 	formFocus           int
 	exportState         ExportState
+	importState         ImportState
 }
 
 type saveDeckMsg struct{}
 type createDeckMsg struct{}
 type deleteDeckMsg struct{}
 
-func NewDeckBuilderModel(game *model.CardGame, user *auth.User, deckService deck.DeckService, cards []model.Card, cfg *runtimecfg.Manager, sm *StyleManager) DeckBuilderModel {
+func NewDeckBuilderModel(game *model.CardGame, user *auth.User, deckService deck.DeckService, cardSvc cardservice.CardService, cards []model.Card, cfg *runtimecfg.Manager, sm *StyleManager) DeckBuilderModel {
 	searchInput := textinput.New()
 	searchInput.Placeholder = "Search cards..."
 	searchInput.Width = 30
@@ -87,6 +90,7 @@ func NewDeckBuilderModel(game *model.CardGame, user *auth.User, deckService deck
 		selectedGame:        game,
 		user:                user,
 		deckService:         deckService,
+		cardService:         cardSvc,
 		styleManager:        sm,
 		configManager:       cfg,
 		cards:               cards,
@@ -121,9 +125,27 @@ func (m DeckBuilderModel) Update(msg tea.Msg) (DeckBuilderModel, tea.Cmd) {
 			return m, cmd
 		}
 	}
+	if m.importState.active {
+		if keyMsg, ok := msg.(tea.KeyMsg); ok {
+			cmd := m.importState.HandleTextInput(keyMsg)
+			if cmd == nil {
+				cmd = m.importState.HandleKey(keyMsg.String())
+			} else {
+				_ = m.importState.HandleKey(keyMsg.String())
+			}
+			return m, cmd
+		}
+	}
 	switch msg := msg.(type) {
 	case exportDoneMsg:
 		m.exportState.HandleResult(msg)
+		return m, nil
+	case importReadyMsg:
+		m.importState.HandleResult(msg)
+		return m, nil
+	case ImportApplyMsg:
+		return m.applyImport(msg)
+	case importCancelMsg:
 		return m, nil
 	case saveDeckMsg:
 		return m.performSave()
@@ -209,16 +231,13 @@ func (m DeckBuilderModel) handleDeckPanelKeys(msg tea.KeyMsg) (DeckBuilderModel,
 		return m, nil
 	}
 	if s == "d" && m.selectedDeck != nil {
-		m.modal = NewModalModel(
+		m.modal = newModal(
 			"Delete Deck",
 			fmt.Sprintf("Delete deck '%s'?", m.selectedDeck.Name),
 			func() tea.Cmd { return func() tea.Msg { return deleteDeckMsg{} } },
 			func() tea.Cmd { return nil },
-			m.styleManager,
+			m.styleManager, m.width, m.height,
 		)
-		if m.width > 0 && m.height > 0 {
-			m.modal = m.modal.SetDimensions(m.width, m.height)
-		}
 		return m, nil
 	}
 	if isSelectKey(action, s) && len(m.decks) > 0 {
@@ -252,6 +271,10 @@ func (m DeckBuilderModel) handleCardPanelKeys(msg tea.KeyMsg) (DeckBuilderModel,
 	}
 	if s == "x" && m.selectedDeck != nil {
 		m.exportState = NewExportState("deck", m.selectedDeck.Name, true, m.selectedDeck.Name, m.buildDeckExportRows)
+		return m, nil
+	}
+	if s == "i" && m.selectedDeck != nil {
+		m.importState = NewImportState(m.cardService, m.styleManager)
 		return m, nil
 	}
 	var cmd tea.Cmd
@@ -297,15 +320,12 @@ func (m DeckBuilderModel) handleFormKeys(msg tea.KeyMsg) (DeckBuilderModel, tea.
 				title = "Update Deck"
 				message = fmt.Sprintf("Update deck to '%s' (%s)?", m.nameInput.Value(), deckFormatOptions[m.formatIndex])
 			}
-			m.modal = NewModalModel(
+			m.modal = newModal(
 				title, message,
 				func() tea.Cmd { return func() tea.Msg { return createDeckMsg{} } },
 				func() tea.Cmd { return nil },
-				m.styleManager,
+				m.styleManager, m.width, m.height,
 			)
-			if m.width > 0 && m.height > 0 {
-				m.modal = m.modal.SetDimensions(m.width, m.height)
-			}
 			return m, nil
 		}
 	}
@@ -430,16 +450,13 @@ func (m DeckBuilderModel) handleSave() (DeckBuilderModel, tea.Cmd) {
 	if changeCount == 0 {
 		return m, nil
 	}
-	m.modal = NewModalModel(
+	m.modal = newModal(
 		"Save Deck",
 		fmt.Sprintf("Save %d card changes to '%s'?", changeCount, m.selectedDeck.Name),
 		func() tea.Cmd { return func() tea.Msg { return saveDeckMsg{} } },
 		func() tea.Cmd { return nil },
-		m.styleManager,
+		m.styleManager, m.width, m.height,
 	)
-	if m.width > 0 && m.height > 0 {
-		m.modal = m.modal.SetDimensions(m.width, m.height)
-	}
 	return m, nil
 }
 
@@ -603,6 +620,9 @@ func (m DeckBuilderModel) renderCardPanel(width, height int) string {
 	b.WriteString(m.styleManager.GetTitleStyle().Render("Add Cards to: "+m.selectedDeck.Name) + "\n")
 	b.WriteString(m.styleManager.GetBlurredStyle().Render("Search: ") + m.searchInput.View() + "\n")
 	tableHeight := CalcTableHeight(height, 4, 3)
+	// panelPadX=1, borderOverhead=2: inner table area = width - 4
+	tableWidth := max(width-4, 20)
+	m.cardTable.SetColumns(scaledDeckColumns(tableWidth))
 	m.cardTable.SetHeight(tableHeight)
 	b.WriteString(m.cardTable.View())
 	return b.String()
@@ -611,6 +631,9 @@ func (m DeckBuilderModel) renderCardPanel(width, height int) string {
 func (m DeckBuilderModel) renderFooter() string {
 	if m.exportState.active {
 		return m.exportState.Render(m.styleManager)
+	}
+	if m.importState.active {
+		return m.importState.Render(m.styleManager)
 	}
 	hb := NewHelpBuilder(m.configManager)
 	var footer string
@@ -621,7 +644,7 @@ func (m DeckBuilderModel) renderFooter() string {
 			KeyItem{"increment_quantity", "+", "Add"},
 			KeyItem{"decrement_quantity", "Delete", "Remove"},
 			KeyItem{"save", "Ctrl+S", "Save"},
-		) + " • x: Export • " + hb.Build(KeyItem{"back", "Q", "Back"}))
+		) + " • x: Export • i: Import • " + hb.Build(KeyItem{"back", "Q", "Back"}))
 	} else {
 		footer = m.styleManager.GetHelpStyle().Render("Tab: Switch panel • n: New • e: Edit • d: Delete • " + hb.Build(KeyItem{"back", "Q", "Back"}))
 	}
@@ -632,26 +655,19 @@ func (m DeckBuilderModel) renderFooter() string {
 }
 
 func (m *DeckBuilderModel) buildDeckExportRows() []export.CardRow {
-	var rows []export.CardRow
-	for _, c := range m.cards {
-		qty := m.dbQuantities[c.ID] + m.tempQuantityChanges[c.ID]
-		if qty <= 0 {
-			continue
-		}
-		setName := ""
-		setCode := ""
-		if c.Set != nil {
-			setName = c.Set.Name
-			setCode = c.Set.Code
-		}
-		rows = append(rows, export.CardRow{
-			Name:     c.Name,
-			SetName:  setName,
-			SetCode:  setCode,
-			Number:   c.Number,
-			Rarity:   c.Rarity,
-			Quantity: qty,
-		})
+	return buildCardExportRows(m.cards, m.dbQuantities, m.tempQuantityChanges)
+}
+
+// applyImport merges the imported card quantities into tempQuantityChanges.
+// Quantities are staged so the user can review before saving with Ctrl+S.
+func (m DeckBuilderModel) applyImport(msg ImportApplyMsg) (DeckBuilderModel, tea.Cmd) {
+	if m.selectedDeck == nil {
+		return m, nil
 	}
-	return rows
+	for cardID, qty := range msg.Quantities {
+		m.tempQuantityChanges[cardID] += qty
+	}
+	m.updateValidation()
+	m.updateCardTable()
+	return m, nil
 }

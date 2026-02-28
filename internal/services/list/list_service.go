@@ -3,6 +3,7 @@ package list
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"log/slog"
 
 	"github.com/laiambryant/tui-cardman/internal/db"
@@ -78,11 +79,11 @@ func (s *ListServiceImpl) CreateList(ctx context.Context, userID, cardGameID int
 	result, err := db.ExecContext(ctx, s.db, insertListQuery, userID, cardGameID, name, description, color)
 	if err != nil {
 		slog.Error("failed to create list", "user_id", userID, "name", name, "error", err)
-		return nil, &FailedToCreateListError{Err: err}
+		return nil, fmt.Errorf("failed to create list: %w", err)
 	}
 	id, err := result.LastInsertId()
 	if err != nil {
-		return nil, &FailedToCreateListError{Err: err}
+		return nil, fmt.Errorf("failed to get last insert id for list: %w", err)
 	}
 	return &model.UserList{
 		ID:          id,
@@ -97,7 +98,7 @@ func (s *ListServiceImpl) CreateList(ctx context.Context, userID, cardGameID int
 func (s *ListServiceImpl) GetListsByUserAndGame(userID, cardGameID int64) ([]model.UserList, error) {
 	rows, err := db.Query(s.db, selectListsByUserAndGameQuery, userID, cardGameID)
 	if err != nil {
-		return nil, &FailedToQueryListsError{Err: err}
+		return nil, fmt.Errorf("failed to query lists: %w", err)
 	}
 	defer rows.Close()
 	var lists []model.UserList
@@ -105,12 +106,12 @@ func (s *ListServiceImpl) GetListsByUserAndGame(userID, cardGameID int64) ([]mod
 		var l model.UserList
 		err := rows.Scan(&l.ID, &l.UserID, &l.CardGameID, &l.Name, &l.Description, &l.Color, &l.CreatedAt, &l.UpdatedAt)
 		if err != nil {
-			return nil, &FailedToScanListError{Err: err}
+			return nil, fmt.Errorf("failed to scan list: %w", err)
 		}
 		lists = append(lists, l)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, &FailedToQueryListsError{Err: err}
+		return nil, fmt.Errorf("failed to query lists: %w", err)
 	}
 	slog.Debug("retrieved lists", "user_id", userID, "game_id", cardGameID, "count", len(lists))
 	return lists, nil
@@ -120,7 +121,7 @@ func (s *ListServiceImpl) GetListByID(listID int64) (*model.UserList, error) {
 	var l model.UserList
 	err := db.QueryRow(s.db, selectListByIDQuery, listID).Scan(&l.ID, &l.UserID, &l.CardGameID, &l.Name, &l.Description, &l.Color, &l.CreatedAt, &l.UpdatedAt)
 	if err != nil {
-		return nil, &FailedToQueryListsError{Err: err}
+		return nil, fmt.Errorf("failed to query list by id: %w", err)
 	}
 	return &l, nil
 }
@@ -129,7 +130,7 @@ func (s *ListServiceImpl) UpdateList(ctx context.Context, listID int64, name, de
 	_, err := db.ExecContext(ctx, s.db, updateListQuery, name, description, color, listID)
 	if err != nil {
 		slog.Error("failed to update list", "list_id", listID, "error", err)
-		return &FailedToUpdateListError{Err: err}
+		return fmt.Errorf("failed to update list: %w", err)
 	}
 	return nil
 }
@@ -138,7 +139,7 @@ func (s *ListServiceImpl) DeleteList(ctx context.Context, listID int64) error {
 	_, err := db.ExecContext(ctx, s.db, deleteListQuery, listID)
 	if err != nil {
 		slog.Error("failed to delete list", "list_id", listID, "error", err)
-		return &FailedToDeleteListError{Err: err}
+		return fmt.Errorf("failed to delete list: %w", err)
 	}
 	return nil
 }
@@ -146,7 +147,7 @@ func (s *ListServiceImpl) DeleteList(ctx context.Context, listID int64) error {
 func (s *ListServiceImpl) GetAllQuantitiesForList(listID int64) (map[int64]int, error) {
 	rows, err := db.Query(s.db, selectAllQuantitiesForListQuery, listID)
 	if err != nil {
-		return nil, &FailedToGetListQuantitiesError{Err: err}
+		return nil, fmt.Errorf("failed to get list quantities: %w", err)
 	}
 	defer rows.Close()
 	quantities := make(map[int64]int)
@@ -160,7 +161,7 @@ func (s *ListServiceImpl) GetAllQuantitiesForList(listID int64) (map[int64]int, 
 		quantities[cardID] = quantity
 	}
 	if err := rows.Err(); err != nil {
-		return nil, &FailedToGetListQuantitiesError{Err: err}
+		return nil, fmt.Errorf("failed to get list quantities: %w", err)
 	}
 	slog.Debug("retrieved list quantities", "list_id", listID, "count", len(quantities))
 	return quantities, nil
@@ -173,14 +174,14 @@ func (s *ListServiceImpl) UpsertListCardBatch(ctx context.Context, listID int64,
 				_, err := db.ExecContextTx(ctx, tx, deleteListCardQuery, listID, cardID)
 				if err != nil {
 					slog.Error("failed to delete list card in batch", "list_id", listID, "card_id", cardID, "error", err)
-					return &FailedToUpsertListCardError{Err: err}
+					return fmt.Errorf("failed to upsert list card: %w", err)
 				}
 				continue
 			}
 			_, err := db.ExecContextTx(ctx, tx, upsertListCardQuery, listID, cardID, quantity)
 			if err != nil {
 				slog.Error("failed to upsert list card in batch", "list_id", listID, "card_id", cardID, "error", err)
-				return &FailedToUpsertListCardError{Err: err}
+				return fmt.Errorf("failed to upsert list card: %w", err)
 			}
 		}
 		slog.Debug("batch upserted list cards", "list_id", listID, "update_count", len(updates))
@@ -191,19 +192,19 @@ func (s *ListServiceImpl) UpsertListCardBatch(ctx context.Context, listID int64,
 func (s *ListServiceImpl) GetListsContainingCard(userID, cardID int64) ([]model.UserList, error) {
 	rows, err := db.Query(s.db, selectListsContainingCardQuery, cardID, userID)
 	if err != nil {
-		return nil, &FailedToQueryListsError{Err: err}
+		return nil, fmt.Errorf("failed to query lists: %w", err)
 	}
 	defer rows.Close()
 	var lists []model.UserList
 	for rows.Next() {
 		var l model.UserList
 		if err := rows.Scan(&l.ID, &l.UserID, &l.CardGameID, &l.Name, &l.Description, &l.Color, &l.CreatedAt, &l.UpdatedAt); err != nil {
-			return nil, &FailedToScanListError{Err: err}
+			return nil, fmt.Errorf("failed to scan list: %w", err)
 		}
 		lists = append(lists, l)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, &FailedToQueryListsError{Err: err}
+		return nil, fmt.Errorf("failed to query lists: %w", err)
 	}
 	return lists, nil
 }

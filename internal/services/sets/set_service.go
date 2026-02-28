@@ -3,6 +3,7 @@ package sets
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -62,7 +63,7 @@ func (s *SetServiceImpl) UpsertSet(ctx context.Context, apiID, code, name string
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		slog.Error("failed to begin transaction for upsert set", "api_id", apiID, "error", err)
-		return 0, &FailedToBeginTransactionError{Err: err}
+		return 0, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer func() {
 		if rollbackErr := tx.Rollback(); rollbackErr != nil && err == nil {
@@ -80,16 +81,16 @@ func (s *SetServiceImpl) UpsertSet(ctx context.Context, apiID, code, name string
 			time.Now())
 		if err != nil {
 			slog.Error("failed to insert set", "api_id", apiID, "error", err)
-			return 0, &FailedToInsertSetError{Err: err}
+			return 0, fmt.Errorf("failed to insert set %s: %w", apiID, err)
 		}
 		setID, err = result.LastInsertId()
 		if err != nil {
 			slog.Error("failed to get last insert id after insert", "api_id", apiID, "error", err)
-			return 0, &FailedToGetLastInsertIDError{Err: err}
+			return 0, fmt.Errorf("failed to get last insert id for set %s: %w", apiID, err)
 		}
 	} else if err != nil {
 		slog.Error("failed to query set during upsert", "api_id", apiID, "error", err)
-		return 0, &FailedToQuerySetError{Err: err}
+		return 0, fmt.Errorf("failed to query set %s: %w", apiID, err)
 	} else {
 		slog.Debug("exec (tx)", "query", logging.SanitizeQuery(updateSetQuery), "args", []any{code, name, printedTotal, total, time.Now(), setID})
 		_, err = tx.ExecContext(ctx, updateSetQuery,
@@ -97,13 +98,13 @@ func (s *SetServiceImpl) UpsertSet(ctx context.Context, apiID, code, name string
 			time.Now(), setID)
 		if err != nil {
 			slog.Error("failed to update set", "api_id", apiID, "id", setID, "error", err)
-			return 0, &FailedToUpdateSetError{Err: err}
+			return 0, fmt.Errorf("failed to update set %s: %w", apiID, err)
 		}
 	}
 
 	if err := tx.Commit(); err != nil {
 		slog.Error("failed to commit transaction for upsert set", "api_id", apiID, "id", setID, "error", err)
-		return 0, &FailedToCommitTransactionError{Err: err}
+		return 0, fmt.Errorf("failed to commit transaction for set %s: %w", apiID, err)
 	}
 	return setID, nil
 }
@@ -114,7 +115,7 @@ func (s *SetServiceImpl) GetAllSetAPIIDs(ctx context.Context) ([]string, error) 
 	rows, err := s.db.QueryContext(ctx, selectAllSetAPIIDsQuery)
 	if err != nil {
 		slog.Error("failed to query existing sets", "error", err)
-		return nil, &FailedToQueryExistingSetsError{Err: err}
+		return nil, fmt.Errorf("failed to query existing sets: %w", err)
 	}
 	defer rows.Close()
 
@@ -123,14 +124,14 @@ func (s *SetServiceImpl) GetAllSetAPIIDs(ctx context.Context) ([]string, error) 
 		var apiID string
 		if err := rows.Scan(&apiID); err != nil {
 			slog.Error("failed to scan set api_id", "error", err)
-			return nil, &FailedToScanSetAPIIDError{Err: err}
+			return nil, fmt.Errorf("failed to scan set api_id: %w", err)
 		}
 		apiIDs = append(apiIDs, apiID)
 	}
 
 	if err := rows.Err(); err != nil {
 		slog.Error("error iterating set rows", "error", err)
-		return nil, &ErrorIteratingSetsError{Err: err}
+		return nil, fmt.Errorf("error iterating set rows: %w", err)
 	}
 
 	return apiIDs, nil
@@ -146,7 +147,7 @@ func (s *SetServiceImpl) SetHasUserCollections(ctx context.Context, setID int64)
 	}
 	if err != nil {
 		slog.Error("failed to check if set has user collections", "set_id", setID, "error", err)
-		return false, &FailedToCheckSetCollectionsError{Err: err}
+		return false, fmt.Errorf("failed to check set collections for set %d: %w", setID, err)
 	}
 	return hasCollections, nil
 }

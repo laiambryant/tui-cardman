@@ -14,6 +14,7 @@ import (
 	"github.com/laiambryant/tui-cardman/internal/export"
 	"github.com/laiambryant/tui-cardman/internal/model"
 	"github.com/laiambryant/tui-cardman/internal/runtimecfg"
+	cardservice "github.com/laiambryant/tui-cardman/internal/services/cards"
 	listservice "github.com/laiambryant/tui-cardman/internal/services/list"
 )
 
@@ -55,6 +56,7 @@ type ListsModel struct {
 	selectedGame        *model.CardGame
 	user                *auth.User
 	listService         listservice.ListService
+	cardService         cardservice.CardService
 	styleManager        *StyleManager
 	configManager       *runtimecfg.Manager
 	width               int
@@ -78,9 +80,10 @@ type ListsModel struct {
 	shouldGoBack        bool
 	editingListID       int64
 	exportState         ExportState
+	importState         ImportState
 }
 
-func NewListsModel(game *model.CardGame, user *auth.User, listSvc listservice.ListService, cards []model.Card, cfg *runtimecfg.Manager, sm *StyleManager) ListsModel {
+func NewListsModel(game *model.CardGame, user *auth.User, listSvc listservice.ListService, cardSvc cardservice.CardService, cards []model.Card, cfg *runtimecfg.Manager, sm *StyleManager) ListsModel {
 	searchInput := textinput.New()
 	searchInput.Placeholder = "Search cards..."
 	searchInput.Width = 30
@@ -107,6 +110,7 @@ func NewListsModel(game *model.CardGame, user *auth.User, listSvc listservice.Li
 		selectedGame:        game,
 		user:                user,
 		listService:         listSvc,
+		cardService:         cardSvc,
 		styleManager:        sm,
 		configManager:       cfg,
 		cards:               cards,
@@ -142,9 +146,27 @@ func (m ListsModel) Update(msg tea.Msg) (ListsModel, tea.Cmd) {
 			return m, cmd
 		}
 	}
+	if m.importState.active {
+		if keyMsg, ok := msg.(tea.KeyMsg); ok {
+			cmd := m.importState.HandleTextInput(keyMsg)
+			if cmd == nil {
+				cmd = m.importState.HandleKey(keyMsg.String())
+			} else {
+				_ = m.importState.HandleKey(keyMsg.String())
+			}
+			return m, cmd
+		}
+	}
 	switch msg := msg.(type) {
 	case exportDoneMsg:
 		m.exportState.HandleResult(msg)
+		return m, nil
+	case importReadyMsg:
+		m.importState.HandleResult(msg)
+		return m, nil
+	case ImportApplyMsg:
+		return m.applyImport(msg)
+	case importCancelMsg:
 		return m, nil
 	case saveListCardsMsg:
 		return m.performSaveListCards()
@@ -235,18 +257,15 @@ func (m ListsModel) handleListPanelKeys(s, action string) (ListsModel, tea.Cmd) 
 	}
 	if s == "d" && len(m.lists) > 0 && m.listCursor < len(m.lists) {
 		l := m.lists[m.listCursor]
-		m.modal = NewModalModel(
+		m.modal = newModal(
 			"Delete List",
 			fmt.Sprintf("Delete list %q? This cannot be undone.", l.Name),
 			func() tea.Cmd {
 				return func() tea.Msg { return deleteListMsg{listID: l.ID} }
 			},
 			func() tea.Cmd { return nil },
-			m.styleManager,
+			m.styleManager, m.width, m.height,
 		)
-		if m.width > 0 && m.height > 0 {
-			m.modal = m.modal.SetDimensions(m.width, m.height)
-		}
 		return m, nil
 	}
 	return m, nil
@@ -284,6 +303,10 @@ func (m ListsModel) handleCardPanelKeys(msg tea.KeyMsg, s, action string) (Lists
 	}
 	if s == "x" && m.selectedList != nil {
 		m.exportState = NewExportState("list", m.selectedList.Name, false, "", m.buildListExportRows)
+		return m, nil
+	}
+	if s == "i" && m.selectedList != nil {
+		m.importState = NewImportState(m.cardService, m.styleManager)
 		return m, nil
 	}
 	var cmd tea.Cmd
@@ -330,24 +353,21 @@ func (m ListsModel) handleFormKeys(s, action string) (ListsModel, tea.Cmd) {
 			return m, nil
 		}
 		if m.mode == ListsModeCreate {
-			m.modal = NewModalModel(
+			m.modal = newModal(
 				"Create List",
 				fmt.Sprintf("Create list %q?", m.nameInput.Value()),
 				func() tea.Cmd { return func() tea.Msg { return createListMsg{} } },
 				func() tea.Cmd { return nil },
-				m.styleManager,
+				m.styleManager, m.width, m.height,
 			)
 		} else {
-			m.modal = NewModalModel(
+			m.modal = newModal(
 				"Update List",
 				fmt.Sprintf("Update list %q?", m.nameInput.Value()),
 				func() tea.Cmd { return func() tea.Msg { return updateListMsg{} } },
 				func() tea.Cmd { return nil },
-				m.styleManager,
+				m.styleManager, m.width, m.height,
 			)
-		}
-		if m.width > 0 && m.height > 0 {
-			m.modal = m.modal.SetDimensions(m.width, m.height)
 		}
 		return m, nil
 	}
@@ -509,6 +529,9 @@ func (m ListsModel) renderCardPanel(width, height int) string {
 		b.WriteString(m.styleManager.GetBlurredStyle().Render("No cards match your search.") + "\n")
 	} else {
 		tableHeight := CalcTableHeight(height-2, 3, 3)
+		// panelPadX=1, borderOverhead=2: inner table area = width - 4
+		tableWidth := max(width-4, 20)
+		m.cardTable.SetColumns(scaledCardSearchColumns(tableWidth))
 		m.cardTable.SetRows(rows)
 		m.cardTable.SetHeight(tableHeight)
 		b.WriteString(m.styleManager.GetTableBaseStyle().Render(m.cardTable.View()))
@@ -520,6 +543,9 @@ func (m ListsModel) renderFooter() string {
 	if m.exportState.active {
 		return m.exportState.Render(m.styleManager)
 	}
+	if m.importState.active {
+		return m.importState.Render(m.styleManager)
+	}
 	hb := NewHelpBuilder(m.configManager)
 	var footer string
 	if m.mode == ListsModeCreate || m.mode == ListsModeEdit {
@@ -530,7 +556,7 @@ func (m ListsModel) renderFooter() string {
 				KeyItem{"increment_quantity", "+", "Add"},
 				KeyItem{"decrement_quantity", "Delete", "Remove"},
 				KeyItem{"save", "Ctrl+S", "Save"},
-			) + " • x: Export • " + hb.Pair("nav_up", "↑", "nav_down", "↓", "Navigate") + " • Left/Shift+Tab: Lists panel",
+			) + " • x: Export • i: Import • " + hb.Pair("nav_up", "↑", "nav_down", "↓", "Navigate") + " • Left/Shift+Tab: Lists panel",
 		)
 	} else {
 		footer = m.styleManager.GetHelpStyle().Render(
@@ -607,16 +633,13 @@ func (m ListsModel) handleSaveListCards() (ListsModel, tea.Cmd) {
 		return m, nil
 	}
 	message := fmt.Sprintf("Save %d card changes to list %q?", changeCount, m.selectedList.Name)
-	m.modal = NewModalModel(
+	m.modal = newModal(
 		"Confirm Save",
 		message,
 		func() tea.Cmd { return func() tea.Msg { return saveListCardsMsg{} } },
 		func() tea.Cmd { return nil },
-		m.styleManager,
+		m.styleManager, m.width, m.height,
 	)
-	if m.width > 0 && m.height > 0 {
-		m.modal = m.modal.SetDimensions(m.width, m.height)
-	}
 	return m, nil
 }
 
@@ -716,19 +739,7 @@ func (m *ListsModel) updateListCardTable() {
 }
 
 func (m ListsModel) filterListCards(query string) []model.Card {
-	if query == "" {
-		return m.cards
-	}
-	var filtered []model.Card
-	query = strings.ToLower(query)
-	for _, card := range m.cards {
-		if strings.Contains(strings.ToLower(card.Name), query) ||
-			strings.Contains(strings.ToLower(card.Number), query) ||
-			strings.Contains(strings.ToLower(card.Rarity), query) {
-			filtered = append(filtered, card)
-		}
-	}
-	return filtered
+	return filterCardsByQuery(m.cards, query)
 }
 
 func (m ListsModel) findColorIndex(color string) int {
@@ -741,26 +752,18 @@ func (m ListsModel) findColorIndex(color string) int {
 }
 
 func (m *ListsModel) buildListExportRows() []export.CardRow {
-	var rows []export.CardRow
-	for _, c := range m.cards {
-		qty := m.dbQuantities[c.ID]
-		if qty <= 0 {
-			continue
-		}
-		setName := ""
-		setCode := ""
-		if c.Set != nil {
-			setName = c.Set.Name
-			setCode = c.Set.Code
-		}
-		rows = append(rows, export.CardRow{
-			Name:     c.Name,
-			SetName:  setName,
-			SetCode:  setCode,
-			Number:   c.Number,
-			Rarity:   c.Rarity,
-			Quantity: qty,
-		})
+	return buildCardExportRows(m.cards, m.dbQuantities, nil)
+}
+
+// applyImport merges the imported card quantities into tempQuantityChanges.
+// Quantities are staged so the user can review before saving with Ctrl+S.
+func (m ListsModel) applyImport(msg ImportApplyMsg) (ListsModel, tea.Cmd) {
+	if m.selectedList == nil {
+		return m, nil
 	}
-	return rows
+	for cardID, qty := range msg.Quantities {
+		m.tempQuantityChanges[cardID] += qty
+	}
+	m.updateListCardTable()
+	return m, nil
 }

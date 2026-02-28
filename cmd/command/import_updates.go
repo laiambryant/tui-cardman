@@ -3,15 +3,8 @@ package command
 import (
 	"context"
 	"fmt"
-	"log/slog"
 
 	"github.com/laiambryant/tui-cardman/internal/config"
-	"github.com/laiambryant/tui-cardman/internal/db"
-	"github.com/laiambryant/tui-cardman/internal/pokemontcg"
-	card "github.com/laiambryant/tui-cardman/internal/services/cards"
-	"github.com/laiambryant/tui-cardman/internal/services/importruns"
-	"github.com/laiambryant/tui-cardman/internal/services/prices"
-	"github.com/laiambryant/tui-cardman/internal/services/sets"
 	"github.com/spf13/cobra"
 )
 
@@ -37,33 +30,18 @@ var importUpdatesCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		config.LoadConfig()
 		ctx := context.Background()
-		database, err := db.OpenDB(config.Cfg.DBDSN)
+
+		deps, err := buildImportService()
 		if err != nil {
-			return fmt.Errorf("failed to connect to database: %w", err)
+			return err
 		}
-		defer database.Close()
-		apiKey := config.GetAPIKey()
-		client := pokemontcg.NewClient(apiKey)
-		logger := slog.Default()
+		defer deps.database.Close()
 
-		// Initialize all services
-		importRunService := importruns.NewImportRunService(database)
-		setService := sets.NewSetService(database)
-		cardService := card.NewCardService(database)
-		tcgPlayerPriceService := prices.NewTCGPlayerPriceService(database)
-		cardMarketPriceService := prices.NewCardMarketPriceService(database)
-
-		importService := pokemontcg.NewImportService(
-			database, client, logger,
-			importRunService, setService, cardService,
-			tcgPlayerPriceService, cardMarketPriceService,
-		)
-
-		logger.Info("Starting incremental Pokemon TCG import (new sets only)")
-		if err := importService.ImportNewSets(ctx); err != nil {
+		deps.logger.Info("Starting incremental Pokemon TCG import (new sets only)")
+		if err := deps.importService.ImportNewSets(ctx); err != nil {
 			return fmt.Errorf("import failed: %w", err)
 		}
-		logger.Info("Incremental import completed successfully")
+		deps.logger.Info("Incremental import completed successfully")
 		return nil
 	},
 }

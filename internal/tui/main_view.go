@@ -47,11 +47,15 @@ func (m Model) renderSplitMainBody(contentWidth, contentHeight int) string {
 func (m Model) renderCardGamesPanel(width, height int) string {
 	var b strings.Builder
 	b.WriteString(titleStyle.Render("Card Games") + "\n")
+	// panelPadX=2, borderOverhead=2: inner content width = width - 6
+	// button has border(2) + padding(2) overhead, so cap btnWidth at innerWidth-4
+	innerWidth := max(width-6, 10)
+	btnMaxWidth := max(innerWidth-4, 6)
 	if len(m.cardGames) == 0 {
 		b.WriteString(errorStyle.Render("No card games found.") + "\n")
 	} else {
 		for i, game := range m.cardGames {
-			b.WriteString(RenderButtonItem(m.styleManager, game.Name, m.cursor == i && m.mainFocusPanel == 0, 40))
+			b.WriteString(RenderButtonItem(m.styleManager, game.Name, m.cursor == i && m.mainFocusPanel == 0, btnMaxWidth))
 		}
 	}
 	return RenderPanel(m.styleManager, b.String(), width, height, m.mainFocusPanel == 0, 2, 1)

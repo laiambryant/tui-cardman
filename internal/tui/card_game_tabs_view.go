@@ -659,15 +659,18 @@ func (m CardGameTabsModel) renderCardSearchTab(availableHeight int) string {
 	}
 	leftWidth := contentWidth / 2
 	rightWidth := contentWidth - leftWidth
+	// panelPadX=1, borderOverhead=2: inner table area = panelWidth - 4
+	leftTableWidth := max(leftWidth-4, 20)
+	rightTableWidth := max(rightWidth-4, 20)
 	tableHeight := CalcTableHeight(availableHeight, 4, 3)
-	leftContent := m.renderSearchLeftPanel(tableHeight)
+	leftContent := m.renderSearchLeftPanel(tableHeight, leftTableWidth)
 	leftPanel := RenderPanel(m.styleManager, leftContent, leftWidth, availableHeight, m.searchTabFocus == 0, 1, 0)
-	rightContent := m.renderSearchRightPanel(tableHeight)
+	rightContent := m.renderSearchRightPanel(tableHeight, rightTableWidth)
 	rightPanel := RenderPanel(m.styleManager, rightContent, rightWidth, availableHeight, m.searchTabFocus == 1, 1, 0)
 	return lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, rightPanel)
 }
 
-func (m CardGameTabsModel) renderSearchLeftPanel(tableHeight int) string {
+func (m CardGameTabsModel) renderSearchLeftPanel(tableHeight, tableWidth int) string {
 	var b strings.Builder
 	b.WriteString(m.styleManager.GetTitleStyle().Render("Search All Cards") + "\n")
 	b.WriteString(m.styleManager.GetBlurredStyle().Render("Search: ") + m.styleManager.GetNoStyle().Render(m.searchInput.View()) + "\n")
@@ -694,13 +697,14 @@ func (m CardGameTabsModel) renderSearchLeftPanel(tableHeight int) string {
 		}
 		return b.String()
 	}
+	m.cardTable.SetColumns(scaledCardSearchColumns(tableWidth))
 	m.cardTable.SetRows(rows)
 	m.cardTable.SetHeight(tableHeight)
 	b.WriteString(m.cardTable.View())
 	return b.String()
 }
 
-func (m CardGameTabsModel) renderSearchRightPanel(tableHeight int) string {
+func (m CardGameTabsModel) renderSearchRightPanel(tableHeight, tableWidth int) string {
 	var b strings.Builder
 	b.WriteString(m.styleManager.GetTitleStyle().Render("My Collection") + "\n")
 	b.WriteString(m.styleManager.GetBlurredStyle().Render("Search: ") + m.styleManager.GetNoStyle().Render(m.userSearchInput.View()) + "\n")
@@ -708,6 +712,7 @@ func (m CardGameTabsModel) renderSearchRightPanel(tableHeight int) string {
 		b.WriteString(m.renderEmptySearchMessage(m.userSearchInput.Value(), "No cards in your collection yet.", "No cards match your search."))
 		return b.String()
 	}
+	m.userSearchTable.SetColumns(scaledCollectionColumns(tableWidth))
 	m.userSearchTable.SetRows(buildCollectionRows(m.filteredCollection))
 	m.userSearchTable.SetHeight(tableHeight)
 	b.WriteString(m.userSearchTable.View())
@@ -716,20 +721,69 @@ func (m CardGameTabsModel) renderSearchRightPanel(tableHeight int) string {
 
 // filterCards filters cards based on search query using fuzzy matching
 func (m CardGameTabsModel) filterCards(query string) []model.Card {
-	if query == "" {
-		return m.cards
-	}
-	var filtered []model.Card
-	query = strings.ToLower(query)
-	for _, card := range m.cards {
-		if strings.Contains(strings.ToLower(card.Name), query) ||
-			strings.Contains(strings.ToLower(card.Number), query) ||
-			strings.Contains(strings.ToLower(card.Rarity), query) {
-			filtered = append(filtered, card)
-		}
-	}
+	return filterCardsByQuery(m.cards, query)
+}
 
-	return filtered
+// scaledCardSearchColumns returns 5 table columns whose widths sum to availableWidth,
+// distributed proportionally (Name 37%, Expansion 22%, Rarity 18%, Card# 12%, Qty 11%).
+// Each column has a sensible minimum width so narrow terminals remain usable.
+func scaledCardSearchColumns(availableWidth int) []table.Column {
+	if availableWidth < 30 {
+		availableWidth = 30
+	}
+	// proportions: 37, 22, 18, 12, 11  (sum = 100)
+	name := max(availableWidth*37/100, 8)
+	exp := max(availableWidth*22/100, 5)
+	rar := max(availableWidth*18/100, 5)
+	num := max(availableWidth*12/100, 4)
+	qty := max(availableWidth-name-exp-rar-num, 3)
+	return []table.Column{
+		{Title: "Name", Width: name},
+		{Title: "Expansion", Width: exp},
+		{Title: "Rarity", Width: rar},
+		{Title: "Card #", Width: num},
+		{Title: "Quantity", Width: qty},
+	}
+}
+
+// scaledDeckColumns returns 5 table columns for the deck builder card panel,
+// proportionally distributed (Name 38%, Set 23%, Rarity 19%, # 11%, Qty 9%).
+func scaledDeckColumns(availableWidth int) []table.Column {
+	if availableWidth < 25 {
+		availableWidth = 25
+	}
+	// proportions: 38, 23, 19, 11, 9 (sum = 100)
+	name := max(availableWidth*38/100, 8)
+	set := max(availableWidth*23/100, 4)
+	rar := max(availableWidth*19/100, 4)
+	num := max(availableWidth*11/100, 3)
+	qty := max(availableWidth-name-set-rar-num, 3)
+	return []table.Column{
+		{Title: "Name", Width: name},
+		{Title: "Set", Width: set},
+		{Title: "Rarity", Width: rar},
+		{Title: "#", Width: num},
+		{Title: "Qty", Width: qty},
+	}
+}
+
+// scaledCollectionColumns returns 4 table columns whose widths sum to availableWidth,
+// distributed proportionally (Name 42%, Expansion 25%, Rarity 20%, Amount 13%).
+func scaledCollectionColumns(availableWidth int) []table.Column {
+	if availableWidth < 24 {
+		availableWidth = 24
+	}
+	// proportions: 42, 25, 20, 13 (sum = 100)
+	name := max(availableWidth*42/100, 8)
+	exp := max(availableWidth*25/100, 5)
+	rar := max(availableWidth*20/100, 5)
+	amt := max(availableWidth-name-exp-rar, 3)
+	return []table.Column{
+		{Title: "Name", Width: name},
+		{Title: "Expansion", Width: exp},
+		{Title: "Rarity", Width: rar},
+		{Title: "Amount", Width: amt},
+	}
 }
 
 // filterUserCollection filters user collection based on search query
@@ -859,7 +913,7 @@ func (m CardGameTabsModel) handleSaveCollection() (CardGameTabsModel, tea.Cmd) {
 		return m, nil
 	}
 	message := fmt.Sprintf("Save %d card quantity changes to your collection?", changeCount)
-	m.modal = NewModalModel(
+	m.modal = newModal(
 		"Confirm Save",
 		message,
 		func() tea.Cmd {
@@ -870,11 +924,8 @@ func (m CardGameTabsModel) handleSaveCollection() (CardGameTabsModel, tea.Cmd) {
 		func() tea.Cmd {
 			return nil
 		},
-		m.styleManager,
+		m.styleManager, m.width, m.height,
 	)
-	if m.width > 0 && m.height > 0 {
-		m.modal = m.modal.SetDimensions(m.width, m.height)
-	}
 	return m, nil
 }
 

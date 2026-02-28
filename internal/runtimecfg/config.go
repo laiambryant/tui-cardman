@@ -2,6 +2,7 @@ package runtimecfg
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 )
@@ -65,11 +66,11 @@ func Load(path string) (*RuntimeConfig, error) {
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, &FailedToReadConfigFileError{Err: err}
+		return nil, fmt.Errorf("failed to read config file: %w", err)
 	}
 	var cfg RuntimeConfig
 	if err := json.Unmarshal(data, &cfg); err != nil {
-		return nil, &FailedToParseConfigFileError{Err: err}
+		return nil, fmt.Errorf("failed to parse config file: %w", err)
 	}
 	defaults := Default()
 	initializeKeybindings(&cfg, defaults)
@@ -92,17 +93,15 @@ func initializeKeybindings(cfg *RuntimeConfig, defaults *RuntimeConfig) {
 func Save(cfg *RuntimeConfig, path string) error {
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0755); err != nil {
-		return &FailedToCreateConfigDirectoryError{Err: err}
+		return fmt.Errorf("failed to create config directory: %w", err)
 	}
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
-		return &FailedToMarshalConfigError{Err: err}
+		return fmt.Errorf("failed to marshal config: %w", err)
 	}
-
 	if err := os.WriteFile(path, data, 0644); err != nil {
-		return &FailedToWriteConfigFileError{Err: err}
+		return fmt.Errorf("failed to write config file: %w", err)
 	}
-
 	return nil
 }
 

@@ -1,7 +1,5 @@
 package auth
 
-type EmailRequiredError struct{}
+import "errors"
 
-func (e *EmailRequiredError) Error() string {
-	return "email is required"
-}
+var ErrEmailRequired = errors.New("email is required")

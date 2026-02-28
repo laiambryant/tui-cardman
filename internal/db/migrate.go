@@ -2,6 +2,7 @@ package db
 
 import (
 	"database/sql"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -107,7 +108,7 @@ func applyMigration(db *sql.DB, m migration) error {
 	slog.Debug("tx exec", "version", m.version, "path", m.path)
 	if _, err := tx.Exec(string(content)); err != nil {
 		slog.Debug("tx exec failed", "version", m.version, "err", err)
-		return &ApplyMigrationError{Path: m.path, Err: err}
+		return fmt.Errorf("apply %s: %w", m.path, err)
 	}
 	slog.Debug("tx exec", "query", logging.SanitizeQuery(recordMigration), "args", []any{m.version, time.Now().UTC()})
 	if _, err := tx.Exec(recordMigration, m.version, time.Now().UTC()); err != nil {

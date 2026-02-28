@@ -1,6 +1,7 @@
 package runtimecfg
 
 import (
+	"fmt"
 	"maps"
 	"slices"
 	"sync"
@@ -27,7 +28,7 @@ func NewManager(isLocal bool, configPath string, service ButtonConfigService, us
 		strategy = NewLocalStrategy(configPath)
 		config, err = strategy.Load()
 		if err != nil {
-			return nil, LocalConfigLoadError{err}
+			return nil, fmt.Errorf("failed to load local config: %w", err)
 		}
 	} else {
 		config = Default()
@@ -71,7 +72,7 @@ func (m *Manager) Set(cfg *RuntimeConfig) error {
 		sub(cfg)
 	}
 	if err := m.strategy.Save(cfg); err != nil {
-		return FailedToSaveConfigError{err}
+		return fmt.Errorf("failed to save config: %w", err)
 	}
 	return nil
 }
@@ -119,10 +120,10 @@ func (m *Manager) validateKeybindings(bindings map[string]string) error {
 	seen := make(map[string]string)
 	for action, key := range bindings {
 		if key == "" {
-			return &ActionNotBoundToAnyKeyError{Action: action}
+			return fmt.Errorf("action %q is not bound to any key", action)
 		}
 		if existingAction, exists := seen[key]; exists {
-			return &KeyBoundToMultipleActionsError{Key: key, ExistingAction: existingAction, NewAction: action}
+			return fmt.Errorf("key %q is bound to both %q and %q", key, existingAction, action)
 		}
 		seen[key] = action
 	}

@@ -62,7 +62,7 @@ func (s *ImportService) initPokemonGameID(ctx context.Context) error {
 	var gameID int64
 	err := s.db.QueryRowContext(ctx, query, "Pokemon").Scan(&gameID)
 	if err != nil {
-		return &FailedToGetPokemonCardGameIDError{Err: err}
+		return fmt.Errorf("failed to get pokemon card game id: %w", err)
 	}
 	s.pokemonGameID = gameID
 	s.logger.Debug("Initialized Pokemon card game ID", "id", gameID)
@@ -97,7 +97,7 @@ func (s *ImportService) UpsertSet(ctx context.Context, set Set) (int64, error) {
 func (s *ImportService) UpsertCard(ctx context.Context, card Card, setID int64) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return &FailedToBeginTransactionError{Err: err}
+		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer func() {
 		if rollbackErr := tx.Rollback(); rollbackErr != nil && err == nil {
@@ -108,7 +108,7 @@ func (s *ImportService) UpsertCard(ctx context.Context, card Card, setID int64) 
 		return err
 	}
 	if err := tx.Commit(); err != nil {
-		return &FailedToCommitCardTransactionError{Err: err}
+		return fmt.Errorf("failed to commit card transaction: %w", err)
 	}
 	return nil
 }
@@ -191,13 +191,13 @@ func (s *ImportService) ImportSet(ctx context.Context, set Set) (int, error) {
 	s.logger.Info("Importing set", "set_id", set.ID, "name", set.Name)
 	setID, err := s.UpsertSet(ctx, set)
 	if err != nil {
-		return 0, &FailedToUpsertSetError{Err: err}
+		return 0, fmt.Errorf("failed to upsert set %s: %w", set.ID, err)
 	}
 
 	// Create a single transaction for all cards in this set
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return 0, &FailedToBeginTransactionError{Err: err}
+		return 0, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer func() {
 		if rollbackErr := tx.Rollback(); rollbackErr != nil && err == nil {
@@ -211,7 +211,7 @@ func (s *ImportService) ImportSet(ctx context.Context, set Set) (int, error) {
 		s.logger.Debug("Fetching cards page", "set_id", set.ID, "page", page)
 		paginatedResp, cards, err := s.client.GetCardsForSet(ctx, set.ID, page)
 		if err != nil {
-			return cardsImported, &FailedToFetchCardsForSetError{SetID: set.ID, Page: page, Err: err}
+			return cardsImported, fmt.Errorf("failed to fetch cards for set %s page %d: %w", set.ID, page, err)
 		}
 		for _, card := range cards {
 			if err := s.upsertCardTx(ctx, tx, card, setID); err != nil {
@@ -230,7 +230,7 @@ func (s *ImportService) ImportSet(ctx context.Context, set Set) (int, error) {
 	// Commit the transaction once for all cards in the set
 	if err := tx.Commit(); err != nil {
 		s.logger.Error("Failed to commit set transaction", "set_id", set.ID, "error", err)
-		return cardsImported, &FailedToCommitSetTransactionError{Err: err}
+		return cardsImported, fmt.Errorf("failed to commit set transaction: %w", err)
 	}
 
 	s.logger.Info("Completed set import", "set_id", set.ID, "total_cards", cardsImported)
@@ -279,17 +279,17 @@ func (s *ImportService) completeImportRun(ctx context.Context, runID int64, resu
 func (s *ImportService) ImportAllSets(ctx context.Context) error {
 	runID, err := s.CreateImportRun(ctx, "import-full")
 	if err != nil {
-		return &FailedToCreateImportRunError{Err: err}
+		return fmt.Errorf("failed to create import run: %w", err)
 	}
 	sets, err := s.client.GetSets(ctx)
 	if err != nil {
 		_ = s.UpdateImportRun(ctx, runID, "failed", 0, 0, 1, fmt.Sprintf("Failed to fetch sets: %v", err))
-		return &FailedToFetchSetsError{Err: err}
+		return fmt.Errorf("failed to fetch sets: %w", err)
 	}
 	s.logger.Info("Starting full import", "total_sets", len(sets))
 	result := s.processSets(ctx, sets)
 	if err := s.completeImportRun(ctx, runID, result); err != nil {
-		return &FailedToUpdateImportRunError{Err: err}
+		return fmt.Errorf("failed to update import run: %w", err)
 	}
 
 	s.logger.Info("Full import completed", "sets_processed", result.setsProcessed, "cards_imported", result.totalCardsImported, "errors", result.errorCount)
@@ -300,17 +300,17 @@ func (s *ImportService) ImportAllSets(ctx context.Context) error {
 func (s *ImportService) ImportNewSets(ctx context.Context) error {
 	runID, err := s.CreateImportRun(ctx, "import-updates")
 	if err != nil {
-		return &FailedToCreateImportRunError{Err: err}
+		return fmt.Errorf("failed to create import run: %w", err)
 	}
 	sets, err := s.client.GetSets(ctx)
 	if err != nil {
 		_ = s.UpdateImportRun(ctx, runID, "failed", 0, 0, 1, fmt.Sprintf("Failed to fetch sets: %v", err))
-		return &FailedToFetchSetsError{Err: err}
+		return fmt.Errorf("failed to fetch sets: %w", err)
 	}
 	newSets, err := s.filterNewSets(ctx, sets)
 	if err != nil {
 		_ = s.UpdateImportRun(ctx, runID, "failed", 0, 0, 1, fmt.Sprintf("Failed to query existing sets: %v", err))
-		return &FailedToQueryExistingSetsError{Err: err}
+		return fmt.Errorf("failed to query existing sets: %w", err)
 	}
 	if len(newSets) == 0 {
 		s.logger.Info("No new sets to import")
@@ -320,7 +320,7 @@ func (s *ImportService) ImportNewSets(ctx context.Context) error {
 	s.logger.Info("Starting incremental import", "new_sets", len(newSets), "total_sets", len(sets))
 	result := s.processSets(ctx, newSets)
 	if err := s.completeImportRun(ctx, runID, result); err != nil {
-		return &FailedToUpdateImportRunError{Err: err}
+		return fmt.Errorf("failed to update import run: %w", err)
 	}
 	s.logger.Info("Incremental import completed", "sets_processed", result.setsProcessed, "cards_imported", result.totalCardsImported, "errors", result.errorCount)
 	return nil
@@ -344,12 +344,12 @@ func (s *ImportService) filterNewSets(ctx context.Context, sets []Set) ([]Set, e
 func (s *ImportService) ImportSpecificSets(ctx context.Context, setIDs []string) error {
 	runID, err := s.CreateImportRun(ctx, "import-specific")
 	if err != nil {
-		return &FailedToCreateImportRunError{Err: err}
+		return fmt.Errorf("failed to create import run: %w", err)
 	}
 	allSets, err := s.client.GetSets(ctx)
 	if err != nil {
 		_ = s.UpdateImportRun(ctx, runID, "failed", 0, 0, 1, fmt.Sprintf("Failed to fetch sets: %v", err))
-		return &FailedToFetchSetsError{Err: err}
+		return fmt.Errorf("failed to fetch sets: %w", err)
 	}
 	setsToImport, notFound := s.findRequestedSets(allSets, setIDs)
 	if len(notFound) > 0 {
@@ -358,7 +358,7 @@ func (s *ImportService) ImportSpecificSets(ctx context.Context, setIDs []string)
 	if len(setsToImport) == 0 {
 		msg := fmt.Sprintf("None of the specified sets were found: %s", strings.Join(setIDs, ", "))
 		_ = s.UpdateImportRun(ctx, runID, "failed", 0, 0, 1, msg)
-		return &ImportSetsNotFoundError{Message: msg}
+		return fmt.Errorf("%s", msg)
 	}
 	s.logger.Info("Starting import of specific sets", "sets_to_import", len(setsToImport), "requested", len(setIDs))
 	result := s.processSets(ctx, setsToImport)
@@ -367,7 +367,7 @@ func (s *ImportService) ImportSpecificSets(ctx context.Context, setIDs []string)
 		extraNote = fmt.Sprintf("Not found: %s", strings.Join(notFound, ", "))
 	}
 	if err := s.completeImportRun(ctx, runID, result, extraNote); err != nil {
-		return &FailedToUpdateImportRunError{Err: err}
+		return fmt.Errorf("failed to update import run: %w", err)
 	}
 	s.logger.Info("Specific sets import completed", "sets_processed", result.setsProcessed, "cards_imported", result.totalCardsImported, "errors", result.errorCount)
 	return nil
@@ -397,19 +397,19 @@ func (s *ImportService) DeleteSetByAPIID(ctx context.Context, setAPIID string) e
 		return nil
 	}
 	if err != nil {
-		return &FailedToDeleteSetError{SetAPIID: setAPIID, Err: err}
+		return fmt.Errorf("failed to delete set %s: %w", setAPIID, err)
 	}
 	deleteCardsQuery := "DELETE FROM cards WHERE set_id = ?"
 	slog.Debug("exec", "query", logging.SanitizeQuery(deleteCardsQuery), "args", []any{dbSetID})
 	_, err = s.db.ExecContext(ctx, deleteCardsQuery, dbSetID)
 	if err != nil {
-		return &FailedToDeleteSetCardsError{SetAPIID: setAPIID, Err: err}
+		return fmt.Errorf("failed to delete cards for set %s: %w", setAPIID, err)
 	}
 	deleteSetQuery := "DELETE FROM sets WHERE id = ?"
 	slog.Debug("exec", "query", logging.SanitizeQuery(deleteSetQuery), "args", []any{dbSetID})
 	_, err = s.db.ExecContext(ctx, deleteSetQuery, dbSetID)
 	if err != nil {
-		return &FailedToDeleteSetError{SetAPIID: setAPIID, Err: err}
+		return fmt.Errorf("failed to delete set %s: %w", setAPIID, err)
 	}
 	s.logger.Info("deleted set from database", "api_id", setAPIID, "db_id", dbSetID)
 	return nil
