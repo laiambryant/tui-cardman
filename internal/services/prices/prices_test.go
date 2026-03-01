@@ -409,6 +409,7 @@ func TestTCGPlayerInsertPrice_MultipleTypes(t *testing.T) {
 		require.NoError(t, err)
 		priceTypes = append(priceTypes, priceType)
 	}
+	require.NoError(t, rows.Err())
 	assert.Equal(t, []string{"holofoil", "normal", "reverseHolofoil"}, priceTypes)
 }
 

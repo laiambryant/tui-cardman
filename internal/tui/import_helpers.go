@@ -13,12 +13,14 @@ func getCursorPrefix(isCursor bool) string {
 	}
 	return "  "
 }
+
 func getSetStatusIcon(isImported bool) string {
 	if isImported {
 		return "[x]"
 	}
 	return "[ ]"
 }
+
 func calculatePaginationRange(cursor int, totalItems int, itemsPerPage int) (int, int) {
 	start := cursor - itemsPerPage/2
 	if start < 0 {
@@ -30,13 +32,16 @@ func calculatePaginationRange(cursor int, totalItems int, itemsPerPage int) (int
 	}
 	return start, end
 }
+
 func calculateProgressPercentage(completed int, total int) int {
 	return int(float64(completed) / float64(total) * 100)
 }
+
 func createProgressBar(completed int, total int, barWidth int) string {
 	filledWidth := int(float64(barWidth) * float64(completed) / float64(total))
 	return strings.Repeat("█", filledWidth) + strings.Repeat("░", barWidth-filledWidth)
 }
+
 func renderStyledLine(style lipgloss.Style, format string, args ...interface{}) string {
 	return style.Render(fmt.Sprintf(format, args...)) + "\n"
 }
@@ -175,12 +180,14 @@ func (m ImportModel) renderSetsListPanel(width int) string {
 	panel := m.styleManager.Box(m.styleManager.scheme.Blurred, 0, 0, width, 2, 1).Render(b.String())
 	return panel
 }
+
 func (m ImportModel) renderEmptySetsList() string {
 	if m.isLoading {
 		return blurredStyle.Render("Loading sets...")
 	}
 	return blurredStyle.Render("No sets found")
 }
+
 func (m ImportModel) renderSetsListContent(itemsPerPage int) string {
 	var b strings.Builder
 	start, end := calculatePaginationRange(m.cursor, len(m.filteredSets), itemsPerPage)
@@ -189,6 +196,7 @@ func (m ImportModel) renderSetsListContent(itemsPerPage int) string {
 	}
 	return b.String()
 }
+
 func (m ImportModel) renderSetListItem(index int) string {
 	set := m.filteredSets[index]
 	status := getSetStatusIcon(m.databaseSetIDs[set.ID])
@@ -238,6 +246,7 @@ func (m ImportModel) renderQueueList() string {
 	}
 	return b.String()
 }
+
 func (m ImportModel) renderSelectedSetInfo() string {
 	var b strings.Builder
 	selectedSet := m.filteredSets[m.cursor]
@@ -251,6 +260,7 @@ func (m ImportModel) renderSelectedSetInfo() string {
 	b.WriteString("\n")
 	return b.String()
 }
+
 func (m ImportModel) renderActionsList() string {
 	var b strings.Builder
 	actions := m.getAvailableActions()
@@ -259,12 +269,14 @@ func (m ImportModel) renderActionsList() string {
 	}
 	return b.String()
 }
+
 func (m ImportModel) renderActionItem(index int, action ActionItem) string {
 	if action.enabled {
 		return m.renderEnabledAction(index, action.label)
 	}
 	return m.renderDisabledAction(action)
 }
+
 func (m ImportModel) renderEnabledAction(index int, label string) string {
 	prefix := getCursorPrefix(index == m.actionCursor && m.focusOnActions)
 	if index == m.actionCursor && m.focusOnActions {
@@ -272,6 +284,7 @@ func (m ImportModel) renderEnabledAction(index int, label string) string {
 	}
 	return blurredStyle.Render(fmt.Sprintf("%s%s", prefix, label)) + "\n"
 }
+
 func (m ImportModel) renderDisabledAction(action ActionItem) string {
 	line := m.styleManager.GetDisabledStyle().Render(fmt.Sprintf("  %s", action.label))
 	if m.selectedSetHasCol && (action.actionType == ActionDelete || action.actionType == ActionReimport) {
@@ -299,8 +312,8 @@ func (m ImportModel) renderStatusBar(contentWidth int) string {
 		rightWidth = 0
 	}
 
-	leftStyle := blurredStyle.Copy().Width(leftWidth).Align(lipgloss.Left)
-	rightStyle := blurredStyle.Copy().Width(rightWidth).Align(lipgloss.Right)
+	leftStyle := blurredStyle.Width(leftWidth).Align(lipgloss.Left)
+	rightStyle := blurredStyle.Width(rightWidth).Align(lipgloss.Right)
 
 	return lipgloss.JoinHorizontal(
 		lipgloss.Top,
@@ -332,6 +345,7 @@ func (m ImportModel) renderImportProgressBody(contentWidth, contentHeight int) s
 	panel := progressStyle.Render(m.renderProgressContent())
 	return lipgloss.Place(contentWidth, contentHeight, lipgloss.Center, lipgloss.Center, panel)
 }
+
 func (m ImportModel) createProgressPanelStyle(contentWidth int) lipgloss.Style {
 	panelWidth := 60
 	if contentWidth > 0 {
@@ -340,6 +354,7 @@ func (m ImportModel) createProgressPanelStyle(contentWidth int) lipgloss.Style {
 	style := m.styleManager.Box(m.styleManager.scheme.Focused, panelWidth, 0, 0, 4, 2).Align(lipgloss.Center)
 	return style
 }
+
 func (m ImportModel) renderProgressContent() string {
 	var content strings.Builder
 	content.WriteString(m.renderCurrentSetStatus())
@@ -350,6 +365,7 @@ func (m ImportModel) renderProgressContent() string {
 	}
 	return content.String()
 }
+
 func (m ImportModel) renderCurrentSetStatus() string {
 	if m.queueProcessing && m.importProgress.setID != "" {
 		queueStatus := fmt.Sprintf("(%d/%d) Downloading: %s", m.queueCurrentIndex+1, len(m.importQueue), m.importProgress.setID)
@@ -360,6 +376,7 @@ func (m ImportModel) renderCurrentSetStatus() string {
 	}
 	return m.spinner.View() + " " + titleStyle.Render("Starting import...") + "\n\n"
 }
+
 func (m ImportModel) renderProgressBar() string {
 	var b strings.Builder
 	completed := m.importProgress.setsCompleted

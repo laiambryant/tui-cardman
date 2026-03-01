@@ -330,7 +330,7 @@ func (m ImportModel) handleSetListNavigation(msg tea.KeyMsg) (ImportModel, tea.C
 	var cmd tea.Cmd
 	m.searchInput, cmd = m.searchInput.Update(msg)
 	if m.searchInput.Value() != "" {
-		m.filterSets()
+		m = m.filterSets()
 	} else {
 		m.filteredSets = m.availableSets
 	}
@@ -383,7 +383,7 @@ func (m ImportModel) handleActionNavigation(msg tea.KeyMsg) (ImportModel, tea.Cm
 	return m, nil
 }
 
-func (m ImportModel) filterSets() {
+func (m ImportModel) filterSets() ImportModel {
 	query := strings.ToLower(m.searchInput.Value())
 	var filtered []pokemontcg.Set
 	for _, set := range m.availableSets {
@@ -399,6 +399,7 @@ func (m ImportModel) filterSets() {
 	if m.cursor < 0 {
 		m.cursor = 0
 	}
+	return m
 }
 
 func (m ImportModel) getAvailableActions() []ActionItem {

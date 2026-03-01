@@ -8,8 +8,9 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const shortMessageImportUpdates = "Import only new Pokemon TCG sets that don't exist in the database"
-const longMessageImportUpdates = `Performs an incremental import of new Pokemon TCG sets only.
+const (
+	shortMessageImportUpdates = "Import only new Pokemon TCG sets that don't exist in the database"
+	longMessageImportUpdates  = `Performs an incremental import of new Pokemon TCG sets only.
 
 This command will:
 - Fetch all sets from the Pokemon TCG API
@@ -22,6 +23,7 @@ re-importing existing data. Run this daily or weekly via cron.
 
 Note: This does NOT update existing cards or refresh prices. It only
 adds net-new sets.`
+)
 
 var importUpdatesCmd = &cobra.Command{
 	Use:   "import-updates",

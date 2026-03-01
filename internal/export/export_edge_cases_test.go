@@ -19,7 +19,7 @@ import (
 func TestFromCSV_HeaderOnly(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "header_only.csv")
-	err := os.WriteFile(path, []byte("Name,Set,Set Code,Number,Rarity,Quantity\n"), 0644)
+	err := os.WriteFile(path, []byte("Name,Set,Set Code,Number,Rarity,Quantity\n"), 0o644)
 	require.NoError(t, err)
 
 	rows, err := export.FromCSV(path)
@@ -31,7 +31,7 @@ func TestFromCSV_WrongColumnCount_TooMany(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "too_many.csv")
 	content := "Name,Set,Set Code,Number,Rarity,Quantity,Extra\nCharizard,Base,BASE,4,Rare,1,extra\n"
-	err := os.WriteFile(path, []byte(content), 0644)
+	err := os.WriteFile(path, []byte(content), 0o644)
 	require.NoError(t, err)
 
 	_, err = export.FromCSV(path)
@@ -42,7 +42,7 @@ func TestFromCSV_InvalidQuantity_Float(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "float_qty.csv")
 	content := "Name,Set,Set Code,Number,Rarity,Quantity\nCharizard,Base Set,BASE,4,Rare Holo,1.5\n"
-	err := os.WriteFile(path, []byte(content), 0644)
+	err := os.WriteFile(path, []byte(content), 0o644)
 	require.NoError(t, err)
 
 	_, err = export.FromCSV(path)
@@ -69,7 +69,7 @@ func TestFromCSV_ZeroQuantity(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "zero_qty.csv")
 	content := "Name,Set,Set Code,Number,Rarity,Quantity\nCharizard,Base Set,BASE,4,Rare Holo,0\n"
-	err := os.WriteFile(path, []byte(content), 0644)
+	err := os.WriteFile(path, []byte(content), 0o644)
 	require.NoError(t, err)
 
 	rows, err := export.FromCSV(path)
@@ -82,7 +82,7 @@ func TestFromCSV_HeaderCaseInsensitive(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "case.csv")
 	content := "name,set,set code,number,rarity,quantity\nCharizard,Base Set,BASE,4,Rare Holo,2\n"
-	err := os.WriteFile(path, []byte(content), 0644)
+	err := os.WriteFile(path, []byte(content), 0o644)
 	require.NoError(t, err)
 
 	rows, err := export.FromCSV(path)
@@ -95,7 +95,7 @@ func TestFromCSV_WhitespaceAroundValues(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "whitespace.csv")
 	content := "Name,Set,Set Code,Number,Rarity,Quantity\n  Charizard  , Base Set , BASE , 4 , Rare Holo , 3 \n"
-	err := os.WriteFile(path, []byte(content), 0644)
+	err := os.WriteFile(path, []byte(content), 0o644)
 	require.NoError(t, err)
 
 	rows, err := export.FromCSV(path)

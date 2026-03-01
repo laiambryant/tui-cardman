@@ -1,10 +1,11 @@
 package main
 
 import (
+	"os"
+
 	goversion "github.com/caarlos0/go-version"
 	"github.com/laiambryant/tui-cardman/cmd/command"
 	"github.com/laiambryant/tui-cardman/internal/tui/art"
-	"os"
 )
 
 var (

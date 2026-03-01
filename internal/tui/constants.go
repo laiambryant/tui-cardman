@@ -1,8 +1,9 @@
 package tui
 
 import (
-	"github.com/charmbracelet/bubbles/spinner"
 	"time"
+
+	"github.com/charmbracelet/bubbles/spinner"
 )
 
 const (

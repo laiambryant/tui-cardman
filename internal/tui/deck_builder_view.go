@@ -75,9 +75,11 @@ type DeckBuilderModel struct {
 	importState         ImportState
 }
 
-type saveDeckMsg struct{}
-type createDeckMsg struct{}
-type deleteDeckMsg struct{}
+type (
+	saveDeckMsg   struct{}
+	createDeckMsg struct{}
+	deleteDeckMsg struct{}
+)
 
 func NewDeckBuilderModel(game *model.CardGame, user *auth.User, deckService deck.DeckService, cardSvc cardservice.CardService, cards []model.Card, cfg *runtimecfg.Manager, sm *StyleManager) DeckBuilderModel {
 	searchInput := textinput.New()

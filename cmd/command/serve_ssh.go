@@ -116,7 +116,7 @@ func ensureHostKey(keyPath string) (string, error) {
 func checkIfKeyExists(keyPath string) error {
 	if _, err := os.Stat(keyPath); os.IsNotExist(err) {
 		dir := filepath.Dir(keyPath)
-		if err := os.MkdirAll(dir, 0700); err != nil {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return fmt.Errorf("create key directory: %w", err)
 		}
 		fmt.Printf("Generating SSH host key at %s...\n", keyPath)

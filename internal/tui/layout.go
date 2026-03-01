@@ -6,9 +6,11 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-const frameBorderSize = 2
-const framePaddingX = 1
-const framePaddingY = 0
+const (
+	frameBorderSize = 2
+	framePaddingX   = 1
+	framePaddingY   = 0
+)
 
 type FrameLayout struct {
 	Width               int

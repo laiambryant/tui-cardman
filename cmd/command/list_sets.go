@@ -14,8 +14,9 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-const shortMessageListSets = "List all available Pokemon TCG sets from the API"
-const longMessageListSets = `Fetch and display all available Pokemon TCG sets from the API.
+const (
+	shortMessageListSets = "List all available Pokemon TCG sets from the API"
+	longMessageListSets  = `Fetch and display all available Pokemon TCG sets from the API.
 
 This command queries the API for all sets and displays them in a table format
 showing the set ID, name, series, and total card count.
@@ -26,6 +27,7 @@ Examples:
   cardman list-sets
   cardman list-sets | grep -i "Sword"
 `
+)
 
 var baseStyle = lipgloss.NewStyle().
 	BorderStyle(lipgloss.NormalBorder()).

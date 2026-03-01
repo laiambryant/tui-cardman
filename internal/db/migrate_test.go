@@ -167,7 +167,7 @@ func TestApplyMigration(t *testing.T) {
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		name TEXT NOT NULL
 	);`
-	err = os.WriteFile(migrationPath, []byte(migrationContent), 0644)
+	err = os.WriteFile(migrationPath, []byte(migrationContent), 0o644)
 	require.NoError(t, err)
 	m := migration{
 		version: "001",
@@ -194,7 +194,7 @@ func TestApplyMigration_InvalidSQL(t *testing.T) {
 	tempDir := t.TempDir()
 	migrationPath := filepath.Join(tempDir, "999_invalid_migration.up.sql")
 	migrationContent := `INVALID SQL STATEMENT;`
-	err = os.WriteFile(migrationPath, []byte(migrationContent), 0644)
+	err = os.WriteFile(migrationPath, []byte(migrationContent), 0o644)
 	require.NoError(t, err)
 	m := migration{
 		version: "999",

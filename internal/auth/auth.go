@@ -73,7 +73,8 @@ func NewService(db interface {
 	CreateUser(req RegisterRequest, passwordHash string) (*User, error)
 	GetUserByEmail(email string) (*User, error)
 	UpdateLastLogin(userID int64) error
-}) *Service {
+},
+) *Service {
 	return &Service{db: db}
 }
 

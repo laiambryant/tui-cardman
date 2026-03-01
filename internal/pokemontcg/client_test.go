@@ -431,7 +431,10 @@ func TestRateLimitedHTTPClient_Do(t *testing.T) {
 		require.NoError(t, err)
 
 		start := time.Now()
-		_, err = client.Do(req)
+		resp, err := client.Do(req)
+		if resp != nil {
+			resp.Body.Close()
+		}
 		elapsed := time.Since(start)
 
 		assert.Error(t, err)
@@ -474,7 +477,10 @@ func TestRateLimitedHTTPClient_Do(t *testing.T) {
 		req, err := http.NewRequest(http.MethodGet, "http://localhost:0", nil)
 		require.NoError(t, err)
 
-		_, err = client.Do(req)
+		resp, err := client.Do(req)
+		if resp != nil {
+			resp.Body.Close()
+		}
 		assert.Error(t, err, "Should return error for invalid URL")
 	})
 }

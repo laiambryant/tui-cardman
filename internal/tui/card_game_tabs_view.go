@@ -200,14 +200,17 @@ func (m *CardGameTabsModel) computeCollectionStats() {
 		m.spotlightScroll = 0
 	}
 }
+
 func (m CardGameTabsModel) Init() tea.Cmd {
 	return textinput.Blink
 }
+
 func (m *CardGameTabsModel) configureTableColumns(columns []table.Column) {
 	m.cardTable.SetColumns(columns)
 	m.cardTable.SetStyles(m.styleManager.GetTableStyles())
 	m.cardTable.Focus()
 }
+
 func (m CardGameTabsModel) getSelectedCard() (model.Card, bool) {
 	selectedRow := m.cardTable.Cursor()
 	if selectedRow < 0 {
@@ -225,6 +228,7 @@ func (m CardGameTabsModel) getSelectedCard() (model.Card, bool) {
 	}
 	return m.filteredCards[selectedRow], true
 }
+
 func buildCollectionRows(collections []model.UserCollection) []table.Row {
 	var rows []table.Row
 	for _, collection := range collections {
@@ -232,6 +236,7 @@ func buildCollectionRows(collections []model.UserCollection) []table.Row {
 	}
 	return rows
 }
+
 func (m CardGameTabsModel) renderEmptySearchMessage(searchValue string, messageWhenEmpty string, messageNoMatch string) string {
 	if searchValue == "" {
 		return m.styleManager.GetBlurredStyle().Render(messageWhenEmpty) + "\n"
@@ -525,6 +530,7 @@ func (m CardGameTabsModel) renderCardGameTabsFooter() string {
 	}
 	return footer
 }
+
 func (m CardGameTabsModel) buildHelpText() string {
 	hb := NewHelpBuilder(m.configManager)
 	if m.currentTab == TabCardSearch {
@@ -561,6 +567,7 @@ func (m CardGameTabsModel) updateTableForTab() CardGameTabsModel {
 	m.cardTable.SetCursor(0)
 	return m
 }
+
 func (m CardGameTabsModel) getCardSearchColumns() []table.Column {
 	return []table.Column{
 		{Title: "Name", Width: 25},
@@ -650,6 +657,7 @@ func (m CardGameTabsModel) renderCollectionTab(availableHeight int) string {
 	rightPanel := RenderPanel(m.styleManager, spotContent, rightWidth, spotlightHeight, m.collectionTabFocus == 1, 1, 0)
 	return lipgloss.JoinHorizontal(lipgloss.Top, leftColumn, rightPanel)
 }
+
 func (m *CardGameTabsModel) updateSpotlightFromSetTable() {
 	idx := m.setCompletionTable.Cursor()
 	if idx >= 0 && idx < len(m.setCompletions) {

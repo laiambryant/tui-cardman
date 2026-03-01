@@ -29,6 +29,7 @@ func (h *HelpBuilder) resolveKey(action string, defaultKey string) string {
 	}
 	return defaultKey
 }
+
 func (h *HelpBuilder) formatKeyItem(item KeyItem) string {
 	key := h.resolveKey(item.Action, item.DefaultKey)
 	return fmt.Sprintf("%s: %s", key, item.Description)
@@ -82,6 +83,7 @@ func MatchActionOrDefault(cfg *runtimecfg.Manager, keyString string, fallback st
 	}
 	return fallback
 }
+
 func RenderProgressBar(percent float64, width int, sm *StyleManager) string {
 	if percent < 0 {
 		percent = 0
@@ -103,6 +105,7 @@ func RenderProgressBar(percent float64, width int, sm *StyleManager) string {
 	empty := barWidth - filled
 	return strings.Repeat("█", filled) + strings.Repeat("░", empty) + fmt.Sprintf(" %3.0f%%", percent)
 }
+
 func RenderPanel(sm *StyleManager, content string, width, height int, focused bool, padX, padY int) string {
 	borderColor := sm.scheme.Blurred
 	if focused {
@@ -113,6 +116,7 @@ func RenderPanel(sm *StyleManager, content string, width, height int, focused bo
 	innerHeight := max(height-borderOverhead-padY*2, 1)
 	return sm.Box(borderColor, innerWidth, innerHeight, 0, padX, padY).Render(content)
 }
+
 func RenderTabBar(sm *StyleManager, tabs []string, activeIndex int) string {
 	var rendered []string
 	for i, tab := range tabs {
@@ -124,6 +128,7 @@ func RenderTabBar(sm *StyleManager, tabs []string, activeIndex int) string {
 	}
 	return strings.Join(rendered, sm.GetNoStyle().Render(" "))
 }
+
 func RenderFramedWithModal(header, footer string, bodyFn func(availableHeight int) string, width, height int, sm *StyleManager, modal *ModalModel) string {
 	layout := calculateFrameLayout(lipgloss.Height(header), lipgloss.Height(footer), width, height)
 	body := bodyFn(layout.BodyContentHeight)
@@ -134,18 +139,21 @@ func RenderFramedWithModal(header, footer string, bodyFn func(availableHeight in
 	}
 	return content
 }
+
 func CalcTableHeight(availableHeight, headerLines, minHeight int) int {
 	if availableHeight <= 0 {
 		return max(10, minHeight)
 	}
 	return max(availableHeight-headerLines, minHeight)
 }
+
 func RenderButton(isFocused bool, label string) string {
 	if isFocused {
 		return titleStyle.Render(label)
 	}
 	return blurredStyle.Render(label)
 }
+
 func RenderButtonItem(sm *StyleManager, label string, isSelected bool, maxWidth int) string {
 	labelWidth := lipgloss.Width(label)
 	// Width() sets content area; border(1+1) + padding(1+1) = 4 overhead on top.
@@ -168,9 +176,11 @@ func RenderButtonItem(sm *StyleManager, label string, isSelected bool, maxWidth 
 		BorderForeground(sm.scheme.Blurred).
 		Padding(0, 1)).Render(label) + "\n"
 }
+
 func GetAction(cfg *runtimecfg.Manager, s string) string {
 	return MatchActionOrDefault(cfg, s, "")
 }
+
 func RenderListItem(line string, isSelected bool) string {
 	prefix := getCursorPrefix(isSelected)
 	if isSelected {
@@ -178,6 +188,7 @@ func RenderListItem(line string, isSelected bool) string {
 	}
 	return blurredStyle.Render(prefix+line) + "\n"
 }
+
 func RenderConditionalLabel(isFocused bool, label string) string {
 	if isFocused {
 		return focusedStyle.Render(label)

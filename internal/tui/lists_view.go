@@ -47,10 +47,12 @@ var listColorOptions = []struct {
 	{"Orange", "#FFAA55"},
 }
 
-type saveListCardsMsg struct{}
-type deleteListMsg struct{ listID int64 }
-type createListMsg struct{}
-type updateListMsg struct{}
+type (
+	saveListCardsMsg struct{}
+	deleteListMsg    struct{ listID int64 }
+	createListMsg    struct{}
+	updateListMsg    struct{}
+)
 
 type ListsModel struct {
 	selectedGame        *model.CardGame

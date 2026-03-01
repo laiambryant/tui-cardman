@@ -9,8 +9,9 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const shortMessageImportSets = "Import specific Pokemon TCG sets by set ID"
-const longMessageImportSets = `Import one or more specific Pokemon TCG sets by their set IDs.
+const (
+	shortMessageImportSets = "Import specific Pokemon TCG sets by set ID"
+	longMessageImportSets  = `Import one or more specific Pokemon TCG sets by their set IDs.
 
 This command will:
 - Fetch only the specified sets from the Pokemon TCG API
@@ -24,6 +25,7 @@ Examples:
 
 Set IDs are typically the lowercase set code (e.g., 'base1', 'jungle', 'swsh1').
 You can find set IDs by browsing the API or running import-full with verbose logging.`
+)
 
 var importSetsCmd = &cobra.Command{
 	Use:   "import-sets [set-id...]",

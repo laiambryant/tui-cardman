@@ -11,8 +11,10 @@ import (
 	"github.com/laiambryant/tui-cardman/internal/runtimecfg"
 )
 
-type saveConfirmedMsg struct{}
-type saveCancelledMsg struct{}
+type (
+	saveConfirmedMsg struct{}
+	saveCancelledMsg struct{}
+)
 
 type SettingsModel struct {
 	configManager  *runtimecfg.Manager

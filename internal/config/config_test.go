@@ -53,7 +53,7 @@ API_KEY=dotenv-api-key
 `
 	tmpDir := t.TempDir()
 	envFile := tmpDir + "/.env"
-	err := os.WriteFile(envFile, []byte(envContent), 0644)
+	err := os.WriteFile(envFile, []byte(envContent), 0o644)
 	require.NoError(t, err)
 
 	// Change to temp directory so godotenv can find .env
@@ -85,7 +85,7 @@ SSH_PORT=5555
 `
 	tmpDir := t.TempDir()
 	envFile := tmpDir + "/.env"
-	err := os.WriteFile(envFile, []byte(envContent), 0644)
+	err := os.WriteFile(envFile, []byte(envContent), 0o644)
 	require.NoError(t, err)
 
 	// Change to temp directory
@@ -252,11 +252,11 @@ func TestConfig_StructFields(t *testing.T) {
 	LoadConfig()
 
 	// Verify all fields are accessible and have correct types
-	var _ LogLevel = Cfg.LogLevel
-	var _ string = Cfg.DBDSN
-	var _ int = Cfg.SSHPort
-	var _ string = Cfg.SSHHostKey
-	var _ string = Cfg.APIKey
+	_ = Cfg.LogLevel
+	_ = Cfg.DBDSN
+	_ = Cfg.SSHPort
+	_ = Cfg.SSHHostKey
+	_ = Cfg.APIKey
 }
 
 func TestConfig_DefaultValues(t *testing.T) {

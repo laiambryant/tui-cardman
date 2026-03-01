@@ -31,8 +31,9 @@ var importFullCmd = &cobra.Command{
 	},
 }
 
-const shortMessageImportAll = "Import all Pokemon TCG sets and cards from the API"
-const longMessageImportAll = `Performs a complete import of all Pokemon TCG sets and cards from the API.
+const (
+	shortMessageImportAll = "Import all Pokemon TCG sets and cards from the API"
+	longMessageImportAll  = `Performs a complete import of all Pokemon TCG sets and cards from the API.
 
 This command will:
 - Fetch all sets from the Pokemon TCG API
@@ -41,6 +42,7 @@ This command will:
 
 Note: This can take a significant amount of time and will use API quota.
 Use 'import-updates' for incremental imports of new sets only.`
+)
 
 func init() {
 	rootCmd.AddCommand(importFullCmd)

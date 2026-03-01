@@ -72,7 +72,7 @@ func TestLoad_ValidFile(t *testing.T) {
 			"compact_lists": true
 		}
 	}`
-	err := os.WriteFile(path, []byte(data), 0644)
+	err := os.WriteFile(path, []byte(data), 0o644)
 	require.NoError(t, err)
 
 	cfg, err := Load(path)
@@ -90,7 +90,7 @@ func TestLoad_MergesDefaults_ForMissingKeys(t *testing.T) {
 
 	// Only override one keybinding; the rest should come from defaults
 	data := `{"keybindings": {"quit": "ctrl+q"}}`
-	err := os.WriteFile(path, []byte(data), 0644)
+	err := os.WriteFile(path, []byte(data), 0o644)
 	require.NoError(t, err)
 
 	cfg, err := Load(path)
@@ -108,7 +108,7 @@ func TestLoad_NullKeybindings_UsesDefaults(t *testing.T) {
 	path := filepath.Join(dir, "null_kb.json")
 
 	data := `{"keybindings": null, "ui": {"compact_lists": false}}`
-	err := os.WriteFile(path, []byte(data), 0644)
+	err := os.WriteFile(path, []byte(data), 0o644)
 	require.NoError(t, err)
 
 	cfg, err := Load(path)
@@ -122,7 +122,7 @@ func TestLoad_InvalidJSON_ReturnsError(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "invalid.json")
 
-	err := os.WriteFile(path, []byte(`{not valid json`), 0644)
+	err := os.WriteFile(path, []byte(`{not valid json`), 0o644)
 	require.NoError(t, err)
 
 	_, err = Load(path)

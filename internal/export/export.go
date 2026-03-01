@@ -85,7 +85,7 @@ func ToPTCGO(deckName string, rows []CardRow, filepath string) error {
 		return err
 	}
 	for _, r := range pokemon {
-		if _, err := f.WriteString(fmt.Sprintf("* %d %s %s %s\n", r.Quantity, r.Name, r.SetCode, r.Number)); err != nil {
+		if _, err := fmt.Fprintf(f, "* %d %s %s %s\n", r.Quantity, r.Name, r.SetCode, r.Number); err != nil {
 			return err
 		}
 	}
@@ -93,7 +93,7 @@ func ToPTCGO(deckName string, rows []CardRow, filepath string) error {
 		return err
 	}
 	for _, r := range trainers {
-		if _, err := f.WriteString(fmt.Sprintf("* %d %s %s %s\n", r.Quantity, r.Name, r.SetCode, r.Number)); err != nil {
+		if _, err := fmt.Fprintf(f, "* %d %s %s %s\n", r.Quantity, r.Name, r.SetCode, r.Number); err != nil {
 			return err
 		}
 	}
@@ -101,7 +101,7 @@ func ToPTCGO(deckName string, rows []CardRow, filepath string) error {
 		return err
 	}
 	for _, r := range energy {
-		if _, err := f.WriteString(fmt.Sprintf("* %d %s %s %s\n", r.Quantity, r.Name, r.SetCode, r.Number)); err != nil {
+		if _, err := fmt.Fprintf(f, "* %d %s %s %s\n", r.Quantity, r.Name, r.SetCode, r.Number); err != nil {
 			return err
 		}
 	}

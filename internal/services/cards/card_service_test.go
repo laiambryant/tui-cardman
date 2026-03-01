@@ -727,7 +727,6 @@ func TestUpsertCard_ContextCancellation(t *testing.T) {
 
 	// Upsert should fail with cancelled context
 	_, err = service.UpsertCard(ctx, tx, "cancelled", setID1, "1", "Cancelled", "Common", "Artist", gameID1)
-
 	// May or may not error depending on timing, but if it does, it should be context error
 	if err != nil {
 		assert.Contains(t, err.Error(), "context")
@@ -840,7 +839,7 @@ func TestUpsertCard_UpdateError(t *testing.T) {
 	cancel()
 
 	// Try to update with cancelled context (may or may not error depending on SQLite timing)
-	_, err = service.UpsertCard(ctxCancelled, tx2, "update-error-test", setID1, "2", "Updated", "Rare", "New Artist", gameID1)
+	_, _ = service.UpsertCard(ctxCancelled, tx2, "update-error-test", setID1, "2", "Updated", "Rare", "New Artist", gameID1)
 
 	// SQLite may not always respect cancelled contexts immediately
 	// Just verify original card is unchanged after rollback

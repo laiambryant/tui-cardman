@@ -342,6 +342,7 @@ func (s *UserCollectionServiceImpl) GetCollectionValue(userID, gameID int64) (fl
 	}
 	return value, nil
 }
+
 func (s *UserCollectionServiceImpl) UpsertCollectionBatch(ctx context.Context, userID int64, updates map[int64]int) error {
 	return db.WithTransaction(ctx, s.db, func(tx *sql.Tx) error {
 		for cardID, quantity := range updates {
