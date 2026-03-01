@@ -32,6 +32,9 @@ var serveCmd = &cobra.Command{
 			return fmt.Errorf("open db: %w", err)
 		}
 		defer db.Close()
+		if err := dbpkg.ApplyMigrations(db, "internal/db/migrations"); err != nil {
+			return fmt.Errorf("apply migrations: %w", err)
+		}
 		model, err := tui.NewModel(db, false)
 		if err != nil {
 			return fmt.Errorf("create TUI model: %w", err)

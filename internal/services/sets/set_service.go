@@ -52,7 +52,11 @@ func (s *SetServiceImpl) GetSetIDByAPIID(ctx context.Context, apiID string) (int
 	var setID int64
 	err := s.db.QueryRowContext(ctx, selectSetIDQuery, apiID).Scan(&setID)
 	if err != nil {
-		slog.Error("failed to query set id by api id", "api_id", apiID, "error", err)
+		if err == sql.ErrNoRows {
+			slog.Debug("set not found by api id", "api_id", apiID)
+		} else {
+			slog.Error("failed to query set id by api id", "api_id", apiID, "error", err)
+		}
 		return 0, err
 	}
 	return setID, nil

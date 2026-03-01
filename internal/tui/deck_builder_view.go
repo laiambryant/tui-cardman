@@ -33,6 +33,14 @@ const (
 	DeckFocusCardPanel
 )
 
+// cardPanelSubFocus tracks which sub-panel of the right panel is active.
+type cardPanelSubFocus int
+
+const (
+	cardSubFocusSearch cardPanelSubFocus = iota // top: search/add cards table
+	cardSubFocusDeck                            // bottom: cards currently in deck
+)
+
 var deckFormatOptions = []string{"standard", "expanded", "unlimited"}
 
 type DeckBuilderModel struct {
@@ -54,6 +62,8 @@ type DeckBuilderModel struct {
 	filteredCards       []model.Card
 	searchInput         textinput.Model
 	cardTable           table.Model
+	deckContentsTable   table.Model
+	cardSubFocus        cardPanelSubFocus
 	focus               DeckBuilderFocus
 	tempQuantityChanges map[int64]int
 	dbQuantities        map[int64]int
@@ -86,6 +96,14 @@ func NewDeckBuilderModel(game *model.CardGame, user *auth.User, deckService deck
 		{Title: "Qty", Width: 5},
 	}
 	cardTable := NewStyledTable(columns, 10, true, sm)
+	deckContentsColumns := []table.Column{
+		{Title: "Name", Width: 20},
+		{Title: "Set", Width: 12},
+		{Title: "Rarity", Width: 10},
+		{Title: "#", Width: 6},
+		{Title: "Qty", Width: 5},
+	}
+	deckContentsTable := NewStyledTable(deckContentsColumns, 5, false, sm)
 	return DeckBuilderModel{
 		selectedGame:        game,
 		user:                user,
@@ -98,6 +116,7 @@ func NewDeckBuilderModel(game *model.CardGame, user *auth.User, deckService deck
 		searchInput:         searchInput,
 		nameInput:           nameInput,
 		cardTable:           cardTable,
+		deckContentsTable:   deckContentsTable,
 		tempQuantityChanges: make(map[int64]int),
 		dbQuantities:        make(map[int64]int),
 	}
@@ -166,7 +185,17 @@ func (m DeckBuilderModel) Update(msg tea.Msg) (DeckBuilderModel, tea.Cmd) {
 		}
 		if isBackKey(action, s) {
 			if m.focus == DeckFocusCardPanel {
-				m.focus = DeckFocusDeckPanel
+				if m.cardSubFocus == cardSubFocusDeck {
+					m.cardSubFocus = cardSubFocusSearch
+					m.cardTable.Focus()
+					m.deckContentsTable.Blur()
+					m.searchInput.Focus()
+				} else {
+					m.focus = DeckFocusDeckPanel
+					m.cardTable.Blur()
+					m.deckContentsTable.Blur()
+					m.searchInput.Blur()
+				}
 				return m, nil
 			}
 			m.shouldGoBack = true
@@ -175,12 +204,24 @@ func (m DeckBuilderModel) Update(msg tea.Msg) (DeckBuilderModel, tea.Cmd) {
 		if s == "tab" {
 			if m.focus == DeckFocusDeckPanel {
 				m.focus = DeckFocusCardPanel
+				m.cardSubFocus = cardSubFocusSearch
 				m.cardTable.Focus()
+				m.deckContentsTable.Blur()
 				m.searchInput.Focus()
 			} else {
-				m.focus = DeckFocusDeckPanel
-				m.cardTable.Blur()
-				m.searchInput.Blur()
+				// cycle sub-focus within the right panel; on second tab go back to deck panel
+				if m.cardSubFocus == cardSubFocusSearch {
+					m.cardSubFocus = cardSubFocusDeck
+					m.cardTable.Blur()
+					m.deckContentsTable.Focus()
+					m.searchInput.Blur()
+				} else {
+					m.focus = DeckFocusDeckPanel
+					m.cardSubFocus = cardSubFocusSearch
+					m.cardTable.Blur()
+					m.deckContentsTable.Blur()
+					m.searchInput.Blur()
+				}
 			}
 			return m, nil
 		}
@@ -253,11 +294,23 @@ func (m DeckBuilderModel) handleCardPanelKeys(msg tea.KeyMsg) (DeckBuilderModel,
 	s := msg.String()
 	action := MatchActionOrDefault(m.configManager, s, "")
 	if action == "nav_up" || s == "up" || s == "k" {
-		m.cardTable, _ = m.cardTable.Update(msg)
+		if m.cardSubFocus == cardSubFocusDeck {
+			m.deckContentsTable, _ = m.deckContentsTable.Update(msg)
+		} else {
+			m.cardTable, _ = m.cardTable.Update(msg)
+		}
 		return m, nil
 	}
 	if action == "nav_down" || s == "down" || s == "j" {
-		m.cardTable, _ = m.cardTable.Update(msg)
+		if m.cardSubFocus == cardSubFocusDeck {
+			if m.deckContentsTable.Cursor() < len(m.deckContentsTable.Rows())-1 {
+				m.deckContentsTable, _ = m.deckContentsTable.Update(msg)
+			}
+		} else {
+			if m.cardTable.Cursor() < len(m.cardTable.Rows())-1 {
+				m.cardTable, _ = m.cardTable.Update(msg)
+			}
+		}
 		return m, nil
 	}
 	if action == "increment_quantity" {
@@ -277,11 +330,15 @@ func (m DeckBuilderModel) handleCardPanelKeys(msg tea.KeyMsg) (DeckBuilderModel,
 		m.importState = NewImportState(m.cardService, m.styleManager)
 		return m, nil
 	}
-	var cmd tea.Cmd
-	m.searchInput, cmd = m.searchInput.Update(msg)
-	m.filterCards()
-	m.updateCardTable()
-	return m, cmd
+	// Only forward to search input when focused on the search sub-panel
+	if m.cardSubFocus == cardSubFocusSearch {
+		var cmd tea.Cmd
+		m.searchInput, cmd = m.searchInput.Update(msg)
+		m.filterCards()
+		m.updateCardTable()
+		return m, cmd
+	}
+	return m, nil
 }
 
 func (m DeckBuilderModel) handleFormKeys(msg tea.KeyMsg) (DeckBuilderModel, tea.Cmd) {
@@ -384,6 +441,31 @@ func (m *DeckBuilderModel) updateCardTable() {
 		})
 	}
 	m.cardTable.SetRows(rows)
+	m.updateDeckContentsTable()
+}
+
+// updateDeckContentsTable rebuilds the deck contents table from cards that
+// have a non-zero combined quantity (db + temp) in the selected deck.
+func (m *DeckBuilderModel) updateDeckContentsTable() {
+	var rows []table.Row
+	for _, card := range m.cards {
+		qty := m.dbQuantities[card.ID] + m.tempQuantityChanges[card.ID]
+		if qty <= 0 {
+			continue
+		}
+		setName := ""
+		if card.Set != nil {
+			setName = card.Set.Name
+		}
+		rows = append(rows, table.Row{
+			Truncate(card.Name, 20),
+			Truncate(setName, 12),
+			Truncate(card.Rarity, 10),
+			Truncate(card.Number, 6),
+			fmt.Sprintf("%d", qty),
+		})
+	}
+	m.deckContentsTable.SetRows(rows)
 }
 
 func (m *DeckBuilderModel) updateValidation() {
@@ -551,9 +633,9 @@ func (m DeckBuilderModel) renderBody(availableHeight int) string {
 	leftWidth := contentWidth * 35 / 100
 	rightWidth := contentWidth - leftWidth
 	leftContent := m.renderDeckPanel(leftWidth, availableHeight)
-	rightContent := m.renderCardPanel(rightWidth, availableHeight)
 	leftPanel := RenderPanel(m.styleManager, leftContent, leftWidth, availableHeight, m.focus == DeckFocusDeckPanel, 1, 0)
-	rightPanel := RenderPanel(m.styleManager, rightContent, rightWidth, availableHeight, m.focus == DeckFocusCardPanel, 1, 0)
+	// renderCardPanel returns its own pre-panelled content (two stacked RenderPanel boxes)
+	rightPanel := m.renderCardPanel(rightWidth, availableHeight)
 	return lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, rightPanel)
 }
 
@@ -612,20 +694,55 @@ func (m DeckBuilderModel) renderDeckPanel(width, height int) string {
 }
 
 func (m DeckBuilderModel) renderCardPanel(width, height int) string {
-	var b strings.Builder
-	if m.selectedDeck == nil {
-		b.WriteString(m.styleManager.GetBlurredStyle().Render("Select a deck to add cards.") + "\n")
-		return b.String()
-	}
-	b.WriteString(m.styleManager.GetTitleStyle().Render("Add Cards to: "+m.selectedDeck.Name) + "\n")
-	b.WriteString(m.styleManager.GetBlurredStyle().Render("Search: ") + m.searchInput.View() + "\n")
-	tableHeight := CalcTableHeight(height, 4, 3)
-	// panelPadX=1, borderOverhead=2: inner table area = width - 4
 	tableWidth := max(width-4, 20)
-	m.cardTable.SetColumns(scaledDeckColumns(tableWidth))
-	m.cardTable.SetHeight(tableHeight)
-	b.WriteString(m.cardTable.View())
-	return b.String()
+	if m.selectedDeck == nil {
+		return m.styleManager.GetBlurredStyle().Render("Select a deck to add cards.") + "\n"
+	}
+
+	// Split the available height: top ~60% for search/add, bottom ~40% for deck contents.
+	// Each sub-section has 2 header lines (title + search/label row).
+	topHeight := max(height*6/10, 5)
+	bottomHeight := max(height-topHeight, 5)
+
+	// --- Top: search/add table ---
+	var top strings.Builder
+	searchFocused := m.cardSubFocus == cardSubFocusSearch
+	titleStyle := m.styleManager.GetTitleStyle()
+	if searchFocused {
+		top.WriteString(titleStyle.Render("Add Cards: "+m.selectedDeck.Name) + "\n")
+	} else {
+		top.WriteString(m.styleManager.GetBlurredStyle().Render("Add Cards: "+m.selectedDeck.Name) + "\n")
+	}
+	top.WriteString(m.styleManager.GetBlurredStyle().Render("Search: ") + m.searchInput.View() + "\n")
+	if len(m.cardTable.Rows()) == 0 {
+		top.WriteString(m.styleManager.GetBlurredStyle().Render("No cards match your search.") + "\n")
+	} else {
+		searchTableHeight := CalcTableHeight(topHeight, 2, 3)
+		m.cardTable.SetColumns(scaledDeckColumns(tableWidth))
+		m.cardTable.SetHeight(searchTableHeight)
+		top.WriteString(m.cardTable.View())
+	}
+	topPanel := RenderPanel(m.styleManager, top.String(), width, topHeight, searchFocused, 1, 0)
+
+	// --- Bottom: deck contents ---
+	var bottom strings.Builder
+	deckFocused := m.cardSubFocus == cardSubFocusDeck
+	if deckFocused {
+		bottom.WriteString(titleStyle.Render("Deck Contents") + "\n")
+	} else {
+		bottom.WriteString(m.styleManager.GetBlurredStyle().Render("Deck Contents") + "\n")
+	}
+	if len(m.deckContentsTable.Rows()) == 0 {
+		bottom.WriteString(m.styleManager.GetBlurredStyle().Render("No cards in deck yet.") + "\n")
+	} else {
+		deckTableHeight := CalcTableHeight(bottomHeight, 1, 3)
+		m.deckContentsTable.SetColumns(scaledDeckColumns(tableWidth))
+		m.deckContentsTable.SetHeight(deckTableHeight)
+		bottom.WriteString(m.deckContentsTable.View())
+	}
+	bottomPanel := RenderPanel(m.styleManager, bottom.String(), width, bottomHeight, deckFocused, 1, 0)
+
+	return lipgloss.JoinVertical(lipgloss.Left, topPanel, bottomPanel)
 }
 
 func (m DeckBuilderModel) renderFooter() string {

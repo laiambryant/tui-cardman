@@ -40,6 +40,9 @@ var serveSSHCmd = &cobra.Command{
 			return fmt.Errorf("open db: %w", err)
 		}
 		defer db.Close()
+		if err := dbpkg.ApplyMigrations(db, "internal/db/migrations"); err != nil {
+			return fmt.Errorf("apply migrations: %w", err)
+		}
 		hostKeyPath, err := ensureHostKey(config.Cfg.SSHHostKey)
 		if err != nil {
 			return fmt.Errorf("ensure host key: %w", err)

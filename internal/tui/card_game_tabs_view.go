@@ -371,8 +371,10 @@ func (m CardGameTabsModel) Update(msg tea.Msg) (CardGameTabsModel, tea.Cmd) {
 		if action == "nav_down" || s == "j" || s == "down" {
 			if m.currentTab == TabCollection {
 				if m.collectionTabFocus == 0 {
-					m.setCompletionTable, _ = m.setCompletionTable.Update(msg)
-					m.updateSpotlightFromSetTable()
+					if m.setCompletionTable.Cursor() < len(m.setCompletionTable.Rows())-1 {
+						m.setCompletionTable, _ = m.setCompletionTable.Update(msg)
+						m.updateSpotlightFromSetTable()
+					}
 				} else {
 					m.spotlightScroll++
 				}
@@ -380,9 +382,13 @@ func (m CardGameTabsModel) Update(msg tea.Msg) (CardGameTabsModel, tea.Cmd) {
 			}
 			if m.currentTab == TabCardSearch {
 				if m.searchTabFocus == 0 {
-					m.cardTable, _ = m.cardTable.Update(msg)
+					if m.cardTable.Cursor() < len(m.cardTable.Rows())-1 {
+						m.cardTable, _ = m.cardTable.Update(msg)
+					}
 				} else {
-					m.userSearchTable, _ = m.userSearchTable.Update(msg)
+					if m.userSearchTable.Cursor() < len(m.userSearchTable.Rows())-1 {
+						m.userSearchTable, _ = m.userSearchTable.Update(msg)
+					}
 				}
 				return m, nil
 			}
@@ -662,7 +668,7 @@ func (m CardGameTabsModel) renderCardSearchTab(availableHeight int) string {
 	// panelPadX=1, borderOverhead=2: inner table area = panelWidth - 4
 	leftTableWidth := max(leftWidth-4, 20)
 	rightTableWidth := max(rightWidth-4, 20)
-	tableHeight := CalcTableHeight(availableHeight, 4, 3)
+	tableHeight := CalcTableHeight(availableHeight, 2, 3)
 	leftContent := m.renderSearchLeftPanel(tableHeight, leftTableWidth)
 	leftPanel := RenderPanel(m.styleManager, leftContent, leftWidth, availableHeight, m.searchTabFocus == 0, 1, 0)
 	rightContent := m.renderSearchRightPanel(tableHeight, rightTableWidth)
@@ -674,23 +680,8 @@ func (m CardGameTabsModel) renderSearchLeftPanel(tableHeight, tableWidth int) st
 	var b strings.Builder
 	b.WriteString(m.styleManager.GetTitleStyle().Render("Search All Cards") + "\n")
 	b.WriteString(m.styleManager.GetBlurredStyle().Render("Search: ") + m.styleManager.GetNoStyle().Render(m.searchInput.View()) + "\n")
-	showAll := m.searchInput.Value() == ""
-	var rows []table.Row
-	if showAll {
-		for _, card := range m.cards {
-			dbQty := m.dbQuantities[card.ID]
-			tempDelta := m.tempQuantityChanges[card.ID]
-			rows = append(rows, cardToRow(card, dbQty, tempDelta))
-		}
-	} else {
-		for _, card := range m.filteredCards {
-			dbQty := m.dbQuantities[card.ID]
-			tempDelta := m.tempQuantityChanges[card.ID]
-			rows = append(rows, cardToRow(card, dbQty, tempDelta))
-		}
-	}
-	if len(rows) == 0 {
-		if showAll {
+	if len(m.cardTable.Rows()) == 0 {
+		if m.searchInput.Value() == "" {
 			b.WriteString(m.styleManager.GetBlurredStyle().Render("No cards available.") + "\n")
 		} else {
 			b.WriteString(m.styleManager.GetBlurredStyle().Render("No cards match your search.") + "\n")
@@ -698,7 +689,6 @@ func (m CardGameTabsModel) renderSearchLeftPanel(tableHeight, tableWidth int) st
 		return b.String()
 	}
 	m.cardTable.SetColumns(scaledCardSearchColumns(tableWidth))
-	m.cardTable.SetRows(rows)
 	m.cardTable.SetHeight(tableHeight)
 	b.WriteString(m.cardTable.View())
 	return b.String()
@@ -807,10 +797,15 @@ func (m CardGameTabsModel) filterUserCollection(query string) []model.UserCollec
 	return filtered
 }
 
-// updateCardTable updates the table with current filtered cards
+// updateCardTable updates the table with current cards.
+// When the search input is empty, all cards are shown; otherwise filtered cards are used.
 func (m *CardGameTabsModel) updateCardTable() {
+	source := m.filteredCards
+	if m.searchInput.Value() == "" {
+		source = m.cards
+	}
 	var rows []table.Row
-	for _, card := range m.filteredCards {
+	for _, card := range source {
 		dbQty := m.dbQuantities[card.ID]
 		tempDelta := m.tempQuantityChanges[card.ID]
 		rows = append(rows, cardToRow(card, dbQty, tempDelta))

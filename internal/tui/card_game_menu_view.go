@@ -14,6 +14,7 @@ const (
 	MenuMyCollection CardGameMenuOption = iota
 	MenuMyLists
 	MenuMyDecks
+	MenuImportSets
 	menuOptionCount
 )
 
@@ -101,6 +102,7 @@ func (m CardGameMenuModel) renderBody(availableHeight int) string {
 	b.WriteString(RenderButtonItem(m.styleManager, "My Collection", m.cursor == 0, btnWidth))
 	b.WriteString(RenderButtonItem(m.styleManager, "My Lists", m.cursor == 1, btnWidth))
 	b.WriteString(RenderButtonItem(m.styleManager, "My Decks", m.cursor == 2, btnWidth))
+	b.WriteString(RenderButtonItem(m.styleManager, "Import Sets", m.cursor == 3, btnWidth))
 	return b.String()
 }
 
