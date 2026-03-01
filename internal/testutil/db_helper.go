@@ -1,3 +1,4 @@
+// Package testutil provides shared test helpers for database setup and teardown.
 package testutil
 
 import (

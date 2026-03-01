@@ -1,3 +1,4 @@
+// Package cardgame provides services for managing card game data.
 package cardgame
 
 import (
@@ -9,7 +10,7 @@ import (
 	"github.com/laiambryant/tui-cardman/internal/model"
 )
 
-// ICardGameService defines the interface for card game-related operations
+// CardGameService defines the interface for card game-related operations.
 type CardGameService interface {
 	GetAllCardGames() ([]model.CardGame, error)
 }

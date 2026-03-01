@@ -219,17 +219,17 @@ func TestUpsertSet_TransactionRollback(t *testing.T) {
 
 	service := NewSetService(db)
 
-	// Use a cancelled context to force transaction failure
+	// Use a canceled context to force transaction failure
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately
 
-	_, err := service.UpsertSet(ctx, "cancelled-set", "CS", "Cancelled Set", 10, 10)
+	_, err := service.UpsertSet(ctx, "canceled-set", "CS", "Canceled Set", 10, 10)
 
 	assert.Error(t, err)
 
 	// Verify no set was inserted
 	var count int
-	err = db.QueryRow(`SELECT COUNT(*) FROM sets WHERE api_id = ?`, "cancelled-set").Scan(&count)
+	err = db.QueryRow(`SELECT COUNT(*) FROM sets WHERE api_id = ?`, "canceled-set").Scan(&count)
 	require.NoError(t, err)
 	assert.Equal(t, 0, count)
 }

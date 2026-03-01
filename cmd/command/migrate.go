@@ -25,7 +25,7 @@ var migrateCmd = &cobra.Command{
 	Long:  `Apply pending database migrations from the migrations directory.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		config.LoadConfig()
-		log, err := os.Create(LOG_FILE_NAME)
+		log, err := os.Create(logFileName)
 		if err != nil {
 			return fmt.Errorf("create log file: %w", err)
 		}

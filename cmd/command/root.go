@@ -1,3 +1,4 @@
+// Package command provides Cobra CLI commands for the tui-cardman application.
 package command
 
 import (

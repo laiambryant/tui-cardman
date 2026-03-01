@@ -1,3 +1,4 @@
+// Package buttonconfig provides services for managing user button key bindings.
 package buttonconfig
 
 import (

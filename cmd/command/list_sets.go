@@ -5,9 +5,10 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/spf13/cobra"
+
 	"github.com/laiambryant/tui-cardman/internal/config"
 	"github.com/laiambryant/tui-cardman/internal/pokemontcg"
-	"github.com/spf13/cobra"
 
 	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"

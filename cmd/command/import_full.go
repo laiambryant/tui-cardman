@@ -4,8 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/laiambryant/tui-cardman/internal/config"
 	"github.com/spf13/cobra"
+
+	"github.com/laiambryant/tui-cardman/internal/config"
 )
 
 var importFullCmd = &cobra.Command{

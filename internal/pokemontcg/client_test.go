@@ -307,17 +307,17 @@ func TestRateLimitedHTTPClient(t *testing.T) {
 		err := client.limiter.Wait(context.Background())
 		require.NoError(t, err)
 
-		// Create a context that's already cancelled
+		// Create a context that's already canceled
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 
-		// This should fail immediately due to cancelled context
+		// This should fail immediately due to canceled context
 		start := time.Now()
 		err = client.limiter.Wait(ctx)
 		elapsed := time.Since(start)
 
 		assert.Error(t, err)
-		assert.Less(t, elapsed, 100*time.Millisecond, "Should fail immediately with cancelled context")
+		assert.Less(t, elapsed, 100*time.Millisecond, "Should fail immediately with canceled context")
 	})
 }
 
@@ -423,7 +423,7 @@ func TestRateLimitedHTTPClient_Do(t *testing.T) {
 		err := client.limiter.Wait(context.Background())
 		require.NoError(t, err)
 
-		// Create a cancelled context
+		// Create a canceled context
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 
@@ -438,7 +438,7 @@ func TestRateLimitedHTTPClient_Do(t *testing.T) {
 		elapsed := time.Since(start)
 
 		assert.Error(t, err)
-		assert.Less(t, elapsed, 100*time.Millisecond, "Should fail quickly with cancelled context")
+		assert.Less(t, elapsed, 100*time.Millisecond, "Should fail quickly with canceled context")
 	})
 
 	t.Run("HTTP errors are propagated", func(t *testing.T) {

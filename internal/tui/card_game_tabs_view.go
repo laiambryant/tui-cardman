@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
 	"github.com/laiambryant/tui-cardman/internal/auth"
 	"github.com/laiambryant/tui-cardman/internal/export"
 	"github.com/laiambryant/tui-cardman/internal/model"
@@ -237,7 +238,7 @@ func buildCollectionRows(collections []model.UserCollection) []table.Row {
 	return rows
 }
 
-func (m CardGameTabsModel) renderEmptySearchMessage(searchValue string, messageWhenEmpty string, messageNoMatch string) string {
+func (m CardGameTabsModel) renderEmptySearchMessage(searchValue, messageWhenEmpty, messageNoMatch string) string {
 	if searchValue == "" {
 		return m.styleManager.GetBlurredStyle().Render(messageWhenEmpty) + "\n"
 	}

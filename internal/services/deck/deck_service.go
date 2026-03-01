@@ -1,3 +1,4 @@
+// Package deck provides services for managing card deck data.
 package deck
 
 import (

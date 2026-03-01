@@ -21,7 +21,7 @@ func getSetStatusIcon(isImported bool) string {
 	return "[ ]"
 }
 
-func calculatePaginationRange(cursor int, totalItems int, itemsPerPage int) (int, int) {
+func calculatePaginationRange(cursor, totalItems, itemsPerPage int) (int, int) {
 	start := cursor - itemsPerPage/2
 	if start < 0 {
 		start = 0
@@ -33,11 +33,11 @@ func calculatePaginationRange(cursor int, totalItems int, itemsPerPage int) (int
 	return start, end
 }
 
-func calculateProgressPercentage(completed int, total int) int {
+func calculateProgressPercentage(completed, total int) int {
 	return int(float64(completed) / float64(total) * 100)
 }
 
-func createProgressBar(completed int, total int, barWidth int) string {
+func createProgressBar(completed, total, barWidth int) string {
 	filledWidth := int(float64(barWidth) * float64(completed) / float64(total))
 	return strings.Repeat("█", filledWidth) + strings.Repeat("░", barWidth-filledWidth)
 }

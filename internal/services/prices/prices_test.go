@@ -5,9 +5,10 @@ import (
 	"database/sql"
 	"testing"
 
-	"github.com/laiambryant/tui-cardman/internal/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/laiambryant/tui-cardman/internal/testutil"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -325,11 +326,11 @@ func TestTCGPlayerInsertPrice_ContextCancellation(t *testing.T) {
 		}
 	}()
 
-	// Create cancelled context
+	// Create canceled context
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	// Try to insert price with cancelled context
+	// Try to insert price with canceled context
 	err = service.InsertPrice(ctx, tx, cardID, "normal",
 		10.50, 12.00, 15.00, 11.50, 9.00,
 		"https://tcgplayer.com/product/123", "2024-01-15T10:00:00Z")
@@ -428,11 +429,11 @@ func TestCardMarketInsertPrice_ContextCancellation(t *testing.T) {
 		}
 	}()
 
-	// Create cancelled context
+	// Create canceled context
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	// Try to insert price with cancelled context
+	// Try to insert price with canceled context
 	err = service.InsertPrice(ctx, tx, cardID,
 		8.50, 9.25, "https://cardmarket.com/product/123")
 

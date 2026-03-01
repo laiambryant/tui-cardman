@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/laiambryant/tui-cardman/internal/config"
 	"github.com/spf13/cobra"
+
+	"github.com/laiambryant/tui-cardman/internal/config"
 )
 
 const (

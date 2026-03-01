@@ -1,3 +1,4 @@
+// Package art provides ASCII art rendering utilities for the TUI.
 package art
 
 import (

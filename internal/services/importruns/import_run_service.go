@@ -1,3 +1,4 @@
+// Package importruns provides services for tracking Pokemon TCG data import history.
 package importruns
 
 import (

@@ -1,3 +1,4 @@
+// Package model defines the core data models used across the application.
 package model
 
 import (

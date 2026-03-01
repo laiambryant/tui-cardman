@@ -2,7 +2,7 @@ package export
 
 import "fmt"
 
-// ImportResult summarises the outcome of resolving CSV rows against local cards.
+// ImportResult summarizes the outcome of resolving CSV rows against local cards.
 type ImportResult struct {
 	// Imported is the number of CSV rows that were matched to a local card.
 	Imported int

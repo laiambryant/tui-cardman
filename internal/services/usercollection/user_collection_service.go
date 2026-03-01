@@ -1,3 +1,4 @@
+// Package usercollection provides services for managing a user's card collection.
 package usercollection
 
 import (

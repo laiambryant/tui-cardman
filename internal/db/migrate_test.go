@@ -6,9 +6,10 @@ import (
 	"testing"
 
 	"github.com/laiambryant/gotestutils/ctesting"
-	"github.com/laiambryant/tui-cardman/internal/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/laiambryant/tui-cardman/internal/testutil"
 )
 
 // TestApplyMigrations tests the migration application process

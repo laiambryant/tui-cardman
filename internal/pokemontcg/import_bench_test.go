@@ -8,11 +8,12 @@ import (
 	"os"
 	"testing"
 
+	_ "github.com/mattn/go-sqlite3"
+
 	card "github.com/laiambryant/tui-cardman/internal/services/cards"
 	"github.com/laiambryant/tui-cardman/internal/services/importruns"
 	"github.com/laiambryant/tui-cardman/internal/services/prices"
 	"github.com/laiambryant/tui-cardman/internal/services/sets"
-	_ "github.com/mattn/go-sqlite3"
 )
 
 // setupBenchmarkDB creates an in-memory SQLite database with required schema

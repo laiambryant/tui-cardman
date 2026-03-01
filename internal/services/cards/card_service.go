@@ -1,3 +1,4 @@
+// Package card provides services for managing individual card data.
 package card
 
 import (

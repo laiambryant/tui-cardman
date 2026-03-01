@@ -6,9 +6,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/laiambryant/tui-cardman/internal/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/laiambryant/tui-cardman/internal/testutil"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -111,11 +112,11 @@ func TestCreateImportRun_ContextCancellation(t *testing.T) {
 
 	service := NewImportRunService(db)
 
-	// Create cancelled context
+	// Create canceled context
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	// Should fail due to cancelled context
+	// Should fail due to canceled context
 	_, err := service.CreateImportRun(ctx, "import_all")
 	assert.Error(t, err)
 }
@@ -235,12 +236,12 @@ func TestUpdateImportRun_ContextCancellation(t *testing.T) {
 	runID, err := service.CreateImportRun(ctx, "import_all")
 	require.NoError(t, err)
 
-	// Create cancelled context
-	ctxCancelled, cancel := context.WithCancel(context.Background())
+	// Create canceled context
+	ctxCanceled, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	// Try to update with cancelled context
-	err = service.UpdateImportRun(ctxCancelled, runID, "completed", 10, 250, 0, "Test")
+	// Try to update with canceled context
+	err = service.UpdateImportRun(ctxCanceled, runID, "completed", 10, 250, 0, "Test")
 	assert.Error(t, err)
 }
 

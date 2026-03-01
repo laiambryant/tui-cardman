@@ -5,9 +5,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/laiambryant/tui-cardman/internal/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/laiambryant/tui-cardman/internal/testutil"
 )
 
 // setupTestDB creates an in-memory database with full schema

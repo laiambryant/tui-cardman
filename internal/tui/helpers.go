@@ -6,6 +6,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/lipgloss"
+
 	"github.com/laiambryant/tui-cardman/internal/export"
 	"github.com/laiambryant/tui-cardman/internal/model"
 	"github.com/laiambryant/tui-cardman/internal/runtimecfg"
@@ -21,7 +22,7 @@ func NewHelpBuilder(cfg *runtimecfg.Manager) *HelpBuilder {
 	return &HelpBuilder{cfg: cfg}
 }
 
-func (h *HelpBuilder) resolveKey(action string, defaultKey string) string {
+func (h *HelpBuilder) resolveKey(action, defaultKey string) string {
 	if h.cfg != nil {
 		if k := h.cfg.KeyForAction(action); k != "" {
 			return k
@@ -77,7 +78,7 @@ func NewStyledTable(columns []table.Column, height int, focused bool, styleManag
 	return t
 }
 
-func MatchActionOrDefault(cfg *runtimecfg.Manager, keyString string, fallback string) string {
+func MatchActionOrDefault(cfg *runtimecfg.Manager, keyString, fallback string) string {
 	if cfg != nil {
 		return cfg.MatchAction(keyString)
 	}

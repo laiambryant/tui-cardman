@@ -636,7 +636,7 @@ func (m DeckBuilderModel) renderBody(availableHeight int) string {
 	rightWidth := contentWidth - leftWidth
 	leftContent := m.renderDeckPanel(leftWidth, availableHeight)
 	leftPanel := RenderPanel(m.styleManager, leftContent, leftWidth, availableHeight, m.focus == DeckFocusDeckPanel, 1, 0)
-	// renderCardPanel returns its own pre-panelled content (two stacked RenderPanel boxes)
+	// renderCardPanel returns its own pre-paneled content (two stacked RenderPanel boxes)
 	rightPanel := m.renderCardPanel(rightWidth, availableHeight)
 	return lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, rightPanel)
 }

@@ -1,3 +1,4 @@
+// Package sets provides services for managing Pokemon TCG set data.
 package sets
 
 import (

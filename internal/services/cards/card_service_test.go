@@ -712,11 +712,11 @@ func TestUpsertCard_ContextCancellation(t *testing.T) {
 
 	gameID1, _, setID1, _ := setupCardTestData(t, db)
 
-	// Create cancelled context
+	// Create canceled context
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	// BeginTx itself may succeed even with cancelled context
+	// BeginTx itself may succeed even with canceled context
 	tx, err := db.BeginTx(context.Background(), nil)
 	require.NoError(t, err)
 	defer func() {
@@ -725,8 +725,8 @@ func TestUpsertCard_ContextCancellation(t *testing.T) {
 		}
 	}()
 
-	// Upsert should fail with cancelled context
-	_, err = service.UpsertCard(ctx, tx, "cancelled", setID1, "1", "Cancelled", "Common", "Artist", gameID1)
+	// Upsert should fail with canceled context
+	_, err = service.UpsertCard(ctx, tx, "canceled", setID1, "1", "Canceled", "Common", "Artist", gameID1)
 	// May or may not error depending on timing, but if it does, it should be context error
 	if err != nil {
 		assert.Contains(t, err.Error(), "context")
@@ -786,11 +786,11 @@ func TestGetCardIDByAPIID_ContextCancellation(t *testing.T) {
 
 	service := NewCardService(db)
 
-	// Create cancelled context
+	// Create canceled context
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	// Should error due to cancelled context
+	// Should error due to canceled context
 	_, err := service.GetCardIDByAPIID(ctx, "test-card")
 	assert.Error(t, err)
 }
@@ -835,13 +835,13 @@ func TestUpsertCard_UpdateError(t *testing.T) {
 	require.NoError(t, err)
 	defer tx2.Rollback()
 
-	ctxCancelled, cancel := context.WithCancel(context.Background())
+	ctxCanceled, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	// Try to update with cancelled context (may or may not error depending on SQLite timing)
-	_, _ = service.UpsertCard(ctxCancelled, tx2, "update-error-test", setID1, "2", "Updated", "Rare", "New Artist", gameID1)
+	// Try to update with canceled context (may or may not error depending on SQLite timing)
+	_, _ = service.UpsertCard(ctxCanceled, tx2, "update-error-test", setID1, "2", "Updated", "Rare", "New Artist", gameID1)
 
-	// SQLite may not always respect cancelled contexts immediately
+	// SQLite may not always respect canceled contexts immediately
 	// Just verify original card is unchanged after rollback
 	tx2.Rollback()
 

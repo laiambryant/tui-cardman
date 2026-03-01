@@ -29,7 +29,7 @@ var serveSSHCmd = &cobra.Command{
 	Long:  `Launch an SSH server that provides authenticated access to the card management TUI.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		config.LoadConfig()
-		log, err := os.Create(LOG_FILE_NAME)
+		log, err := os.Create(logFileName)
 		if err != nil {
 			return fmt.Errorf("create log file: %w", err)
 		}

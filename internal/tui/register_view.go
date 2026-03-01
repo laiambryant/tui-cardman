@@ -5,10 +5,11 @@ import (
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/laiambryant/tui-cardman/internal/auth"
 )
 
-func (m *Model) createTextInput(placeholder string, charLimit, width int, focused bool, isPassword bool) textinput.Model {
+func (m *Model) createTextInput(placeholder string, charLimit, width int, focused, isPassword bool) textinput.Model {
 	t := textinput.New()
 	t.Placeholder = placeholder
 	t.CharLimit = charLimit

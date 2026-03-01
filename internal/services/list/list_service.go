@@ -1,3 +1,4 @@
+// Package list provides services for managing user card lists.
 package list
 
 import (

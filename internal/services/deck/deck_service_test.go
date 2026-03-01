@@ -61,7 +61,7 @@ func seedDeckTestData(t *testing.T, db *sql.DB) (userID, cardGameID, cardID1, ca
 	cardID2, err = res.LastInsertId()
 	require.NoError(t, err)
 
-	return
+	return userID, cardGameID, cardID1, cardID2
 }
 
 func TestNewDeckService(t *testing.T) {

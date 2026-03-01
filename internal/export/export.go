@@ -1,3 +1,4 @@
+// Package export provides CSV export and import functionality for card collections.
 package export
 
 import (

@@ -1,3 +1,4 @@
+// Package runtimecfg manages user-editable runtime configuration persisted to disk.
 package runtimecfg
 
 import (
@@ -77,7 +78,7 @@ func Load(path string) (*RuntimeConfig, error) {
 	return &cfg, nil
 }
 
-func initializeKeybindings(cfg *RuntimeConfig, defaults *RuntimeConfig) {
+func initializeKeybindings(cfg, defaults *RuntimeConfig) {
 	if cfg.Keybindings == nil {
 		cfg.Keybindings = defaults.Keybindings
 	} else {

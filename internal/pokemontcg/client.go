@@ -1,3 +1,4 @@
+// Package pokemontcg provides a client and importer for the Pokemon TCG API.
 package pokemontcg
 
 import (

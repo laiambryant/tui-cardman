@@ -13,7 +13,7 @@ import (
 	"github.com/laiambryant/tui-cardman/internal/tui"
 )
 
-const LOG_FILE_NAME = "output.log"
+const logFileName = "output.log"
 
 var serveCmd = &cobra.Command{
 	Use:   "serve",
@@ -21,7 +21,7 @@ var serveCmd = &cobra.Command{
 	Long:  `Launch the interactive terminal UI for card management.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		config.LoadConfig()
-		log, err := os.Create(LOG_FILE_NAME)
+		log, err := os.Create(logFileName)
 		if err != nil {
 			return fmt.Errorf("create log file: %w", err)
 		}

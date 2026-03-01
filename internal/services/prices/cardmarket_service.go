@@ -1,3 +1,4 @@
+// Package prices provides services for fetching and storing card market prices.
 package prices
 
 import (

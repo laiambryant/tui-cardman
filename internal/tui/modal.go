@@ -36,7 +36,7 @@ func NewModalModel(title, message string, onConfirm, onCancel func() tea.Cmd, st
 }
 
 // newModal is a convenience wrapper that creates a modal and immediately sets
-// its dimensions so it renders correctly centred over the current view.
+// its dimensions so it renders correctly centered over the current view.
 func newModal(title, message string, onConfirm, onCancel func() tea.Cmd, sm *StyleManager, width, height int) ModalModel {
 	return NewModalModel(title, message, onConfirm, onCancel, sm).SetDimensions(width, height)
 }
