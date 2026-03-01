@@ -1,0 +1,38 @@
+# Build artifacts
+dist/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test artifacts
+*.test
+*.out
+coverage.html
+coverage.txt
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Environment files (never bake secrets into image)
+.env
+.env.*
+!.env.example
+
+# Runtime data (use volumes instead)
+*.db
+*.db-shm
+*.db-wal
+data/
+
+# Config files
+config.json
+*.key

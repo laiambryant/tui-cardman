@@ -8,7 +8,6 @@ func SanitizeQuery(q string) string {
 	if q == "" {
 		return q
 	}
-	// replace tabs/newlines with spaces, then collapse consecutive spaces
 	s := strings.ReplaceAll(q, "\t", " ")
 	s = strings.ReplaceAll(s, "\n", " ")
 	return strings.Join(strings.Fields(s), " ")

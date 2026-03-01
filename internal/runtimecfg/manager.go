@@ -2,6 +2,8 @@ package runtimecfg
 
 import (
 	"fmt"
+	"maps"
+	"slices"
 	"sync"
 )
 
@@ -12,66 +14,66 @@ type Subscriber func(*RuntimeConfig)
 type Manager struct {
 	mu          sync.RWMutex
 	config      *RuntimeConfig
-	configPath  string
+	strategy    ButtonStrategy
 	subscribers []Subscriber
+	keyToAction map[string]string // Reverse index for O(1) key→action lookups
 }
 
 // NewManager creates a new config manager
-func NewManager(configPath string) (*Manager, error) {
-	cfg, err := Load(configPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load config: %w", err)
+func NewManager(isLocal bool, configPath string, service ButtonConfigService, userID int64) (*Manager, error) {
+	var strategy ButtonStrategy
+	var config *RuntimeConfig
+	var err error
+	if isLocal {
+		strategy = NewLocalStrategy(configPath)
+		config, err = strategy.Load()
+		if err != nil {
+			return nil, fmt.Errorf("failed to load local config: %w", err)
+		}
+	} else {
+		config = Default()
+		strategy = NewRemoteStrategy(service, userID, config, configPath)
+		dbConfig, loadErr := strategy.Load()
+		if loadErr == nil && dbConfig != nil {
+			config = dbConfig
+		}
 	}
-
 	return &Manager{
-		config:      cfg,
-		configPath:  configPath,
+		config:      config,
+		strategy:    strategy,
 		subscribers: make([]Subscriber, 0),
+		keyToAction: buildKeyToActionMap(config.Keybindings),
 	}, nil
 }
 
-// Get returns a copy of the current configuration
 func (m *Manager) Get() *RuntimeConfig {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-
-	// Return a copy to prevent external modifications
 	cfg := *m.config
-
-	// Deep copy the keybindings map
 	cfg.Keybindings = make(map[string]string)
-	for k, v := range m.config.Keybindings {
-		cfg.Keybindings[k] = v
-	}
-
+	maps.Copy(cfg.Keybindings, m.config.Keybindings)
 	return &cfg
 }
 
 // Set updates the configuration and notifies subscribers
 func (m *Manager) Set(cfg *RuntimeConfig) error {
 	m.mu.Lock()
-
-	// Validate keybindings for conflicts
 	if err := m.validateKeybindings(cfg.Keybindings); err != nil {
 		m.mu.Unlock()
 		return err
 	}
-
 	m.config = cfg
+	m.keyToAction = buildKeyToActionMap(cfg.Keybindings)
+	m.strategy.MarkUnsaved()
 	subscribers := make([]Subscriber, len(m.subscribers))
 	copy(subscribers, m.subscribers)
 	m.mu.Unlock()
-
-	// Notify subscribers outside of lock
 	for _, sub := range subscribers {
 		sub(cfg)
 	}
-
-	// Save to disk
-	if err := Save(cfg, m.configPath); err != nil {
+	if err := m.strategy.Save(cfg); err != nil {
 		return fmt.Errorf("failed to save config: %w", err)
 	}
-
 	return nil
 }
 
@@ -86,7 +88,6 @@ func (m *Manager) Subscribe(sub Subscriber) {
 func (m *Manager) KeyForAction(action string) string {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-
 	if key, exists := m.config.Keybindings[action]; exists {
 		return key
 	}
@@ -97,41 +98,35 @@ func (m *Manager) KeyForAction(action string) string {
 func (m *Manager) MatchAction(keyPress string, actions ...string) string {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-
-	// If specific actions provided, check only those
 	if len(actions) > 0 {
-		for _, action := range actions {
-			if key, exists := m.config.Keybindings[action]; exists && key == keyPress {
-				return action
-			}
-		}
-		return ""
+		return m.matchAmongActions(keyPress, actions)
 	}
+	if action, exists := m.keyToAction[keyPress]; exists {
+		return action
+	}
+	return ""
+}
 
-	// Otherwise check all keybindings
-	for action, key := range m.config.Keybindings {
-		if key == keyPress {
+func (m *Manager) matchAmongActions(keyPress string, actions []string) string {
+	if action, exists := m.keyToAction[keyPress]; exists {
+		if slices.Contains(actions, action) {
 			return action
 		}
 	}
 	return ""
 }
 
-// validateKeybindings checks for duplicate key bindings
 func (m *Manager) validateKeybindings(bindings map[string]string) error {
 	seen := make(map[string]string)
-
 	for action, key := range bindings {
 		if key == "" {
-			continue // Allow unbound actions
+			return fmt.Errorf("action %q is not bound to any key", action)
 		}
-
 		if existingAction, exists := seen[key]; exists {
-			return fmt.Errorf("key '%s' is bound to both '%s' and '%s'", key, existingAction, action)
+			return fmt.Errorf("key %q is bound to both %q and %q", key, existingAction, action)
 		}
 		seen[key] = action
 	}
-
 	return nil
 }
 
@@ -139,23 +134,57 @@ func (m *Manager) validateKeybindings(bindings map[string]string) error {
 func (m *Manager) SetKeybinding(action, key string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-
-	// Create a copy of current keybindings
 	newBindings := make(map[string]string)
-	for k, v := range m.config.Keybindings {
-		newBindings[k] = v
-	}
-
-	// Update the specific binding
+	maps.Copy(newBindings, m.config.Keybindings)
 	newBindings[action] = key
-
-	// Validate
 	if err := m.validateKeybindings(newBindings); err != nil {
 		return err
 	}
-
-	// Apply
 	m.config.Keybindings[action] = key
-
+	m.keyToAction = buildKeyToActionMap(m.config.Keybindings)
 	return nil
+}
+
+// SaveToDatabase saves the current configuration using the strategy
+func (m *Manager) SaveToDatabase() error {
+	m.mu.RLock()
+	config := m.config
+	m.mu.RUnlock()
+	return m.strategy.Save(config)
+}
+
+// LoadFromDatabase loads configuration using the strategy
+func (m *Manager) LoadFromDatabase() error {
+	config, err := m.strategy.Load()
+	if err != nil {
+		return err
+	}
+	m.mu.Lock()
+	m.config = config
+	m.mu.Unlock()
+	return nil
+}
+
+// HasUnsavedChanges returns true if there are unsaved changes
+func (m *Manager) HasUnsavedChanges() bool {
+	return m.strategy.HasUnsavedChanges()
+}
+
+// MarkUnsaved marks the configuration as having unsaved changes
+func (m *Manager) MarkUnsaved() {
+	m.strategy.MarkUnsaved()
+}
+
+// IsUserMode returns true if the manager is using remote strategy
+func (m *Manager) IsUserMode() bool {
+	_, isRemote := m.strategy.(*RemoteStrategy)
+	return isRemote
+}
+
+func buildKeyToActionMap(keybindings map[string]string) map[string]string {
+	keyToAction := make(map[string]string, len(keybindings))
+	for action, key := range keybindings {
+		keyToAction[key] = action
+	}
+	return keyToAction
 }

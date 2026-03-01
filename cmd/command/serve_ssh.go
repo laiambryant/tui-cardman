@@ -40,6 +40,9 @@ var serveSSHCmd = &cobra.Command{
 			return fmt.Errorf("open db: %w", err)
 		}
 		defer db.Close()
+		if err := dbpkg.ApplyMigrations(db, "internal/db/migrations"); err != nil {
+			return fmt.Errorf("apply migrations: %w", err)
+		}
 		hostKeyPath, err := ensureHostKey(config.Cfg.SSHHostKey)
 		if err != nil {
 			return fmt.Errorf("ensure host key: %w", err)
@@ -104,20 +107,25 @@ func ensureHostKey(keyPath string) (string, error) {
 		}
 		keyPath = filepath.Join(home, keyPath[2:])
 	}
+	if err := checkIfKeyExists(keyPath); err != nil {
+		return "", err
+	}
+	return keyPath, nil
+}
 
-	// Check if key exists
+func checkIfKeyExists(keyPath string) error {
 	if _, err := os.Stat(keyPath); os.IsNotExist(err) {
 		dir := filepath.Dir(keyPath)
 		if err := os.MkdirAll(dir, 0700); err != nil {
-			return "", fmt.Errorf("create key directory: %w", err)
+			return fmt.Errorf("create key directory: %w", err)
 		}
 		fmt.Printf("Generating SSH host key at %s...\n", keyPath)
 		if err := generateHostKey(keyPath); err != nil {
-			return "", fmt.Errorf("generate host key: %w", err)
+			return fmt.Errorf("generate host key: %w", err)
 		}
-		fmt.Println(lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Render("✓ Host key generated successfully"))
+		fmt.Println(lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Render("Host key generated successfully"))
 	}
-	return keyPath, nil
+	return nil
 }
 
 // generateHostKey creates a new ED25519 SSH host key

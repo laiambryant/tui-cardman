@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/laiambryant/tui-cardman/internal/services/cardimages"
+	"github.com/laiambryant/tui-cardman/internal/logging"
 	card "github.com/laiambryant/tui-cardman/internal/services/cards"
 	"github.com/laiambryant/tui-cardman/internal/services/importruns"
 	"github.com/laiambryant/tui-cardman/internal/services/prices"
@@ -22,9 +22,9 @@ type ImportService struct {
 	importRunService       importruns.ImportRunService
 	setService             sets.SetService
 	cardService            card.CardService
-	cardImageService       cardimages.CardImageService
 	tcgPlayerPriceService  prices.TCGPlayerPriceService
 	cardMarketPriceService prices.CardMarketPriceService
+	pokemonGameID          int64
 }
 
 func NewImportService(
@@ -34,21 +34,39 @@ func NewImportService(
 	importRunService importruns.ImportRunService,
 	setService sets.SetService,
 	cardService card.CardService,
-	cardImageService cardimages.CardImageService,
 	tcgPlayerPriceService prices.TCGPlayerPriceService,
 	cardMarketPriceService prices.CardMarketPriceService,
 ) *ImportService {
-	return &ImportService{
+	service := &ImportService{
 		db:                     db,
 		client:                 client,
 		logger:                 logger,
 		importRunService:       importRunService,
 		setService:             setService,
 		cardService:            cardService,
-		cardImageService:       cardImageService,
 		tcgPlayerPriceService:  tcgPlayerPriceService,
 		cardMarketPriceService: cardMarketPriceService,
 	}
+
+	// Fetch Pokemon card game ID
+	if err := service.initPokemonGameID(context.Background()); err != nil {
+		logger.Error("Failed to initialize Pokemon game ID", "error", err)
+	}
+
+	return service
+}
+
+func (s *ImportService) initPokemonGameID(ctx context.Context) error {
+	query := "SELECT id FROM card_games WHERE name = ?"
+	slog.Debug("query row", "query", logging.SanitizeQuery(query), "args", []any{"Pokemon"})
+	var gameID int64
+	err := s.db.QueryRowContext(ctx, query, "Pokemon").Scan(&gameID)
+	if err != nil {
+		return fmt.Errorf("failed to get pokemon card game id: %w", err)
+	}
+	s.pokemonGameID = gameID
+	s.logger.Debug("Initialized Pokemon card game ID", "id", gameID)
+	return nil
 }
 
 type ImportRun struct {
@@ -72,8 +90,8 @@ func (s *ImportService) UpdateImportRun(ctx context.Context, runID int64, status
 }
 
 func (s *ImportService) UpsertSet(ctx context.Context, set Set) (int64, error) {
-	return s.setService.UpsertSet(ctx, set.ID, set.PtcgoCode, set.Name, set.Series,
-		set.PrintedTotal, set.Total, set.ReleaseDate, set.Images.Symbol, set.Images.Logo)
+	return s.setService.UpsertSet(ctx, set.ID, set.PtcgoCode, set.Name,
+		set.PrintedTotal, set.Total)
 }
 
 func (s *ImportService) UpsertCard(ctx context.Context, card Card, setID int64) error {
@@ -81,12 +99,12 @@ func (s *ImportService) UpsertCard(ctx context.Context, card Card, setID int64) 
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback()
-	cardID, err := s.cardService.UpsertCard(ctx, tx, card.ID, setID, card.Number, card.Name, card.Rarity, card.Artist)
-	if err != nil {
-		return err
-	}
-	if err := s.replaceCardChildren(ctx, tx, cardID, card); err != nil {
+	defer func() {
+		if rollbackErr := tx.Rollback(); rollbackErr != nil && err == nil {
+			err = rollbackErr
+		}
+	}()
+	if err := s.upsertCardTx(ctx, tx, card, setID); err != nil {
 		return err
 	}
 	if err := tx.Commit(); err != nil {
@@ -95,10 +113,19 @@ func (s *ImportService) UpsertCard(ctx context.Context, card Card, setID int64) 
 	return nil
 }
 
-func (s *ImportService) replaceCardChildren(ctx context.Context, tx *sql.Tx, cardID int64, card Card) error {
-	if err := s.cardImageService.ReplaceCardImages(ctx, tx, cardID, card.Images.Small, card.Images.Large); err != nil {
+// upsertCardTx upserts a card using the provided transaction
+func (s *ImportService) upsertCardTx(ctx context.Context, tx *sql.Tx, card Card, setID int64) error {
+	cardID, err := s.cardService.UpsertCard(ctx, tx, card.ID, setID, card.Number, card.Name, card.Rarity, card.Artist, s.pokemonGameID)
+	if err != nil {
 		return err
 	}
+	if err := s.replaceCardChildren(ctx, tx, cardID, card); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *ImportService) replaceCardChildren(ctx context.Context, tx *sql.Tx, cardID int64, card Card) error {
 	if err := s.tcgPlayerPriceService.DeletePrices(ctx, tx, cardID); err != nil {
 		return err
 	}
@@ -164,8 +191,20 @@ func (s *ImportService) ImportSet(ctx context.Context, set Set) (int, error) {
 	s.logger.Info("Importing set", "set_id", set.ID, "name", set.Name)
 	setID, err := s.UpsertSet(ctx, set)
 	if err != nil {
-		return 0, fmt.Errorf("failed to upsert set: %w", err)
+		return 0, fmt.Errorf("failed to upsert set %s: %w", set.ID, err)
 	}
+
+	// Create a single transaction for all cards in this set
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() {
+		if rollbackErr := tx.Rollback(); rollbackErr != nil && err == nil {
+			err = rollbackErr
+		}
+	}()
+
 	cardsImported := 0
 	page := 1
 	for {
@@ -175,7 +214,7 @@ func (s *ImportService) ImportSet(ctx context.Context, set Set) (int, error) {
 			return cardsImported, fmt.Errorf("failed to fetch cards for set %s page %d: %w", set.ID, page, err)
 		}
 		for _, card := range cards {
-			if err := s.UpsertCard(ctx, card, setID); err != nil {
+			if err := s.upsertCardTx(ctx, tx, card, setID); err != nil {
 				s.logger.Error("Failed to upsert card", "card_id", card.ID, "error", err)
 				continue
 			}
@@ -187,6 +226,13 @@ func (s *ImportService) ImportSet(ctx context.Context, set Set) (int, error) {
 		}
 		page++
 	}
+
+	// Commit the transaction once for all cards in the set
+	if err := tx.Commit(); err != nil {
+		s.logger.Error("Failed to commit set transaction", "set_id", set.ID, "error", err)
+		return cardsImported, fmt.Errorf("failed to commit set transaction: %w", err)
+	}
+
 	s.logger.Info("Completed set import", "set_id", set.ID, "total_cards", cardsImported)
 	return cardsImported, nil
 }
@@ -342,4 +388,29 @@ func (s *ImportService) findRequestedSets(allSets []Set, setIDs []string) ([]Set
 		}
 	}
 	return setsToImport, notFound
+}
+
+func (s *ImportService) DeleteSetByAPIID(ctx context.Context, setAPIID string) error {
+	dbSetID, err := s.setService.GetSetIDByAPIID(ctx, setAPIID)
+	if err == sql.ErrNoRows {
+		s.logger.Debug("set not found in database, nothing to delete", "api_id", setAPIID)
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("failed to delete set %s: %w", setAPIID, err)
+	}
+	deleteCardsQuery := "DELETE FROM cards WHERE set_id = ?"
+	slog.Debug("exec", "query", logging.SanitizeQuery(deleteCardsQuery), "args", []any{dbSetID})
+	_, err = s.db.ExecContext(ctx, deleteCardsQuery, dbSetID)
+	if err != nil {
+		return fmt.Errorf("failed to delete cards for set %s: %w", setAPIID, err)
+	}
+	deleteSetQuery := "DELETE FROM sets WHERE id = ?"
+	slog.Debug("exec", "query", logging.SanitizeQuery(deleteSetQuery), "args", []any{dbSetID})
+	_, err = s.db.ExecContext(ctx, deleteSetQuery, dbSetID)
+	if err != nil {
+		return fmt.Errorf("failed to delete set %s: %w", setAPIID, err)
+	}
+	s.logger.Info("deleted set from database", "api_id", setAPIID, "db_id", dbSetID)
+	return nil
 }

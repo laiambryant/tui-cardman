@@ -15,8 +15,7 @@ type RuntimeConfig struct {
 
 // UIConfig holds UI-related settings
 type UIConfig struct {
-	CompactLists bool   `json:"compact_lists"`
-	ColorScheme  string `json:"color_scheme"`
+	CompactLists bool `json:"compact_lists"`
 }
 
 // Default returns a RuntimeConfig with sensible defaults
@@ -48,10 +47,14 @@ func Default() *RuntimeConfig {
 			// Search
 			"search_focus": "/",
 			"search_clear": "ctrl+u",
+
+			// Collection management
+			"save":               "ctrl+s",
+			"increment_quantity": "+",
+			"decrement_quantity": "delete",
 		},
 		UI: UIConfig{
 			CompactLists: false,
-			ColorScheme:  "default",
 		},
 	}
 }
@@ -70,6 +73,11 @@ func Load(path string) (*RuntimeConfig, error) {
 		return nil, fmt.Errorf("failed to parse config file: %w", err)
 	}
 	defaults := Default()
+	initializeKeybindings(&cfg, defaults)
+	return &cfg, nil
+}
+
+func initializeKeybindings(cfg *RuntimeConfig, defaults *RuntimeConfig) {
 	if cfg.Keybindings == nil {
 		cfg.Keybindings = defaults.Keybindings
 	} else {
@@ -79,7 +87,6 @@ func Load(path string) (*RuntimeConfig, error) {
 			}
 		}
 	}
-	return &cfg, nil
 }
 
 // Save writes configuration to a file path
@@ -92,21 +99,16 @@ func Save(cfg *RuntimeConfig, path string) error {
 	if err != nil {
 		return fmt.Errorf("failed to marshal config: %w", err)
 	}
-
 	if err := os.WriteFile(path, data, 0644); err != nil {
 		return fmt.Errorf("failed to write config file: %w", err)
 	}
-
 	return nil
 }
 
-// GetConfigPath returns the path to the config file
-// Respects CARDMAN_CONFIG env var, otherwise uses default
+// GetConfigPath returns the path to the config file. Respects CARDMAN_CONFIG env var, otherwise uses default
 func GetConfigPath() string {
 	if path := os.Getenv("CARDMAN_CONFIG"); path != "" {
 		return path
 	}
-
-	// Use current directory by default
 	return ".cardman.json"
 }

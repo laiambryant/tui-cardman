@@ -3,17 +3,9 @@ package command
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"strings"
 
 	"github.com/laiambryant/tui-cardman/internal/config"
-	"github.com/laiambryant/tui-cardman/internal/db"
-	"github.com/laiambryant/tui-cardman/internal/pokemontcg"
-	"github.com/laiambryant/tui-cardman/internal/services/cardimages"
-	card "github.com/laiambryant/tui-cardman/internal/services/cards"
-	"github.com/laiambryant/tui-cardman/internal/services/importruns"
-	"github.com/laiambryant/tui-cardman/internal/services/prices"
-	"github.com/laiambryant/tui-cardman/internal/services/sets"
 	"github.com/spf13/cobra"
 )
 
@@ -42,38 +34,20 @@ var importSetsCmd = &cobra.Command{
 		config.LoadConfig()
 		ctx := context.Background()
 
-		database, err := db.OpenDB(config.Cfg.DBDSN)
+		deps, err := buildImportService()
 		if err != nil {
-			return fmt.Errorf("failed to connect to database: %w", err)
+			return err
 		}
-		defer database.Close()
-
-		apiKey := config.GetAPIKey()
-		client := pokemontcg.NewClient(apiKey)
-		logger := slog.Default()
-
-		// Initialize all services
-		importRunService := importruns.NewImportRunService(database)
-		setService := sets.NewSetService(database)
-		cardService := card.NewCardService(database)
-		cardImageService := cardimages.NewCardImageService(database)
-		tcgPlayerPriceService := prices.NewTCGPlayerPriceService(database)
-		cardMarketPriceService := prices.NewCardMarketPriceService(database)
-
-		importService := pokemontcg.NewImportService(
-			database, client, logger,
-			importRunService, setService, cardService,
-			cardImageService, tcgPlayerPriceService, cardMarketPriceService,
-		)
+		defer deps.database.Close()
 
 		setIDs := args
-		logger.Info("Starting import of specific sets", "sets", strings.Join(setIDs, ", "))
+		deps.logger.Info("Starting import of specific sets", "sets", strings.Join(setIDs, ", "))
 
-		if err := importService.ImportSpecificSets(ctx, setIDs); err != nil {
+		if err := deps.importService.ImportSpecificSets(ctx, setIDs); err != nil {
 			return fmt.Errorf("import failed: %w", err)
 		}
 
-		logger.Info("Import of specific sets completed successfully")
+		deps.logger.Info("Import of specific sets completed successfully")
 		return nil
 	},
 }

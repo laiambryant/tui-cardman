@@ -7,125 +7,102 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/laiambryant/tui-cardman/internal/auth"
+	"github.com/laiambryant/tui-cardman/internal/runtimecfg"
 )
 
 func (m *Model) initLocalUserSetupInputs() {
-	var inputs []textinput.Model
-
-	// Name input
-	nameInput := textinput.New()
-	nameInput.Placeholder = "First Name"
-	nameInput.Width = 30
-	nameInput.Focus()
-	nameInput.Prompt = focusedStyle.Render("> ")
-	nameInput.TextStyle = focusedStyle
-
-	// Surname input
-	surnameInput := textinput.New()
-	surnameInput.Placeholder = "Last Name"
-	surnameInput.Width = 30
-	surnameInput.Prompt = blurredStyle.Render("> ")
-
-	// Email input
-	emailInput := textinput.New()
-	emailInput.Placeholder = "email@example.com"
-	emailInput.Width = 30
-	emailInput.Prompt = blurredStyle.Render("> ")
-
-	inputs = append(inputs, nameInput, surnameInput, emailInput)
-	m.inputs = inputs
+	m.inputs = make([]textinput.Model, 3)
+	m.inputs[0] = m.createTextInput("First Name", 30, 30, true, false)
+	m.inputs[1] = m.createTextInput("Last Name", 30, 30, false, false)
+	m.inputs[2] = m.createTextInput("email@example.com", 255, 30, false, false)
 	m.focusIndex = 0
 }
 
 func (m Model) localUserSetupView() string {
+	header := titleStyle.Render("Welcome to CardMan!")
+	body := m.renderLocalUserSetupBody()
+	footer := m.renderLocalUserSetupFooter()
+	return renderFramedView(header, body, footer, m.width, m.height, m.styleManager)
+}
+
+func (m Model) renderLocalUserSetupBody() string {
 	var b strings.Builder
-
-	b.WriteString(titleStyle.Render("🎴 Welcome to CardMan!") + "\n\n")
 	b.WriteString(focusedStyle.Render("Let's set up your local profile to get started.") + "\n")
-	b.WriteString(blurredStyle.Render("This will be used to manage your card collections.") + "\n\n")
-
+	b.WriteString(blurredStyle.Render("This will be used to manage your card collections.") + "\n")
 	if m.errorMsg != "" {
-		b.WriteString(errorStyle.Render("Error: "+m.errorMsg) + "\n\n")
+		b.WriteString(errorStyle.Render("Error: "+m.errorMsg) + "\n")
 	}
-
-	// Form fields
-	inputs := []string{"First Name:", "Last Name:", "Email:"}
+	fields := []string{"First Name:", "Last Name:", "Email:"}
 	for i := range m.inputs {
-		b.WriteString(inputs[i] + "\n")
-		b.WriteString(m.inputs[i].View() + "\n\n")
-	}
-
-	// Submit button
-	submitButton := "[ Create Profile ]"
-	if m.focusIndex == len(m.inputs) {
-		submitButton = focusedStyle.Render("[ Create Profile ]")
-	} else {
-		submitButton = blurredStyle.Render(submitButton)
-	}
-	b.WriteString(submitButton + "\n\n")
-
-	settingsKey := "F1"
-	navUp := "↑"
-	navDown := "↓"
-	submitKey := "Enter"
-	quitKey := "Ctrl+C"
-	if m.configManager != nil {
-		if k := m.configManager.KeyForAction("settings"); k != "" {
-			settingsKey = k
-		}
-		if k := m.configManager.KeyForAction("nav_up"); k != "" {
-			navUp = k
-		}
-		if k := m.configManager.KeyForAction("nav_down"); k != "" {
-			navDown = k
-		}
-		if k := m.configManager.KeyForAction("select"); k != "" {
-			submitKey = k
-		}
-		if k := m.configManager.KeyForAction("quit"); k != "" {
-			quitKey = k
+		b.WriteString(fields[i] + "\n")
+		b.WriteString(m.inputs[i].View())
+		if i < len(m.inputs)-1 {
+			b.WriteString("\n")
 		}
 	}
-	help := fmt.Sprintf("%s: Settings • %s/%s: Navigate • %s: Submit • %s: Quit", settingsKey, navUp, navDown, submitKey, quitKey)
-	b.WriteString(helpStyle.Render(help) + "\n")
-
+	b.WriteString("\n" + RenderButton(m.focusIndex == len(m.inputs), "[ Create Profile ]"))
 	return b.String()
 }
 
+func (m Model) renderLocalUserSetupFooter() string {
+	return helpStyle.Render(m.buildLocalSetupHelpText())
+}
+
+func (m Model) buildLocalSetupHelpText() string {
+	hb := NewHelpBuilder(m.configManager)
+	return hb.Build(KeyItem{"settings", "F1", "Settings"}) + " • " + hb.Pair("nav_up", "↑", "nav_down", "↓", "Navigate") + " • " + hb.Build(
+		KeyItem{"select", "Enter", "Submit"},
+		KeyItem{"quit", "Ctrl+C", "Quit"},
+	)
+}
+
+func (m *Model) validateLocalUserSetupInputs(name, surname, email string) string {
+	name = strings.TrimSpace(name)
+	surname = strings.TrimSpace(surname)
+	email = strings.TrimSpace(email)
+	if name == "" {
+		return "First name is required"
+	}
+	if surname == "" {
+		return "Last name is required"
+	}
+	if email == "" {
+		return "Email is required"
+	}
+	if !strings.Contains(email, "@") || !strings.Contains(email, ".") {
+		return "Please enter a valid email address"
+	}
+	return ""
+}
+
+func (m *Model) initLocalConfigManager() {
+	if m.configManager != nil {
+		return
+	}
+	configPath := runtimecfg.GetConfigPath()
+	configManager, cfgErr := runtimecfg.NewManager(true, configPath, nil, 0)
+	if cfgErr != nil {
+		fmt.Printf("Warning: failed to initialize config manager, will fallback to default configuration: %v\n", cfgErr)
+	} else {
+		m.configManager = configManager
+	}
+}
+
 func (m *Model) handleLocalUserSetup() (tea.Model, tea.Cmd) {
-	// Validate inputs
 	name := strings.TrimSpace(m.inputs[0].Value())
 	surname := strings.TrimSpace(m.inputs[1].Value())
 	email := strings.TrimSpace(m.inputs[2].Value())
-
-	if name == "" {
-		m.errorMsg = "First name is required"
+	if validationErr := m.validateLocalUserSetupInputs(name, surname, email); validationErr != "" {
+		m.errorMsg = validationErr
 		return m, nil
 	}
-	if surname == "" {
-		m.errorMsg = "Last name is required"
-		return m, nil
-	}
-	if email == "" {
-		m.errorMsg = "Email is required"
-		return m, nil
-	}
-
-	// Basic email validation
-	if !strings.Contains(email, "@") || !strings.Contains(email, ".") {
-		m.errorMsg = "Please enter a valid email address"
-		return m, nil
-	}
-
-	// Create user with empty password (local mode)
 	req := auth.RegisterRequest{
 		Name:     name,
 		Surname:  surname,
 		Email:    email,
-		Password: "", // No password for local mode
+		Password: "",
 	}
-
-	user, err := m.userService.CreateUser(req, "") // Empty password hash
+	user, err := m.userService.CreateUser(req, "")
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint") {
 			m.errorMsg = "This email is already registered"
@@ -134,22 +111,23 @@ func (m *Model) handleLocalUserSetup() (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
-
-	// Set the user as current user and go to main screen
 	m.user = user
-
-	// Create sample collection data for the new local user
+	m.initLocalConfigManager()
 	err = m.collectionService.CreateSampleCollectionData(user.ID)
 	if err != nil {
-		// Don't fail user creation if sample data fails, just log it
 		m.errorMsg = fmt.Sprintf("Profile created but failed to add sample collection cards: %v", err)
-		// Still proceed to main screen after a brief delay
 		m.screen = ScreenMain
+		m.initMainScreenImport()
+		if m.importModel != nil {
+			return m, m.importModel.Init()
+		}
 		return m, nil
 	}
-
 	m.screen = ScreenMain
 	m.errorMsg = ""
-
+	m.initMainScreenImport()
+	if m.importModel != nil {
+		return m, m.importModel.Init()
+	}
 	return m, nil
 }

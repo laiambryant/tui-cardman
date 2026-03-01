@@ -50,10 +50,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "q", "ctrl+c":
 			return m, tea.Quit
-		case "enter":
-			return m, tea.Batch(
-				tea.Printf("Let's go to %s!", m.table.SelectedRow()[1]),
-			)
 		}
 	}
 	m.table, cmd = m.table.Update(msg)
@@ -86,7 +82,6 @@ var listSetsCmd = &cobra.Command{
 		columns := []table.Column{
 			{Title: "SET ID", Width: 10},
 			{Title: "NAME", Width: 20},
-			{Title: "SERIES", Width: 8},
 			{Title: "TOTAL CARDS", Width: 15},
 		}
 
@@ -95,7 +90,6 @@ var listSetsCmd = &cobra.Command{
 			rows = append(rows, table.Row{
 				set.ID,
 				set.Name,
-				set.Series,
 				fmt.Sprintf("%d", set.Total),
 			})
 		}

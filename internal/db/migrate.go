@@ -43,6 +43,7 @@ func ApplyMigrations(db *sql.DB, migrationsDir string) error {
 
 func ensureMigrationsTable(db *sql.DB) error {
 	slog.Debug("ensuring schema_migrations table exists")
+	slog.Debug("exec", "query", logging.SanitizeQuery(createMigrationsTable), "args", []any{})
 	_, err := db.Exec(createMigrationsTable)
 	return err
 }
@@ -82,6 +83,7 @@ func extractVersion(path string) string {
 }
 
 func isApplied(db *sql.DB, version string) (bool, error) {
+	slog.Debug("query row", "query", logging.SanitizeQuery(checkMigrationApplied), "args", []any{version})
 	var count int
 	err := db.QueryRow(checkMigrationApplied, version).Scan(&count)
 	return count > 0, err
@@ -102,21 +104,17 @@ func applyMigration(db *sql.DB, m migration) error {
 			slog.Debug("tx rollback", "err", err, "version", m.version)
 		}
 	}()
-
-	// Execute migration SQL
+	slog.Debug("exec (tx)", "query", logging.SanitizeQuery(string(content)), "args", []any{})
 	slog.Debug("tx exec", "version", m.version, "path", m.path)
 	if _, err := tx.Exec(string(content)); err != nil {
 		slog.Debug("tx exec failed", "version", m.version, "err", err)
 		return fmt.Errorf("apply %s: %w", m.path, err)
 	}
-
-	// Record migration
 	slog.Debug("tx exec", "query", logging.SanitizeQuery(recordMigration), "args", []any{m.version, time.Now().UTC()})
 	if _, err := tx.Exec(recordMigration, m.version, time.Now().UTC()); err != nil {
 		slog.Debug("record migration failed", "version", m.version, "err", err)
 		return err
 	}
-
 	if err := tx.Commit(); err != nil {
 		slog.Debug("tx commit failed", "version", m.version, "err", err)
 		return err
