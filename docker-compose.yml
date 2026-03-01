@@ -1,0 +1,28 @@
+services:
+  cardman:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: cardman:latest
+    container_name: cardman
+    environment:
+      - DATABASE_DSN=/app/data/cardman.db
+      - DB_DRIVER=sqlite3
+      - LOG_LEVEL=INFO
+      # Uncomment for SSH server mode:
+      # - SSH_MODE=true
+      # - PORT=2222
+      # - SSH_HOST_KEY=/app/data/host_key
+      # - API_KEY=your_pokemontcg_api_key
+    volumes:
+      - cardman_data:/app/data
+    # Uncomment to expose SSH server port:
+    # ports:
+    #   - "2222:2222"
+    stdin_open: true
+    tty: true
+    restart: unless-stopped
+
+volumes:
+  cardman_data:
+    driver: local

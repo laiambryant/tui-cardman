@@ -1,158 +1,178 @@
 # tui-cardman
 
-A TUI to manage your trading card inventory
+[![Build](https://github.com/laiambryant/tui-cardman/actions/workflows/build.yml/badge.svg)](https://github.com/laiambryant/tui-cardman/actions/workflows/build.yml)
+[![Release](https://github.com/laiambryant/tui-cardman/actions/workflows/release.yml/badge.svg)](https://github.com/laiambryant/tui-cardman/releases/latest)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/laiambryant/tui-cardman)](go.mod)
+[![License](https://img.shields.io/github/license/laiambryant/tui-cardman)](LICENSE)
 
-## Build
+A terminal UI for managing your trading card collection. Track cards, build decks, maintain wishlists, and import card data — all from the command line.
 
-This project uses [go-sqlite3](https://github.com/mattn/go-sqlite3), which is a CGO package. Building requires:
+> **Status**: v0.1.0 alpha — core features are functional. Expect rough edges.
 
-1. A C compiler (GCC or similar)
-2. The `CGO_ENABLED=1` environment variable
+## Features
 
-### Using Make (Recommended)
+- **Collection management** — track cards you own with quantities
+- **Deck builder** — build and validate 60-card Pokemon TCG decks (enforces 4-copy and basic energy rules)
+- **Lists / wishlists** — maintain custom card lists with color labels
+- **Card import** — import all Pokemon TCG sets and cards from the TCGDex API
+- **Price tracking** — TCGPlayer and CardMarket price snapshots
+- **Export** — export collections to CSV, text, and PTCGO formats
+- **Multi-user SSH mode** — run as a shared SSH server for multiple users
+- **SQLite backend** — single-file database, no external dependencies
+
+## Installation
+
+### Download a binary (recommended)
+
+Grab the latest release from the [releases page](https://github.com/laiambryant/tui-cardman/releases). Linux (amd64/arm64) and macOS (amd64/arm64) binaries are provided.
 
 ```bash
-make build
+# Linux amd64 example
+curl -L https://github.com/laiambryant/tui-cardman/releases/latest/download/cardman_linux-amd64.tar.gz | tar xz
+sudo mv cardman /usr/local/bin/
 ```
 
-### Manual Build
+### Build from source
+
+Requires Go 1.24+ and GCC (for CGO/SQLite).
 
 ```bash
+git clone https://github.com/laiambryant/tui-cardman.git
+cd tui-cardman
 CGO_ENABLED=1 go build -o cardman ./cmd/main.go
+```
+
+### Docker
+
+```bash
+# Run interactively (TUI mode)
+docker compose run --rm cardman serve
+
+# Or with Docker directly
+docker build -t cardman .
+docker run -it -v cardman_data:/app/data cardman serve
+```
+
+## Quick Start
+
+```bash
+# 1. Configure
+cp .env.example .env
+# Edit .env — set DATABASE_DSN and optionally API_KEY
+
+# 2. Run migrations
+./cardman migrate
+
+# 3. Import Pokemon TCG data (initial setup — takes a few minutes)
+./cardman import-full
+
+# 4. Launch the TUI
+./cardman serve
 ```
 
 ## Configuration
 
-Create a `.env` file in the project root (or copy from `.env.example`):
+Copy `.env.example` to `.env` and edit as needed:
 
 ```bash
 cp .env.example .env
 ```
 
-Edit `.env` to configure:
+| Variable        | Description                                      | Default         |
+|-----------------|--------------------------------------------------|-----------------|
+| `DATABASE_DSN`  | Path to SQLite database file                     | `cardman.db`    |
+| `DB_DRIVER`     | Database driver (always `sqlite3`)               | `sqlite3`       |
+| `LOG_LEVEL`     | Logging verbosity (`DEBUG`, `INFO`, `WARN`, `ERROR`) | `INFO`      |
+| `SSH_MODE`      | Enable SSH server mode (`true`/`false`)          | `false`         |
+| `PORT`          | SSH server port                                  | `2222`          |
+| `SSH_HOST_KEY`  | Path to SSH host key file                        | —               |
+| `API_KEY`       | Pokemon TCG API key (optional, increases limits) | —               |
 
-- `LOG_LEVEL` - Logging verbosity (DEBUG, INFO, WARN, ERROR)
-- `DB_DSN` - Database connection string
-- `SSH_PORT` - SSH server port
-- `SSH_HOST_KEY` - SSH host key path
-- `API_KEY` - Pokemon TCG API key (optional, but recommended)
+## SSH Server Mode
 
-### TCGDex API Key
-
-Get your API key or use the public TCGDex endpoints at <https://tcgdex.dev/>:
-
-- **Without API key**: limited public access depending on TCGDex rate limits
-- **With API key**: pass the token via `API_KEY` in your `.env` and the application will send it as `X-Api-Key`.
-
-## Importing Pokemon TCG Data (via TCGDex)
-
-## Database Setup
-
-Run migrations to set up the database schema:
+Run cardman as a shared SSH server so multiple users can access their collections remotely:
 
 ```bash
-make migrate
-# or manually: ./cardman migrate
+# Generate a host key (first time only)
+ssh-keygen -t ed25519 -f host_key -N ""
+
+# Set in .env:
+# SSH_MODE=true
+# PORT=2222
+# SSH_HOST_KEY=./host_key
+
+./cardman serve-ssh
 ```
 
-## Importing Pokemon TCG Data
+Users connect with: `ssh -p 2222 username@your-server`
 
-The application provides commands for importing card data from the TCGDex API (Pokemon TCG data served by TCGDex):
+## Build
 
-### Full Import
-
-Import all Pokemon TCG sets and cards (initial setup) via TCGDex:
+This project requires CGO because it uses [go-sqlite3](https://github.com/mattn/go-sqlite3). A C compiler (GCC or Clang) must be available.
 
 ```bash
-make import-full
-# or manually: ./cardman import-full
+# Build
+CGO_ENABLED=1 go build -o cardman ./cmd/main.go
+
+# Using Make
+make build
+
+# Run tests
+go test ./...
 ```
 
-This will:
+## Importing Card Data
 
-- Fetch all sets from the Pokemon TCG API
-- Import all cards from each set with complete metadata
-- Store card images, prices, and other related data
-- Track import progress in the database
-
-**Note**: This can take considerable time and API quota. Recommended for initial setup only.
-
-### Incremental Import
-
-Import only new sets that don't exist in your database (via TCGDex):
+### Full import (initial setup)
 
 ```bash
-make import-updates
-# or manually: ./cardman import-updates
+./cardman import-full
+# or: make import-full
 ```
 
-This will:
+Fetches all sets and cards from the TCGDex Pokemon TCG API. This can take several minutes on first run.
 
-- Fetch all sets from the API
-- Compare with your local database
-- Import only net-new sets
-- Skip all existing sets (saves time and API quota)
+### Incremental import (keep up to date)
 
-**Recommended**: Run this daily or weekly via cron to catch new set releases.
+```bash
+./cardman import-updates
+# or: make import-updates
+```
 
-### Import Specific Sets
+Only imports sets not already in your database. Run weekly via cron to pick up new releases.
 
-Import one or more specific sets by their set IDs (useful to import only chosen sets). This uses the TCGDex `sets` endpoint under the hood:
+### Import specific sets
 
 ```bash
 ./cardman import-sets base1
 ./cardman import-sets base1 jungle fossil
 ```
 
-This command fetches the specified sets from TCGDex and imports all cards for each set. Use `list-sets` to discover set IDs.
-
-### Import Data Stored
-
-The import process stores:
-
-- **Sets**: All Pokemon TCG sets with metadata
-- **Cards**: Core card data (name, number, supertype, rarity, HP, etc.)
-- **Images**: Small and large image URLs
-- **Prices**: TCGPlayer and CardMarket price snapshots
-- **Import Runs**: History and status of all import operations
-
 ## Available Commands
 
-### Using Make
-
-```bash
-make help              # Show all available commands
-make build             # Build the application
-make test              # Run all tests
-make test-coverage     # Run tests with coverage
-make test-bench        # Run benchmarks
-make fmt               # Format code
-make vet               # Run go vet
-make lint              # Run golangci-lint
-make lint-install      # Install golangci-lint
-make tidy              # Tidy dependencies
-make check             # Run fmt, vet, and test
-make all               # Full build pipeline (tidy, check, build)
-make migrate           # Run database migrations
-make serve             # Start the TUI server
-make serve-ssh         # Start the SSH server
-make import-full       # Import all Pokemon TCG data
-make import-updates    # Import only new sets
-make list-sets         # List available sets from the API
-make clean             # Remove build artifacts
-make clean-all         # Remove build artifacts, database, and logs
-make install           # Install binary to GOPATH/bin
-make run               # Build and run (serve)
+```
+cardman migrate          Run database migrations
+cardman import-full      Import all Pokemon TCG data
+cardman import-updates   Import only new sets
+cardman import-sets      Import one or more specific sets by ID
+cardman list-sets        List available sets from the API
+cardman serve            Launch the TUI (local mode)
+cardman serve-ssh        Start SSH server (multi-user mode)
 ```
 
-### Manual Commands
-
-```bash
-./cardman migrate          # Run database migrations
-./cardman import-full      # Import all Pokemon TCG data
-./cardman import-updates   # Import only new sets
-./cardman import-sets      # Import one or more specific sets by ID
-./cardman list-sets        # List available sets from the API
-./cardman serve            # Start the TUI server
-./cardman serve-ssh        # Start the SSH server
 ```
+make help                Show all Make targets
+make build               Build the binary
+make test                Run all tests
+make test-coverage       Run tests with coverage report
+make fmt                 Format code
+make lint                Run golangci-lint
+make migrate             Run database migrations
+make import-full         Import all Pokemon TCG data
+make import-updates      Import only new sets
+make clean               Remove build artifacts
+```
+
+## License
+
+[MIT](LICENSE)

@@ -8,18 +8,65 @@ before:
 
 env:
   - GO111MODULE=on
-  - CGO_ENABLED=1
 
 builds:
-  - main: ./cmd/main.go
+  - id: linux-amd64
+    main: ./cmd/main.go
     binary: cardman
     env:
       - CGO_ENABLED=1
     goos:
       - linux
+    goarch:
+      - amd64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.CommitDate}}
+      - -X main.builtBy=goreleaser
+
+  - id: linux-arm64
+    main: ./cmd/main.go
+    binary: cardman
+    env:
+      - CGO_ENABLED=1
+      - CC=aarch64-linux-gnu-gcc
+    goos:
+      - linux
+    goarch:
+      - arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.CommitDate}}
+      - -X main.builtBy=goreleaser
+
+  - id: darwin-amd64
+    main: ./cmd/main.go
+    binary: cardman
+    env:
+      - CGO_ENABLED=1
+    goos:
       - darwin
     goarch:
       - amd64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.CommitDate}}
+      - -X main.builtBy=goreleaser
+
+  - id: darwin-arm64
+    main: ./cmd/main.go
+    binary: cardman
+    env:
+      - CGO_ENABLED=1
+    goos:
+      - darwin
+    goarch:
       - arm64
     ldflags:
       - -s -w
@@ -31,9 +78,6 @@ builds:
 archives:
   - format: tar.gz
     name_template: "cardman_{{ .Version }}_{{ .Os }}-{{ .Arch }}"
-    format_overrides:
-      - goos: windows
-        format: zip
     files:
       - LICENSE
       - README.md
