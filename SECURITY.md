@@ -16,6 +16,7 @@ Please **do not** open a public GitHub issue for security vulnerabilities.
 Instead, report them privately via [GitHub Security Advisories](https://github.com/laiambryant/tui-cardman/security/advisories/new).
 
 Include:
+
 - A description of the vulnerability
 - Steps to reproduce
 - Potential impact

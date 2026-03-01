@@ -48,7 +48,7 @@ Tests use an in-memory SQLite database and apply all migrations automatically. N
 
 ## Project Structure
 
-```
+``` txt
 cmd/            CLI entry points (Cobra commands)
 internal/
   auth/         Authentication and session management
@@ -78,6 +78,7 @@ Migrations live in `internal/db/migrations/` as numbered `*.up.sql` / `*.down.sq
 ## Reporting Bugs
 
 Open a GitHub issue with:
+
 - Go version (`go version`)
 - OS and architecture
 - Steps to reproduce

@@ -718,9 +718,9 @@ func (m CardGameTabsModel) filterCards(query string) []model.Card {
 // distributed proportionally (Name 37%, Expansion 22%, Rarity 18%, Card# 12%, Qty 11%).
 // Each column has a sensible minimum width so narrow terminals remain usable.
 func scaledCardSearchColumns(availableWidth int) []table.Column {
-	if availableWidth < 30 {
-		availableWidth = 30
-	}
+	// Each cell has Padding(0, 1), so each column consumes Width+2 chars.
+	// Subtract the total cell padding (5 columns × 2) before distributing.
+	availableWidth = max(availableWidth-10, 20)
 	// proportions: 37, 22, 18, 12, 11  (sum = 100)
 	name := max(availableWidth*37/100, 8)
 	exp := max(availableWidth*22/100, 5)
@@ -739,9 +739,9 @@ func scaledCardSearchColumns(availableWidth int) []table.Column {
 // scaledDeckColumns returns 5 table columns for the deck builder card panel,
 // proportionally distributed (Name 38%, Set 23%, Rarity 19%, # 11%, Qty 9%).
 func scaledDeckColumns(availableWidth int) []table.Column {
-	if availableWidth < 25 {
-		availableWidth = 25
-	}
+	// Each cell has Padding(0, 1), so each column consumes Width+2 chars.
+	// Subtract the total cell padding (5 columns × 2) before distributing.
+	availableWidth = max(availableWidth-10, 15)
 	// proportions: 38, 23, 19, 11, 9 (sum = 100)
 	name := max(availableWidth*38/100, 8)
 	set := max(availableWidth*23/100, 4)
@@ -760,9 +760,9 @@ func scaledDeckColumns(availableWidth int) []table.Column {
 // scaledCollectionColumns returns 4 table columns whose widths sum to availableWidth,
 // distributed proportionally (Name 42%, Expansion 25%, Rarity 20%, Amount 13%).
 func scaledCollectionColumns(availableWidth int) []table.Column {
-	if availableWidth < 24 {
-		availableWidth = 24
-	}
+	// Each cell has Padding(0, 1), so each column consumes Width+2 chars.
+	// Subtract the total cell padding (4 columns × 2) before distributing.
+	availableWidth = max(availableWidth-8, 16)
 	// proportions: 42, 25, 20, 13 (sum = 100)
 	name := max(availableWidth*42/100, 8)
 	exp := max(availableWidth*25/100, 5)
