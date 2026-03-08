@@ -104,12 +104,17 @@ func (m ModalModel) View() string {
 		return modalBox
 	}
 	overlay := m.renderOverlay()
+	placeOpts := []lipgloss.WhitespaceOption{}
+	if bg := m.styleManager.scheme.Background; bg != "" {
+		placeOpts = append(placeOpts, lipgloss.WithWhitespaceBackground(bg))
+	}
 	centered := lipgloss.Place(
 		m.width,
 		m.height,
 		lipgloss.Center,
 		lipgloss.Center,
 		modalBox,
+		placeOpts...,
 	)
 	return m.overlayContent(overlay, centered)
 }
@@ -175,14 +180,10 @@ func (m ModalModel) overlayContent(background, foreground string) string {
 	cellbuf.SetContent(bgBuf, background)
 	fgBuf := cellbuf.NewBuffer(width, height)
 	cellbuf.SetContent(fgBuf, foreground)
-	blank := cellbuf.BlankCell
 	for y := 0; y < height; y++ {
 		for x := 0; x < width; x++ {
 			cell := fgBuf.Cell(x, y)
 			if cell == nil || cell.Width == 0 {
-				continue
-			}
-			if cell.Equal(&blank) {
 				continue
 			}
 			bgBuf.SetCell(x, y, cell)
