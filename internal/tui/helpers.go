@@ -196,9 +196,8 @@ func RenderConditionalLabel(isFocused bool, label string) string {
 	return blurredStyle.Render(label)
 }
 
-// filterCardsByQuery filters a card slice by name, number, or rarity (case-insensitive).
-// Returns the original slice unchanged when query is empty.
-func filterCardsByQuery(cards []model.Card, query string) []model.Card {
+// filterCardsByQuerySubstring filters a card slice by substring match (kept for benchmarks).
+func filterCardsByQuerySubstring(cards []model.Card, query string) []model.Card {
 	if query == "" {
 		return cards
 	}
@@ -212,6 +211,16 @@ func filterCardsByQuery(cards []model.Card, query string) []model.Card {
 		}
 	}
 	return filtered
+}
+
+// filterCardsByQuery filters a card slice using fuzzy matching on name, number, and rarity.
+// Returns the original slice unchanged when query is empty.
+func filterCardsByQuery(cards []model.Card, query string) []model.Card {
+	if query == "" {
+		return cards
+	}
+	results := fuzzySearchCards(cards, query)
+	return fuzzyResultsToCards(results)
 }
 
 func renderSplitCardPanel(sm *StyleManager, topContent string, topFocused bool, bottomContent string, bottomFocused bool, width, topHeight, bottomHeight int) string {

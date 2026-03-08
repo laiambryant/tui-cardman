@@ -31,6 +31,14 @@ const (
 	ActionImportUpdates
 )
 
+type importFocus int
+
+const (
+	importFocusSets    importFocus = iota
+	importFocusActions importFocus = iota
+	importFocusQueue   importFocus = iota
+)
+
 type ActionItem struct {
 	label       string
 	description string
@@ -46,7 +54,8 @@ type ImportModel struct {
 	searchInput       textinput.Model
 	cursor            int
 	actionCursor      int
-	focusOnActions    bool
+	queueCursor       int
+	focus             importFocus
 	configManager     *runtimecfg.Manager
 	styleManager      *StyleManager
 	db                *sql.DB
@@ -98,7 +107,8 @@ func NewImportModel(db *sql.DB, cfg *runtimecfg.Manager, styleManager *StyleMana
 		searchInput:      searchInput,
 		cursor:           0,
 		actionCursor:     0,
-		focusOnActions:   false,
+		queueCursor:      0,
+		focus:            importFocusSets,
 		configManager:    cfg,
 		styleManager:     styleManager,
 		db:               db,
@@ -278,14 +288,27 @@ func (m ImportModel) handleKeyMsg(msg tea.KeyMsg) (ImportModel, tea.Cmd) {
 		return m, tea.Quit
 	}
 	if s == "tab" {
-		m.focusOnActions = !m.focusOnActions
-		if m.focusOnActions {
+		switch m.focus {
+		case importFocusSets:
+			m.focus = importFocusActions
 			m.actionCursor = 0
+		case importFocusActions:
+			if len(m.importQueue) > 0 {
+				m.focus = importFocusQueue
+				m.queueCursor = 0
+			} else {
+				m.focus = importFocusSets
+			}
+		case importFocusQueue:
+			m.focus = importFocusSets
 		}
 		return m, nil
 	}
-	if m.focusOnActions {
+	switch m.focus {
+	case importFocusActions:
 		return m.handleActionNavigation(msg)
+	case importFocusQueue:
+		return m.handleQueueNavigation(msg)
 	}
 	return m.handleSetListNavigation(msg)
 }
@@ -379,6 +402,43 @@ func (m ImportModel) handleActionNavigation(msg tea.KeyMsg) (ImportModel, tea.Cm
 		if m.actionCursor < len(actions) {
 			return m.executeAction(actions[m.actionCursor])
 		}
+	}
+	return m, nil
+}
+
+func (m ImportModel) handleQueueNavigation(msg tea.KeyMsg) (ImportModel, tea.Cmd) {
+	s := msg.String()
+	action := GetAction(m.configManager, s)
+	if action == "nav_up" || s == "up" || s == "k" {
+		if m.queueCursor > 0 {
+			m.queueCursor--
+		}
+		return m, nil
+	}
+	if action == "nav_down" || s == "down" || s == "j" {
+		if m.queueCursor < len(m.importQueue)-1 {
+			m.queueCursor++
+		}
+		return m, nil
+	}
+	if s == "r" {
+		if m.queueCursor < len(m.importQueue) {
+			item := m.importQueue[m.queueCursor]
+			m.removeFromQueue(item.setID)
+			if m.queueCursor >= len(m.importQueue) && m.queueCursor > 0 {
+				m.queueCursor--
+			}
+			m.statusMsg = fmt.Sprintf("Removed %s from queue (%d pending)", item.setName, m.queuePendingCount())
+		}
+		return m, nil
+	}
+	if s == "s" && !m.queueProcessing {
+		return m.startQueueProcessing()
+	}
+	if s == "c" && !m.queueProcessing {
+		m.clearCompletedFromQueue()
+		m.statusMsg = "Cleared completed items from queue"
+		return m, nil
 	}
 	return m, nil
 }

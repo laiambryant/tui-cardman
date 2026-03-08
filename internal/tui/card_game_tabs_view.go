@@ -68,6 +68,10 @@ type CardGameTabsModel struct {
 	cardDetail          *CardDetailModel
 	valueHistory        []usercollection.ValueSnapshot
 	exportState         ExportState
+	searchCache         *SearchCache
+	collectionCache     *SearchCache
+	cardPagination      Pagination
+	collectionPagination Pagination
 }
 
 // NewCardGameTabsModel creates a new card game tabs model
@@ -103,17 +107,21 @@ func NewCardGameTabsModel(selectedGame *model.CardGame, cfg *runtimecfg.Manager,
 	userSearchTable := NewStyledTable(userSearchColumns, 10, false, styleManager)
 
 	return CardGameTabsModel{
-		selectedGame:        selectedGame,
-		currentTab:          TabCollection,
-		searchInput:         searchInput,
-		cursor:              0,
-		cardTable:           cardTable,
-		configManager:       cfg,
-		styleManager:        styleManager,
-		tempQuantityChanges: make(map[int64]int),
-		dbQuantities:        make(map[int64]int),
-		userSearchTable:     userSearchTable,
-		userSearchInput:     userSearchInput,
+		selectedGame:         selectedGame,
+		currentTab:           TabCollection,
+		searchInput:          searchInput,
+		cursor:               0,
+		cardTable:            cardTable,
+		configManager:        cfg,
+		styleManager:         styleManager,
+		tempQuantityChanges:  make(map[int64]int),
+		dbQuantities:         make(map[int64]int),
+		userSearchTable:      userSearchTable,
+		userSearchInput:      userSearchInput,
+		searchCache:          NewSearchCache(),
+		collectionCache:      NewSearchCache(),
+		cardPagination:       NewPagination(50),
+		collectionPagination: NewPagination(50),
 	}
 }
 
@@ -217,17 +225,15 @@ func (m CardGameTabsModel) getSelectedCard() (model.Card, bool) {
 	if selectedRow < 0 {
 		return model.Card{}, false
 	}
-	showAll := m.searchInput.Value() == ""
-	if showAll {
-		if selectedRow >= len(m.cards) {
-			return model.Card{}, false
-		}
-		return m.cards[selectedRow], true
+	source := m.filteredCards
+	if m.searchInput.Value() == "" {
+		source = m.cards
 	}
-	if selectedRow >= len(m.filteredCards) {
+	actualIndex := m.cardPagination.CurrentPage*m.cardPagination.PageSize + selectedRow
+	if actualIndex >= len(source) {
 		return model.Card{}, false
 	}
-	return m.filteredCards[selectedRow], true
+	return source[actualIndex], true
 }
 
 func buildCollectionRows(collections []model.UserCollection) []table.Row {
@@ -404,6 +410,32 @@ func (m CardGameTabsModel) Update(msg tea.Msg) (CardGameTabsModel, tea.Cmd) {
 			m.exportState = NewExportState("collection", m.selectedGame.Name, false, "", m.buildCollectionExportRows)
 			return m, nil
 		}
+		if s == "ctrl+n" && m.currentTab == TabCardSearch {
+			if m.searchTabFocus == 0 {
+				m.cardPagination.NextPage()
+				m.updateCardTable()
+				m.cardTable.SetCursor(0)
+			} else {
+				m.collectionPagination.NextPage()
+				m.filteredCollection = m.filterUserCollection(m.userSearchInput.Value())
+				m.userSearchTable.SetRows(buildCollectionRows(m.paginateCollections(m.filteredCollection)))
+				m.userSearchTable.SetCursor(0)
+			}
+			return m, nil
+		}
+		if s == "ctrl+p" && m.currentTab == TabCardSearch {
+			if m.searchTabFocus == 0 {
+				m.cardPagination.PrevPage()
+				m.updateCardTable()
+				m.cardTable.SetCursor(0)
+			} else {
+				m.collectionPagination.PrevPage()
+				m.filteredCollection = m.filterUserCollection(m.userSearchInput.Value())
+				m.userSearchTable.SetRows(buildCollectionRows(m.paginateCollections(m.filteredCollection)))
+				m.userSearchTable.SetCursor(0)
+			}
+			return m, nil
+		}
 		if m.currentTab == TabCardSearch && m.searchTabFocus == 0 {
 			if action == "increment_quantity" {
 				return m.handleIncrementQuantity()
@@ -433,6 +465,7 @@ func (m CardGameTabsModel) Update(msg tea.Msg) (CardGameTabsModel, tea.Cmd) {
 					var cmd tea.Cmd
 					m.searchInput, cmd = m.searchInput.Update(msg)
 					m.filteredCards = m.filterCards(m.searchInput.Value())
+					m.cardPagination.Reset()
 					m.updateCardTable()
 					m.cursor = 0
 					m.cardTable.SetCursor(0)
@@ -441,7 +474,9 @@ func (m CardGameTabsModel) Update(msg tea.Msg) (CardGameTabsModel, tea.Cmd) {
 				var cmd tea.Cmd
 				m.userSearchInput, cmd = m.userSearchInput.Update(msg)
 				m.filteredCollection = m.filterUserCollection(m.userSearchInput.Value())
-				m.userSearchTable.SetRows(buildCollectionRows(m.filteredCollection))
+				m.collectionPagination.Reset()
+				m.collectionPagination.TotalItems = len(m.filteredCollection)
+				m.userSearchTable.SetRows(buildCollectionRows(m.paginateCollections(m.filteredCollection)))
 				m.userSearchTable.SetCursor(0)
 				return m, cmd
 			}
@@ -539,7 +574,7 @@ func (m CardGameTabsModel) buildHelpText() string {
 			KeyItem{"increment_quantity", "+", "Add"},
 			KeyItem{"decrement_quantity", "Delete", "Remove"},
 			KeyItem{"save", "Ctrl+S", "Save"},
-		) + " • x: Export • " + hb.Pair("nav_up", "↑", "nav_down", "↓", "Navigate") + " • " + hb.Build(KeyItem{"back", "Q", "Back"})
+		) + " • x: Export • Ctrl+N/P: Page • " + hb.Pair("nav_up", "↑", "nav_down", "↓", "Navigate") + " • " + hb.Build(KeyItem{"back", "Q", "Back"})
 	}
 	if m.currentTab == TabCollection {
 		return "Tab: Switch panel • " + hb.Pair("nav_up", "↑", "nav_down", "↓", "Navigate") + " • " + hb.Pair("nav_prev_tab", "Shift+Tab", "nav_next_tab", "Tab", "Switch tabs") + " • " + hb.Build(KeyItem{"back", "Q", "Back"})
@@ -688,7 +723,7 @@ func (m CardGameTabsModel) renderCardSearchTab(availableHeight int) string {
 func (m CardGameTabsModel) renderSearchLeftPanel(tableHeight, tableWidth int) string {
 	var b strings.Builder
 	b.WriteString(m.styleManager.GetTitleStyle().Render("Search All Cards") + "\n")
-	b.WriteString(m.styleManager.GetBlurredStyle().Render("Search: ") + m.styleManager.GetNoStyle().Render(m.searchInput.View()) + "\n")
+	b.WriteString(m.styleManager.GetBlurredStyle().Render("Search: ") + m.styleManager.GetNoStyle().Render(m.searchInput.View()) + " " + m.styleManager.GetBlurredStyle().Render(m.cardPagination.StatusText()) + "\n")
 	if len(m.cardTable.Rows()) == 0 {
 		if m.searchInput.Value() == "" {
 			b.WriteString(m.styleManager.GetBlurredStyle().Render("No cards available.") + "\n")
@@ -706,21 +741,28 @@ func (m CardGameTabsModel) renderSearchLeftPanel(tableHeight, tableWidth int) st
 func (m CardGameTabsModel) renderSearchRightPanel(tableHeight, tableWidth int) string {
 	var b strings.Builder
 	b.WriteString(m.styleManager.GetTitleStyle().Render("My Collection") + "\n")
-	b.WriteString(m.styleManager.GetBlurredStyle().Render("Search: ") + m.styleManager.GetNoStyle().Render(m.userSearchInput.View()) + "\n")
+	b.WriteString(m.styleManager.GetBlurredStyle().Render("Search: ") + m.styleManager.GetNoStyle().Render(m.userSearchInput.View()) + " " + m.styleManager.GetBlurredStyle().Render(m.collectionPagination.StatusText()) + "\n")
 	if len(m.filteredCollection) == 0 {
 		b.WriteString(m.renderEmptySearchMessage(m.userSearchInput.Value(), "No cards in your collection yet.", "No cards match your search."))
 		return b.String()
 	}
 	m.userSearchTable.SetColumns(scaledCollectionColumns(tableWidth))
-	m.userSearchTable.SetRows(buildCollectionRows(m.filteredCollection))
+	m.userSearchTable.SetRows(buildCollectionRows(m.paginateCollections(m.filteredCollection)))
 	m.userSearchTable.SetHeight(tableHeight)
 	b.WriteString(m.userSearchTable.View())
 	return b.String()
 }
 
-// filterCards filters cards based on search query using fuzzy matching
+// filterCards filters cards based on search query using fuzzy matching with caching
 func (m CardGameTabsModel) filterCards(query string) []model.Card {
-	return filterCardsByQuery(m.cards, query)
+	return filterCardsByQueryCached(m.cards, query, m.searchCache)
+}
+
+// paginateCollections applies the collectionPagination to a collection slice.
+func (m *CardGameTabsModel) paginateCollections(collections []model.UserCollection) []model.UserCollection {
+	m.collectionPagination.TotalItems = len(collections)
+	start, end := m.collectionPagination.Slice()
+	return collections[start:end]
 }
 
 // scaledCardSearchColumns returns 5 table columns whose widths sum to availableWidth,
@@ -785,36 +827,25 @@ func scaledCollectionColumns(availableWidth int) []table.Column {
 	}
 }
 
-// filterUserCollection filters user collection based on search query
+// filterUserCollection filters user collection based on search query using fuzzy matching
 func (m CardGameTabsModel) filterUserCollection(query string) []model.UserCollection {
 	if query == "" {
 		return m.userCollections
 	}
-	var filtered []model.UserCollection
-	query = strings.ToLower(query)
-	for _, collection := range m.userCollections {
-		if collection.Card != nil {
-			if strings.Contains(strings.ToLower(collection.Card.Name), query) ||
-				strings.Contains(strings.ToLower(collection.Card.Number), query) ||
-				strings.Contains(strings.ToLower(collection.Card.Rarity), query) ||
-				strings.Contains(strings.ToLower(collection.Condition), query) ||
-				strings.Contains(strings.ToLower(collection.Notes), query) {
-				filtered = append(filtered, collection)
-			}
-		}
-	}
-	return filtered
+	return fuzzySearchCollections(m.userCollections, query)
 }
 
-// updateCardTable updates the table with current cards.
-// When the search input is empty, all cards are shown; otherwise filtered cards are used.
+// updateCardTable updates the table with current cards, applying pagination.
 func (m *CardGameTabsModel) updateCardTable() {
 	source := m.filteredCards
 	if m.searchInput.Value() == "" {
 		source = m.cards
 	}
+	m.cardPagination.TotalItems = len(source)
+	start, end := m.cardPagination.Slice()
+	page := source[start:end]
 	var rows []table.Row
-	for _, card := range source {
+	for _, card := range page {
 		dbQty := m.dbQuantities[card.ID]
 		tempDelta := m.tempQuantityChanges[card.ID]
 		rows = append(rows, cardToRow(card, dbQty, tempDelta))
@@ -949,6 +980,8 @@ func (m CardGameTabsModel) performSaveCollection() (CardGameTabsModel, tea.Cmd) 
 	}
 	maps.Copy(m.dbQuantities, updates)
 	m.tempQuantityChanges = make(map[int64]int)
+	m.searchCache.Invalidate()
+	m.collectionCache.Invalidate()
 	m.updateCardTable()
 
 	if m.selectedGame != nil {

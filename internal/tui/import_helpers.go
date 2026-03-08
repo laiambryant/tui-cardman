@@ -118,17 +118,16 @@ func (m ImportModel) renderImportBody() string {
 		return b.String()
 	}
 	b.WriteString(m.renderSearchInput() + "\n\n")
-
-	// Calculate available width for the two panels
 	contentWidth := m.width - frameBorderSize - framePaddingX*2
 	if contentWidth < 0 {
 		contentWidth = 0
 	}
 	listWidth, actionsWidth := splitImportPanelWidths(contentWidth)
-
 	leftPanel := m.renderSetsListPanel(listWidth)
-	rightPanel := m.renderActionsPanelContent(actionsWidth)
-
+	rightPanel := lipgloss.JoinVertical(lipgloss.Left,
+		m.renderActionsPanel(actionsWidth),
+		m.renderQueuePanel(actionsWidth),
+	)
 	mainContent := lipgloss.JoinHorizontal(
 		lipgloss.Top,
 		leftPanel,
@@ -204,29 +203,43 @@ func (m ImportModel) renderSetListItem(index int) string {
 	if m.isInQueue(set.ID) {
 		line += " [Q]"
 	}
-	return RenderListItem(line, m.cursor == index && !m.focusOnActions)
+	return RenderListItem(line, m.cursor == index && m.focus == importFocusSets)
 }
 
-func (m ImportModel) renderActionsPanelContent(width int) string {
+func (m ImportModel) renderActionsPanel(width int) string {
 	var b strings.Builder
-	b.WriteString(titleStyle.Render("Actions") + "\n")
+	if m.focus == importFocusActions {
+		b.WriteString(titleStyle.Render("Actions") + "\n")
+	} else {
+		b.WriteString(blurredStyle.Render("Actions") + "\n")
+	}
 	if len(m.filteredSets) > 0 && m.cursor < len(m.filteredSets) {
 		b.WriteString(m.renderSelectedSetInfo())
 	}
 	b.WriteString(m.renderActionsList())
-	if len(m.importQueue) > 0 {
-		b.WriteString("\n" + titleStyle.Render("Queue") + "\n")
+	return m.styleManager.Box(m.styleManager.scheme.Blurred, 0, 0, width, 2, 1).Render(b.String())
+}
+
+func (m ImportModel) renderQueuePanel(width int) string {
+	var b strings.Builder
+	if m.focus == importFocusQueue {
+		b.WriteString(titleStyle.Render("Queue") + "\n")
+	} else {
+		b.WriteString(blurredStyle.Render("Queue") + "\n")
+	}
+	if len(m.importQueue) == 0 {
+		b.WriteString(blurredStyle.Render("No items queued") + "\n")
+	} else {
 		b.WriteString(m.renderQueueList())
 	}
-	panel := m.styleManager.Box(m.styleManager.scheme.Blurred, 0, 0, width, 2, 1).Render(b.String())
-	return panel
+	return m.styleManager.Box(m.styleManager.scheme.Blurred, 0, 0, width, 2, 1).Render(b.String())
 }
 
 func (m ImportModel) renderQueueList() string {
 	var b strings.Builder
 	maxItems := 8
 	shown := 0
-	for _, item := range m.importQueue {
+	for i, item := range m.importQueue {
 		if shown >= maxItems {
 			remaining := len(m.importQueue) - shown
 			b.WriteString(blurredStyle.Render(fmt.Sprintf("  ... and %d more", remaining)) + "\n")
@@ -237,8 +250,9 @@ func (m ImportModel) renderQueueList() string {
 		if item.status == queueStatusError && item.err != nil {
 			line += " " + errorStyle.Render("(failed)")
 		}
-		if item.status == queueStatusImporting {
-			b.WriteString(focusedStyle.Render(line) + "\n")
+		isCursor := i == m.queueCursor && m.focus == importFocusQueue
+		if item.status == queueStatusImporting || isCursor {
+			b.WriteString(titleStyle.Render(line) + "\n")
 		} else {
 			b.WriteString(blurredStyle.Render(line) + "\n")
 		}
@@ -278,8 +292,9 @@ func (m ImportModel) renderActionItem(index int, action ActionItem) string {
 }
 
 func (m ImportModel) renderEnabledAction(index int, label string) string {
-	prefix := getCursorPrefix(index == m.actionCursor && m.focusOnActions)
-	if index == m.actionCursor && m.focusOnActions {
+	isActive := index == m.actionCursor && m.focus == importFocusActions
+	prefix := getCursorPrefix(isActive)
+	if isActive {
 		return titleStyle.Render(fmt.Sprintf("%s%s", prefix, label)) + "\n"
 	}
 	return blurredStyle.Render(fmt.Sprintf("%s%s", prefix, label)) + "\n"
@@ -328,7 +343,7 @@ func (m ImportModel) renderHelp() string {
 		KeyItem{"select", "Enter", "Execute"},
 		KeyItem{"back", "Q", "Back"},
 	)
-	help += "\n" + helpStyle.Render("a: Queue • r: Unqueue • s: Start Queue • c: Clear Done")
+	help += "\n" + helpStyle.Render("Sets: a: Queue • r: Unqueue • Queue: r: Remove • s: Start • c: Clear Done")
 	return helpStyle.Render(help)
 }
 

@@ -73,6 +73,8 @@ type DeckBuilderModel struct {
 	formFocus           int
 	exportState         ExportState
 	importState         ImportState
+	searchCache         *SearchCache
+	cardPagination      Pagination
 }
 
 type (
@@ -121,6 +123,8 @@ func NewDeckBuilderModel(game *model.CardGame, user *auth.User, deckService deck
 		deckContentsTable:   deckContentsTable,
 		tempQuantityChanges: make(map[int64]int),
 		dbQuantities:        make(map[int64]int),
+		searchCache:         NewSearchCache(),
+		cardPagination:      NewPagination(50),
 	}
 }
 
@@ -315,6 +319,18 @@ func (m DeckBuilderModel) handleCardPanelKeys(msg tea.KeyMsg) (DeckBuilderModel,
 		}
 		return m, nil
 	}
+	if s == "ctrl+n" {
+		m.cardPagination.NextPage()
+		m.updateCardTable()
+		m.cardTable.SetCursor(0)
+		return m, nil
+	}
+	if s == "ctrl+p" {
+		m.cardPagination.PrevPage()
+		m.updateCardTable()
+		m.cardTable.SetCursor(0)
+		return m, nil
+	}
 	if action == "increment_quantity" {
 		return m.handleIncrement()
 	}
@@ -337,7 +353,9 @@ func (m DeckBuilderModel) handleCardPanelKeys(msg tea.KeyMsg) (DeckBuilderModel,
 		var cmd tea.Cmd
 		m.searchInput, cmd = m.searchInput.Update(msg)
 		m.filterCards()
+		m.cardPagination.Reset()
 		m.updateCardTable()
+		m.cardTable.SetCursor(0)
 		return m, cmd
 	}
 	return m, nil
@@ -410,12 +428,15 @@ func (m *DeckBuilderModel) selectCurrentDeck() {
 }
 
 func (m *DeckBuilderModel) filterCards() {
-	m.filteredCards = filterCardsByQuery(m.cards, m.searchInput.Value())
+	m.filteredCards = filterCardsByQueryCached(m.cards, m.searchInput.Value(), m.searchCache)
 }
 
 func (m *DeckBuilderModel) updateCardTable() {
+	m.cardPagination.TotalItems = len(m.filteredCards)
+	start, end := m.cardPagination.Slice()
+	page := m.filteredCards[start:end]
 	var rows []table.Row
-	for _, card := range m.filteredCards {
+	for _, card := range page {
 		rows = append(rows, cardToRow(card, m.dbQuantities[card.ID], m.tempQuantityChanges[card.ID]))
 	}
 	m.cardTable.SetRows(rows)
@@ -447,10 +468,14 @@ func (m *DeckBuilderModel) updateValidation() {
 
 func (m DeckBuilderModel) getSelectedCard() (model.Card, bool) {
 	idx := m.cardTable.Cursor()
-	if idx < 0 || idx >= len(m.filteredCards) {
+	if idx < 0 {
 		return model.Card{}, false
 	}
-	return m.filteredCards[idx], true
+	actualIndex := m.cardPagination.CurrentPage*m.cardPagination.PageSize + idx
+	if actualIndex >= len(m.filteredCards) {
+		return model.Card{}, false
+	}
+	return m.filteredCards[actualIndex], true
 }
 
 func (m DeckBuilderModel) handleIncrement() (DeckBuilderModel, tea.Cmd) {
@@ -517,6 +542,7 @@ func (m DeckBuilderModel) performSave() (DeckBuilderModel, tea.Cmd) {
 		m.dbQuantities[id] = qty
 	}
 	m.tempQuantityChanges = make(map[int64]int)
+	m.searchCache.Invalidate()
 	m.updateValidation()
 	m.updateCardTable()
 	return m, nil
@@ -664,7 +690,7 @@ func (m DeckBuilderModel) renderCardPanel(width, height int) string {
 	} else {
 		top.WriteString(m.styleManager.GetBlurredStyle().Render("Add Cards: "+m.selectedDeck.Name) + "\n")
 	}
-	top.WriteString(m.styleManager.GetBlurredStyle().Render("Search: ") + m.searchInput.View() + "\n")
+	top.WriteString(m.styleManager.GetBlurredStyle().Render("Search: ") + m.searchInput.View() + " " + m.styleManager.GetBlurredStyle().Render(m.cardPagination.StatusText()) + "\n")
 	if len(m.cardTable.Rows()) == 0 {
 		top.WriteString(m.styleManager.GetBlurredStyle().Render("No cards match your search.") + "\n")
 	} else {
@@ -707,7 +733,7 @@ func (m DeckBuilderModel) renderFooter() string {
 			KeyItem{"increment_quantity", "+", "Add"},
 			KeyItem{"decrement_quantity", "Delete", "Remove"},
 			KeyItem{"save", "Ctrl+S", "Save"},
-		) + " • x: Export • i: Import • " + hb.Build(KeyItem{"back", "Q", "Back"}))
+		) + " • x: Export • i: Import • Ctrl+N/P: Page • " + hb.Build(KeyItem{"back", "Q", "Back"}))
 	} else {
 		footer = m.styleManager.GetHelpStyle().Render("Tab: Switch panel • n: New • e: Edit • d: Delete • " + hb.Build(KeyItem{"back", "Q", "Back"}))
 	}

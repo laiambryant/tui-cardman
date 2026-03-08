@@ -93,6 +93,8 @@ type ListsModel struct {
 	editingListID       int64
 	exportState         ExportState
 	importState         ImportState
+	searchCache         *SearchCache
+	cardPagination      Pagination
 }
 
 func NewListsModel(game *model.CardGame, user *auth.User, listSvc listservice.ListService, cardSvc cardservice.CardService, cards []model.Card, cfg *runtimecfg.Manager, sm *StyleManager) ListsModel {
@@ -142,6 +144,8 @@ func NewListsModel(game *model.CardGame, user *auth.User, listSvc listservice.Li
 		listContentsTable:   listContentsTable,
 		tempQuantityChanges: make(map[int64]int),
 		dbQuantities:        make(map[int64]int),
+		searchCache:         NewSearchCache(),
+		cardPagination:      NewPagination(50),
 	}
 }
 
@@ -219,6 +223,7 @@ func (m ListsModel) Update(msg tea.Msg) (ListsModel, tea.Cmd) {
 				var cmd tea.Cmd
 				m.searchInput, cmd = m.searchInput.Update(msg)
 				m.filteredCards = m.filterListCards(m.searchInput.Value())
+				m.cardPagination.Reset()
 				m.updateListCardTable()
 				m.cardTable.SetCursor(0)
 				return m, cmd
@@ -353,6 +358,18 @@ func (m ListsModel) handleCardPanelKeys(msg tea.KeyMsg, s, action string) (Lists
 		}
 		return m, nil
 	}
+	if s == "ctrl+n" {
+		m.cardPagination.NextPage()
+		m.updateListCardTable()
+		m.cardTable.SetCursor(0)
+		return m, nil
+	}
+	if s == "ctrl+p" {
+		m.cardPagination.PrevPage()
+		m.updateListCardTable()
+		m.cardTable.SetCursor(0)
+		return m, nil
+	}
 	if action == "increment_quantity" {
 		return m.handleIncrementQuantity()
 	}
@@ -374,6 +391,7 @@ func (m ListsModel) handleCardPanelKeys(msg tea.KeyMsg, s, action string) (Lists
 		var cmd tea.Cmd
 		m.searchInput, cmd = m.searchInput.Update(msg)
 		m.filteredCards = m.filterListCards(m.searchInput.Value())
+		m.cardPagination.Reset()
 		m.updateListCardTable()
 		m.cardTable.SetCursor(0)
 		return m, cmd
@@ -582,17 +600,17 @@ func (m ListsModel) renderCardPanel(width, height int) string {
 	} else {
 		top.WriteString(colorDot + " " + m.styleManager.GetBlurredStyle().Render(m.selectedList.Name) + "\n")
 	}
-	top.WriteString(m.styleManager.GetBlurredStyle().Render("Search: ") + m.styleManager.GetNoStyle().Render(m.searchInput.View()) + "\n")
-	showAll := m.searchInput.Value() == ""
+	top.WriteString(m.styleManager.GetBlurredStyle().Render("Search: ") + m.styleManager.GetNoStyle().Render(m.searchInput.View()) + " " + m.styleManager.GetBlurredStyle().Render(m.cardPagination.StatusText()) + "\n")
+	source := m.filteredCards
+	if m.searchInput.Value() == "" {
+		source = m.cards
+	}
+	m.cardPagination.TotalItems = len(source)
+	start, end := m.cardPagination.Slice()
+	page := source[start:end]
 	var rows []table.Row
-	if showAll {
-		for _, card := range m.cards {
-			rows = append(rows, cardToRow(card, m.dbQuantities[card.ID], m.tempQuantityChanges[card.ID]))
-		}
-	} else {
-		for _, card := range m.filteredCards {
-			rows = append(rows, cardToRow(card, m.dbQuantities[card.ID], m.tempQuantityChanges[card.ID]))
-		}
+	for _, card := range page {
+		rows = append(rows, cardToRow(card, m.dbQuantities[card.ID], m.tempQuantityChanges[card.ID]))
 	}
 	if len(rows) == 0 {
 		top.WriteString(m.styleManager.GetBlurredStyle().Render("No cards match your search.") + "\n")
@@ -638,7 +656,7 @@ func (m ListsModel) renderFooter() string {
 				KeyItem{"increment_quantity", "+", "Add"},
 				KeyItem{"decrement_quantity", "Delete", "Remove"},
 				KeyItem{"save", "Ctrl+S", "Save"},
-			) + " • x: Export • i: Import • " + hb.Pair("nav_up", "↑", "nav_down", "↓", "Navigate") + " • Left/Shift+Tab: Lists panel",
+			) + " • x: Export • i: Import • Ctrl+N/P: Page • " + hb.Pair("nav_up", "↑", "nav_down", "↓", "Navigate") + " • Left/Shift+Tab: Lists panel",
 		)
 	} else {
 		footer = m.styleManager.GetHelpStyle().Render(
@@ -656,17 +674,15 @@ func (m ListsModel) getSelectedCard() (model.Card, bool) {
 	if selectedRow < 0 {
 		return model.Card{}, false
 	}
-	showAll := m.searchInput.Value() == ""
-	if showAll {
-		if selectedRow >= len(m.cards) {
-			return model.Card{}, false
-		}
-		return m.cards[selectedRow], true
+	source := m.filteredCards
+	if m.searchInput.Value() == "" {
+		source = m.cards
 	}
-	if selectedRow >= len(m.filteredCards) {
+	actualIndex := m.cardPagination.CurrentPage*m.cardPagination.PageSize + selectedRow
+	if actualIndex >= len(source) {
 		return model.Card{}, false
 	}
-	return m.filteredCards[selectedRow], true
+	return source[actualIndex], true
 }
 
 func (m ListsModel) handleIncrementQuantity() (ListsModel, tea.Cmd) {
@@ -732,6 +748,7 @@ func (m ListsModel) performSaveListCards() (ListsModel, tea.Cmd) {
 	}
 	maps.Copy(m.dbQuantities, updates)
 	m.tempQuantityChanges = make(map[int64]int)
+	m.searchCache.Invalidate()
 	m.updateListCardTable()
 	return m, nil
 }
@@ -797,12 +814,15 @@ func (m ListsModel) refreshLists() (ListsModel, tea.Cmd) {
 }
 
 func (m *ListsModel) updateListCardTable() {
-	var rows []table.Row
 	source := m.filteredCards
 	if m.searchInput.Value() == "" {
 		source = m.cards
 	}
-	for _, card := range source {
+	m.cardPagination.TotalItems = len(source)
+	start, end := m.cardPagination.Slice()
+	page := source[start:end]
+	var rows []table.Row
+	for _, card := range page {
 		dbQty := m.dbQuantities[card.ID]
 		tempDelta := m.tempQuantityChanges[card.ID]
 		rows = append(rows, cardToRow(card, dbQty, tempDelta))
@@ -824,7 +844,7 @@ func (m *ListsModel) updateListContentsTable() {
 }
 
 func (m ListsModel) filterListCards(query string) []model.Card {
-	return filterCardsByQuery(m.cards, query)
+	return filterCardsByQueryCached(m.cards, query, m.searchCache)
 }
 
 func (m ListsModel) findColorIndex(color string) int {
