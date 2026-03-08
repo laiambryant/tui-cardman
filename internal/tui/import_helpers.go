@@ -339,60 +339,29 @@ func (m ImportModel) renderStatusBar(contentWidth int) string {
 
 func (m ImportModel) renderHelp() string {
 	hb := NewHelpBuilder(m.configManager)
-	helpStyle := m.styleManager.GetHelpStyle()
-
-	nav := hb.Pair("nav_up", "↑", "nav_down", "↓", "Navigate")
-	back := hb.Build(KeyItem{"back", "Q", "Back"})
-	tab := "Tab: Switch Panel"
-
-	var line1, line2 string
-
+	common := strings.Join([]string{
+		"Tab: Switch Panel",
+		hb.Pair("nav_up", "↑", "nav_down", "↓", "Navigate"),
+		hb.Build(KeyItem{"back", "Q", "Back"}),
+	}, " | ")
+	var contextual string
 	switch m.focus {
 	case importFocusSets:
-		line1 = strings.Join([]string{tab, nav, back}, " • ")
-		var setHints []string
-		if len(m.filteredSets) > 0 && m.cursor < len(m.filteredSets) {
-			selectedSet := m.filteredSets[m.cursor]
-			if !m.databaseSetIDs[selectedSet.ID] && !m.isInQueue(selectedSet.ID) {
-				setHints = append(setHints, "a: Queue set")
-			}
-			if m.isInQueue(selectedSet.ID) {
-				setHints = append(setHints, "r: Unqueue set")
-			}
-		}
-		if m.queuePendingCount() > 0 && !m.queueProcessing {
-			setHints = append(setHints, "s: Start queue")
-		}
-		if len(m.importQueue) > m.queuePendingCount() && !m.queueProcessing {
-			setHints = append(setHints, "c: Clear done")
-		}
-		setHints = append(setHints, "Type to search")
-		line2 = strings.Join(setHints, " • ")
-
+		contextual = hb.Build(
+			KeyItem{"queue_add", "Ctrl+A", "Queue set"},
+			KeyItem{"queue_remove", "Ctrl+R", "Unqueue set"},
+			KeyItem{"queue_start", "Ctrl+G", "Start queue"},
+		)
 	case importFocusActions:
-		enter := hb.Build(KeyItem{"select", "Enter", "Execute"})
-		line1 = strings.Join([]string{tab, nav, enter, back}, " • ")
-		line2 = ""
-
+		contextual = hb.Build(KeyItem{"select", "Enter", "Execute"})
 	case importFocusQueue:
-		line1 = strings.Join([]string{tab, nav, back}, " • ")
-		var queueHints []string
-		if len(m.importQueue) > 0 && !m.queueProcessing {
-			queueHints = append(queueHints, "r: Remove item")
-		}
-		if m.queuePendingCount() > 0 && !m.queueProcessing {
-			queueHints = append(queueHints, "s: Start queue")
-		}
-		if len(m.importQueue) > m.queuePendingCount() && !m.queueProcessing {
-			queueHints = append(queueHints, "c: Clear done")
-		}
-		line2 = strings.Join(queueHints, " • ")
+		contextual = hb.Build(
+			KeyItem{"queue_remove", "Ctrl+R", "Remove"},
+			KeyItem{"queue_start", "Ctrl+G", "Start"},
+			KeyItem{"queue_clear", "Ctrl+L", "Clear Done"},
+		)
 	}
-
-	if line2 != "" {
-		return helpStyle.Render(line1) + "\n" + helpStyle.Render(line2)
-	}
-	return helpStyle.Render(line1)
+	return helpStyle.Render(common) + "\n" + helpStyle.Render(contextual)
 }
 
 func (m ImportModel) renderImportProgress() string {

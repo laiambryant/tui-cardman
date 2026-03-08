@@ -361,7 +361,8 @@ func (m CardGameTabsModel) Update(msg tea.Msg) (CardGameTabsModel, tea.Cmd) {
 			}
 			return m, nil
 		}
-		if action == "nav_up" || s == "k" || s == "up" {
+		// Navigation — up/down only for Collection tab (TabCardSearch uses arrow keys via textinput forwarding below)
+		if action == "nav_up" || s == "up" {
 			if m.currentTab == TabCollection {
 				if m.collectionTabFocus == 0 {
 					m.setCompletionTable, _ = m.setCompletionTable.Update(msg)
@@ -371,17 +372,8 @@ func (m CardGameTabsModel) Update(msg tea.Msg) (CardGameTabsModel, tea.Cmd) {
 				}
 				return m, nil
 			}
-			if m.currentTab == TabCardSearch {
-				if m.searchTabFocus == 0 {
-					m.cardTable, _ = m.cardTable.Update(msg)
-				} else {
-					m.userSearchTable, _ = m.userSearchTable.Update(msg)
-				}
-				return m, nil
-			}
-			return m, nil
 		}
-		if action == "nav_down" || s == "j" || s == "down" {
+		if action == "nav_down" || s == "down" {
 			if m.currentTab == TabCollection {
 				if m.collectionTabFocus == 0 {
 					if m.setCompletionTable.Cursor() < len(m.setCompletionTable.Rows())-1 {
@@ -393,7 +385,20 @@ func (m CardGameTabsModel) Update(msg tea.Msg) (CardGameTabsModel, tea.Cmd) {
 				}
 				return m, nil
 			}
-			if m.currentTab == TabCardSearch {
+		}
+
+		// CardSearch tab — handle all shortcuts here; search textinput forwarding follows
+		if m.currentTab == TabCardSearch {
+			// Arrow-based table navigation (always works, not intercepted by textinput)
+			if action == "nav_up" || s == "up" {
+				if m.searchTabFocus == 0 {
+					m.cardTable, _ = m.cardTable.Update(msg)
+				} else {
+					m.userSearchTable, _ = m.userSearchTable.Update(msg)
+				}
+				return m, nil
+			}
+			if action == "nav_down" || s == "down" {
 				if m.searchTabFocus == 0 {
 					if m.cardTable.Cursor() < len(m.cardTable.Rows())-1 {
 						m.cardTable, _ = m.cardTable.Update(msg)
@@ -405,63 +410,58 @@ func (m CardGameTabsModel) Update(msg tea.Msg) (CardGameTabsModel, tea.Cmd) {
 				}
 				return m, nil
 			}
-			return m, nil
-		}
-		if s == "x" && m.currentTab == TabCardSearch {
-			m.exportState = NewExportState("collection", m.selectedGame.Name, false, "", m.buildCollectionExportRows)
-			return m, nil
-		}
-		if s == "ctrl+n" && m.currentTab == TabCardSearch {
+			// Modifier-key shortcuts (safe regardless of search focus)
+			if action == "export" {
+				m.exportState = NewExportState("collection", m.selectedGame.Name, false, "", m.buildCollectionExportRows)
+				return m, nil
+			}
+			if action == "page_next" {
+				if m.searchTabFocus == 0 {
+					m.cardPagination.NextPage()
+					m.updateCardTable()
+					m.cardTable.SetCursor(0)
+				} else {
+					m.collectionPagination.NextPage()
+					m.filteredCollection = m.filterUserCollection(m.userSearchInput.Value())
+					m.userSearchTable.SetRows(buildCollectionRows(m.paginateCollections(m.filteredCollection)))
+					m.userSearchTable.SetCursor(0)
+				}
+				return m, nil
+			}
+			if action == "page_prev" {
+				if m.searchTabFocus == 0 {
+					m.cardPagination.PrevPage()
+					m.updateCardTable()
+					m.cardTable.SetCursor(0)
+				} else {
+					m.collectionPagination.PrevPage()
+					m.filteredCollection = m.filterUserCollection(m.userSearchInput.Value())
+					m.userSearchTable.SetRows(buildCollectionRows(m.paginateCollections(m.filteredCollection)))
+					m.userSearchTable.SetCursor(0)
+				}
+				return m, nil
+			}
 			if m.searchTabFocus == 0 {
-				m.cardPagination.NextPage()
-				m.updateCardTable()
-				m.cardTable.SetCursor(0)
-			} else {
-				m.collectionPagination.NextPage()
-				m.filteredCollection = m.filterUserCollection(m.userSearchInput.Value())
-				m.userSearchTable.SetRows(buildCollectionRows(m.paginateCollections(m.filteredCollection)))
-				m.userSearchTable.SetCursor(0)
-			}
-			return m, nil
-		}
-		if s == "ctrl+p" && m.currentTab == TabCardSearch {
-			if m.searchTabFocus == 0 {
-				m.cardPagination.PrevPage()
-				m.updateCardTable()
-				m.cardTable.SetCursor(0)
-			} else {
-				m.collectionPagination.PrevPage()
-				m.filteredCollection = m.filterUserCollection(m.userSearchInput.Value())
-				m.userSearchTable.SetRows(buildCollectionRows(m.paginateCollections(m.filteredCollection)))
-				m.userSearchTable.SetCursor(0)
-			}
-			return m, nil
-		}
-		if m.currentTab == TabCardSearch && m.searchTabFocus == 0 {
-			if action == "increment_quantity" {
-				return m.handleIncrementQuantity()
-			}
-			if action == "decrement_quantity" {
-				return m.handleDecrementQuantity()
-			}
-			if action == "save" {
-				return m.handleSaveCollection()
-			}
-			if (action == "select" || s == "enter") && m.cardDetail != nil {
-				card, ok := m.getSelectedCard()
-				if ok {
-					qty := m.dbQuantities[card.ID] + m.tempQuantityChanges[card.ID]
-					cmd := m.cardDetail.Open(card, qty)
-					return m, cmd
+				if action == "increment_quantity" {
+					return m.handleIncrementQuantity()
+				}
+				if action == "decrement_quantity" {
+					return m.handleDecrementQuantity()
+				}
+				if action == "save" {
+					return m.handleSaveCollection()
+				}
+				if action == "select" && m.cardDetail != nil {
+					card, ok := m.getSelectedCard()
+					if ok {
+						qty := m.dbQuantities[card.ID] + m.tempQuantityChanges[card.ID]
+						cmd := m.cardDetail.Open(card, qty)
+						return m, cmd
+					}
 				}
 			}
-		}
-	}
-	if m.currentTab == TabCardSearch {
-		if keyMsg, ok := msg.(tea.KeyMsg); ok {
-			s := keyMsg.String()
-			action := MatchActionOrDefault(m.configManager, s, "")
-			if action != "nav_up" && action != "nav_down" && s != "k" && s != "j" {
+			// Forward non-modifier keys to the focused search input
+			if !isModifierKey(s) {
 				if m.searchTabFocus == 0 {
 					var cmd tea.Cmd
 					m.searchInput, cmd = m.searchInput.Update(msg)
@@ -571,19 +571,33 @@ func (m CardGameTabsModel) renderCardGameTabsFooter() string {
 func (m CardGameTabsModel) buildHelpText() string {
 	hb := NewHelpBuilder(m.configManager)
 	if m.currentTab == TabCardSearch {
-		return "Tab: Switch panel • " + hb.Build(
-			KeyItem{"increment_quantity", "+", "Add"},
-			KeyItem{"decrement_quantity", "Delete", "Remove"},
-			KeyItem{"save", "Ctrl+S", "Save"},
-		) + " • x: Export • Ctrl+N/P: Page • " + hb.Pair("nav_up", "↑", "nav_down", "↓", "Navigate") + " • " + hb.Build(KeyItem{"back", "Q", "Back"})
+		return strings.Join([]string{
+			"Tab: Switch panel",
+			hb.Build(
+				KeyItem{"increment_quantity", "+", "Add"},
+				KeyItem{"decrement_quantity", "Delete", "Remove"},
+				KeyItem{"save", "Ctrl+S", "Save"},
+			),
+			hb.Build(KeyItem{"export", "x", "Export"}),
+			hb.Pair("page_next", "Ctrl+N", "page_prev", "Ctrl+P", "Page"),
+			hb.Pair("nav_up", "↑", "nav_down", "↓", "Navigate"),
+			hb.Build(KeyItem{"back", "Q", "Back"}),
+		}, " | ")
 	}
 	if m.currentTab == TabCollection {
-		return "Tab: Switch panel • " + hb.Pair("nav_up", "↑", "nav_down", "↓", "Navigate") + " • " + hb.Pair("nav_prev_tab", "Shift+Tab", "nav_next_tab", "Tab", "Switch tabs") + " • " + hb.Build(KeyItem{"back", "Q", "Back"})
+		return strings.Join([]string{
+			"Tab: Switch panel",
+			hb.Pair("nav_up", "↑", "nav_down", "↓", "Navigate"),
+			hb.Pair("nav_prev_tab", "Shift+Tab", "nav_next_tab", "Tab", "Switch tabs"),
+			hb.Build(KeyItem{"back", "Q", "Back"}),
+		}, " | ")
 	}
-	return hb.Build(KeyItem{"settings", "F1", "Settings"}) + " • " + hb.Pair("nav_prev_tab", "Shift+Tab", "nav_next_tab", "Tab", "Switch tabs") + " • " + hb.Pair("nav_up", "↑", "nav_down", "↓", "Navigate") + " • " + hb.Build(
-		KeyItem{"back", "Q", "Back"},
-		KeyItem{"quit", "Ctrl+C", "Quit"},
-	)
+	return strings.Join([]string{
+		hb.Build(KeyItem{"settings", "F1", "Settings"}),
+		hb.Pair("nav_prev_tab", "Shift+Tab", "nav_next_tab", "Tab", "Switch tabs"),
+		hb.Pair("nav_up", "↑", "nav_down", "↓", "Navigate"),
+		hb.Build(KeyItem{"back", "Q", "Back"}, KeyItem{"quit", "Ctrl+C", "Quit"}),
+	}, " | ")
 }
 
 func (m CardGameTabsModel) updateTableForTab() CardGameTabsModel {

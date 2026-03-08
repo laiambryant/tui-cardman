@@ -53,6 +53,25 @@ func Default() *RuntimeConfig {
 			"save":               "ctrl+s",
 			"increment_quantity": "+",
 			"decrement_quantity": "delete",
+
+			// CRUD operations (lists, decks)
+			"create_new": "n",
+			"edit":       "e",
+			"delete":     "d",
+
+			// Import / Export
+			"export": "x",
+			"import": "i",
+
+			// Pagination
+			"page_next": "ctrl+n",
+			"page_prev": "ctrl+p",
+
+			// Import queue operations (ctrl+ to avoid search conflicts)
+			"queue_add":   "ctrl+a",
+			"queue_remove": "ctrl+r",
+			"queue_start": "ctrl+g",
+			"queue_clear": "ctrl+l",
 		},
 		UI: UIConfig{
 			CompactLists: false,

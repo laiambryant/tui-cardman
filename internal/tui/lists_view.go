@@ -215,21 +215,6 @@ func (m ListsModel) Update(msg tea.Msg) (ListsModel, tea.Cmd) {
 		}
 		return m.handleCardPanelKeys(msg, s, action)
 	}
-	if m.focus == ListsFocusCardPanel && m.cardSubFocus == listCardSubFocusSearch {
-		if keyMsg, ok := msg.(tea.KeyMsg); ok {
-			s := keyMsg.String()
-			action := MatchActionOrDefault(m.configManager, s, "")
-			if action != "nav_up" && action != "nav_down" && s != "k" && s != "j" {
-				var cmd tea.Cmd
-				m.searchInput, cmd = m.searchInput.Update(msg)
-				m.filteredCards = m.filterListCards(m.searchInput.Value())
-				m.cardPagination.Reset()
-				m.updateListCardTable()
-				m.cardTable.SetCursor(0)
-				return m, cmd
-			}
-		}
-	}
 	return m, nil
 }
 
@@ -263,7 +248,7 @@ func (m ListsModel) handleListPanelKeys(s, action string) (ListsModel, tea.Cmd) 
 	if isSelectKey(action, s) {
 		return m.selectCurrentList()
 	}
-	if s == "n" {
+	if action == "create_new" {
 		m.mode = ListsModeCreate
 		m.nameInput.SetValue("")
 		m.descInput.SetValue("")
@@ -272,7 +257,7 @@ func (m ListsModel) handleListPanelKeys(s, action string) (ListsModel, tea.Cmd) 
 		m.nameInput.Focus()
 		return m, nil
 	}
-	if s == "e" && len(m.lists) > 0 && m.listCursor < len(m.lists) {
+	if action == "edit" && len(m.lists) > 0 && m.listCursor < len(m.lists) {
 		l := m.lists[m.listCursor]
 		m.mode = ListsModeEdit
 		m.editingListID = l.ID
@@ -283,7 +268,7 @@ func (m ListsModel) handleListPanelKeys(s, action string) (ListsModel, tea.Cmd) 
 		m.nameInput.Focus()
 		return m, nil
 	}
-	if s == "d" && len(m.lists) > 0 && m.listCursor < len(m.lists) {
+	if action == "delete" && len(m.lists) > 0 && m.listCursor < len(m.lists) {
 		l := m.lists[m.listCursor]
 		m.modal = newModal(
 			"Delete List",
@@ -323,7 +308,8 @@ func (m ListsModel) handleCardPanelKeys(msg tea.KeyMsg, s, action string) (Lists
 		m.listContentsTable.Blur()
 		return m, nil
 	}
-	if isBackKey(action, s) {
+	// Back key: only handle when search is NOT focused (so Esc closes, not clears search)
+	if isBackKey(action, s) && m.cardSubFocus != listCardSubFocusSearch {
 		if m.cardSubFocus == listCardSubFocusContents {
 			m.cardSubFocus = listCardSubFocusSearch
 			m.listContentsTable.Blur()
@@ -338,7 +324,8 @@ func (m ListsModel) handleCardPanelKeys(msg tea.KeyMsg, s, action string) (Lists
 		m.listContentsTable.Blur()
 		return m, nil
 	}
-	if action == "nav_up" || s == "up" || s == "k" {
+	// Arrow navigation — always safe, never consumed by textinput
+	if action == "nav_up" || s == "up" {
 		if m.cardSubFocus == listCardSubFocusContents {
 			m.listContentsTable, _ = m.listContentsTable.Update(msg)
 		} else {
@@ -346,7 +333,7 @@ func (m ListsModel) handleCardPanelKeys(msg tea.KeyMsg, s, action string) (Lists
 		}
 		return m, nil
 	}
-	if action == "nav_down" || s == "down" || s == "j" {
+	if action == "nav_down" || s == "down" {
 		if m.cardSubFocus == listCardSubFocusContents {
 			if m.listContentsTable.Cursor() < len(m.listContentsTable.Rows())-1 {
 				m.listContentsTable, _ = m.listContentsTable.Update(msg)
@@ -358,36 +345,38 @@ func (m ListsModel) handleCardPanelKeys(msg tea.KeyMsg, s, action string) (Lists
 		}
 		return m, nil
 	}
-	if s == "ctrl+n" {
+	// Modifier-key shortcuts — safe to handle regardless of search focus
+	if action == "page_next" {
 		m.cardPagination.NextPage()
 		m.updateListCardTable()
 		m.cardTable.SetCursor(0)
 		return m, nil
 	}
-	if s == "ctrl+p" {
+	if action == "page_prev" {
 		m.cardPagination.PrevPage()
 		m.updateListCardTable()
 		m.cardTable.SetCursor(0)
 		return m, nil
 	}
-	if action == "increment_quantity" {
+	if action == "increment_quantity" && m.cardSubFocus != listCardSubFocusSearch {
 		return m.handleIncrementQuantity()
 	}
-	if action == "decrement_quantity" {
+	if action == "decrement_quantity" && m.cardSubFocus != listCardSubFocusSearch {
 		return m.handleDecrementQuantity()
 	}
 	if action == "save" {
 		return m.handleSaveListCards()
 	}
-	if s == "x" && m.selectedList != nil {
+	if action == "export" && m.selectedList != nil {
 		m.exportState = NewExportState("list", m.selectedList.Name, false, "", m.buildListExportRows)
 		return m, nil
 	}
-	if s == "i" && m.selectedList != nil {
+	if action == "import" && m.selectedList != nil {
 		m.importState = NewImportState(m.cardService, m.styleManager)
 		return m, nil
 	}
-	if m.cardSubFocus == listCardSubFocusSearch {
+	// Forward non-modifier printable keys to the search textinput when it is focused
+	if m.cardSubFocus == listCardSubFocusSearch && !isModifierKey(s) {
 		var cmd tea.Cmd
 		m.searchInput, cmd = m.searchInput.Update(msg)
 		m.filteredCards = m.filterListCards(m.searchInput.Value())
@@ -649,19 +638,32 @@ func (m ListsModel) renderFooter() string {
 	hb := NewHelpBuilder(m.configManager)
 	var footer string
 	if m.mode == ListsModeCreate || m.mode == ListsModeEdit {
-		footer = m.styleManager.GetHelpStyle().Render("Tab: next field • Enter: confirm • Esc: cancel")
+		footer = m.styleManager.GetHelpStyle().Render("Tab: next field | Enter: confirm | Esc: cancel")
 	} else if m.focus == ListsFocusCardPanel {
-		footer = m.styleManager.GetHelpStyle().Render(
-			"Tab: Switch panel • " + hb.Build(
+		footer = m.styleManager.GetHelpStyle().Render(strings.Join([]string{
+			"Tab: Switch panel",
+			hb.Build(
 				KeyItem{"increment_quantity", "+", "Add"},
 				KeyItem{"decrement_quantity", "Delete", "Remove"},
 				KeyItem{"save", "Ctrl+S", "Save"},
-			) + " • x: Export • i: Import • Ctrl+N/P: Page • " + hb.Pair("nav_up", "↑", "nav_down", "↓", "Navigate") + " • Left/Shift+Tab: Lists panel",
-		)
+			),
+			hb.Build(KeyItem{"export", "x", "Export"}, KeyItem{"import", "i", "Import"}),
+			hb.Pair("page_next", "Ctrl+N", "page_prev", "Ctrl+P", "Page"),
+			hb.Pair("nav_up", "↑", "nav_down", "↓", "Navigate"),
+			"Left / Shift+Tab: Lists panel",
+		}, " | "))
 	} else {
-		footer = m.styleManager.GetHelpStyle().Render(
-			hb.Pair("nav_up", "↑", "nav_down", "↓", "Navigate") + " • Enter: Select list • n: New • e: Edit • d: Delete • Right/Tab: Cards panel • " + hb.Build(KeyItem{"back", "Q", "Back"}),
-		)
+		footer = m.styleManager.GetHelpStyle().Render(strings.Join([]string{
+			hb.Pair("nav_up", "↑", "nav_down", "↓", "Navigate"),
+			hb.Build(KeyItem{"select", "Enter", "Select list"}),
+			hb.Build(
+				KeyItem{"create_new", "n", "New"},
+				KeyItem{"edit", "e", "Edit"},
+				KeyItem{"delete", "d", "Delete"},
+			),
+			"Right / Tab: Cards panel",
+			hb.Build(KeyItem{"back", "Q", "Back"}),
+		}, " | "))
 	}
 	if m.exportState.statusMsg != "" {
 		footer = m.styleManager.GetHelpStyle().Render(m.exportState.statusMsg) + "  " + footer
