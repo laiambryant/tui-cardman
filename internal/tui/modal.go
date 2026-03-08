@@ -5,21 +5,19 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/x/cellbuf"
 )
 
 type ModalModel struct {
-	title             string
-	message           string
-	onConfirm         func() tea.Cmd
-	onCancel          func() tea.Cmd
-	confirmed         bool
-	selected          int
-	visible           bool
-	width             int
-	height            int
-	backgroundContent string
-	styleManager      *StyleManager
+	title        string
+	message      string
+	onConfirm    func() tea.Cmd
+	onCancel     func() tea.Cmd
+	confirmed    bool
+	selected     int
+	visible      bool
+	width        int
+	height       int
+	styleManager *StyleManager
 }
 
 func NewModalModel(title, message string, onConfirm, onCancel func() tea.Cmd, styleManager *StyleManager) ModalModel {
@@ -99,24 +97,28 @@ func (m ModalModel) View() string {
 	if !m.visible {
 		return ""
 	}
-	modalBox := m.renderModalBox()
 	if m.width == 0 || m.height == 0 {
-		return modalBox
+		return m.renderModalBox()
 	}
-	overlay := m.renderOverlay()
-	placeOpts := []lipgloss.WhitespaceOption{}
-	if bg := m.styleManager.scheme.Background; bg != "" {
-		placeOpts = append(placeOpts, lipgloss.WithWhitespaceBackground(bg))
+	header := m.styleManager.GetTitleStyle().Render(m.title)
+	footer := m.styleManager.GetBlurredStyle().Render("← → to select • enter to confirm • esc to cancel")
+	layout := calculateFrameLayout(lipgloss.Height(header), lipgloss.Height(footer), m.width, m.height)
+	body := m.renderModalBody(layout.ContentWidth, layout.BodyContentHeight)
+	return renderFramedViewWithLayout(header, body, footer, layout, m.styleManager)
+}
+
+func (m ModalModel) renderModalBody(contentWidth, contentHeight int) string {
+	panelWidth := 60
+	if contentWidth > 0 {
+		panelWidth = min(60, contentWidth)
 	}
-	centered := lipgloss.Place(
-		m.width,
-		m.height,
-		lipgloss.Center,
-		lipgloss.Center,
-		modalBox,
-		placeOpts...,
-	)
-	return m.overlayContent(overlay, centered)
+	panelStyle := m.styleManager.Box(m.styleManager.scheme.Title, panelWidth, 0, 0, 4, 2).Align(lipgloss.Center)
+	messageStyle := m.styleManager.GetBlurredStyle().Align(lipgloss.Center)
+	var b strings.Builder
+	b.WriteString(messageStyle.Render(m.message) + "\n\n")
+	b.WriteString(m.renderButtons())
+	panel := panelStyle.Render(b.String())
+	return lipgloss.Place(contentWidth, contentHeight, lipgloss.Center, lipgloss.Center, panel)
 }
 
 func (m ModalModel) createButtonStyle(focused bool) lipgloss.Style {
@@ -149,71 +151,6 @@ func (m ModalModel) renderButtons() string {
 	return m.styleManager.applyBGFG(lipgloss.NewStyle().Align(lipgloss.Center)).Render(buttons)
 }
 
-func (m ModalModel) renderOverlay() string {
-	if m.backgroundContent == "" {
-		return ""
-	}
-	return m.backgroundContent
-}
-
-func (m ModalModel) overlayContent(background, foreground string) string {
-	if background == "" {
-		return foreground
-	}
-	if foreground == "" {
-		return background
-	}
-	width := maxLineWidth(background)
-	fgWidth := maxLineWidth(foreground)
-	if fgWidth > width {
-		width = fgWidth
-	}
-	height := lineCount(background)
-	fgHeight := lineCount(foreground)
-	if fgHeight > height {
-		height = fgHeight
-	}
-	if width == 0 || height == 0 {
-		return background
-	}
-	bgBuf := cellbuf.NewBuffer(width, height)
-	cellbuf.SetContent(bgBuf, background)
-	fgBuf := cellbuf.NewBuffer(width, height)
-	cellbuf.SetContent(fgBuf, foreground)
-	for y := 0; y < height; y++ {
-		for x := 0; x < width; x++ {
-			cell := fgBuf.Cell(x, y)
-			if cell == nil || cell.Width == 0 {
-				continue
-			}
-			bgBuf.SetCell(x, y, cell)
-		}
-	}
-	return strings.ReplaceAll(cellbuf.Render(bgBuf), "\r\n", "\n")
-}
-
-func lineCount(s string) int {
-	if s == "" {
-		return 0
-	}
-	return strings.Count(s, "\n") + 1
-}
-
-func maxLineWidth(s string) int {
-	if s == "" {
-		return 0
-	}
-	lines := strings.Split(s, "\n")
-	maxWidth := 0
-	for _, line := range lines {
-		width := lipgloss.Width(line)
-		if width > maxWidth {
-			maxWidth = width
-		}
-	}
-	return maxWidth
-}
-
 func (m ModalModel) IsVisible() bool {
 	return m.visible
 }
@@ -238,10 +175,5 @@ func (m ModalModel) SetMessage(title, message string) ModalModel {
 func (m ModalModel) SetDimensions(width, height int) ModalModel {
 	m.width = width
 	m.height = height
-	return m
-}
-
-func (m ModalModel) SetBackgroundContent(content string) ModalModel {
-	m.backgroundContent = content
 	return m
 }

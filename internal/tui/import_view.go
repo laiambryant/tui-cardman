@@ -523,7 +523,6 @@ func (m ImportModel) View() string {
 	}
 	view := m.renderImportView()
 	if m.modal.IsVisible() {
-		m.modal = m.modal.SetBackgroundContent(view)
 		return m.modal.View()
 	}
 	return view

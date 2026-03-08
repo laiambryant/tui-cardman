@@ -135,7 +135,6 @@ func RenderFramedWithModal(header, footer string, bodyFn func(availableHeight in
 	body := bodyFn(layout.BodyContentHeight)
 	content := renderFramedViewWithLayout(header, body, footer, layout, sm)
 	if modal != nil && modal.IsVisible() {
-		*modal = modal.SetBackgroundContent(content)
 		return modal.View()
 	}
 	return content
