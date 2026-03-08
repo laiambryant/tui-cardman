@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CARDMAN — Terminal UI Card Collection Manager</title>
+  <style>
+    /* ── Reset ──────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* ── Palette ────────────────────────────────────────────── */
+    :root {
+      --bg:        #2b2f3e;
+      --bg-alt:    #252838;
+      --bg-panel:  #222535;
+      --pink:      #e040fb;
+      --pink-dim:  #9b35b5;
+      --muted:     #5a5f7a;
+      --text:      #c8c8d4;
+      --text-dim:  #7a7f98;
+      --border:    #3a3f58;
+    }
+
+    /* ── Base ───────────────────────────────────────────────── */
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'JetBrains Mono', 'Fira Mono', 'Courier New', monospace;
+      font-size: 14px;
+      line-height: 1.7;
+      min-height: 100vh;
+    }
+
+    /* ── Nav ────────────────────────────────────────────────── */
+    nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      background: var(--bg-alt);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 2rem;
+      height: 48px;
+    }
+
+    .nav-brand {
+      color: var(--pink);
+      font-size: 13px;
+      letter-spacing: 0.25em;
+      text-transform: uppercase;
+      text-decoration: none;
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 2rem;
+      list-style: none;
+    }
+
+    .nav-links a {
+      color: var(--text-dim);
+      text-decoration: none;
+      font-size: 12px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      transition: color 0.15s;
+    }
+
+    .nav-links a:hover { color: var(--pink); }
+
+    /* ── Layout ─────────────────────────────────────────────── */
+    .page { padding-top: 48px; }
+
+    section {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 5rem 2rem;
+    }
+
+    section + section {
+      border-top: 1px solid var(--border);
+    }
+
+    /* ── Hero ───────────────────────────────────────────────── */
+    #hero {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      padding: 6rem 2rem 5rem;
+    }
+
+    /* Dotted spade art (removed from page) */
+    .spade-art { display: none; }
+
+    .hero-title {
+      font-size: 22px;
+      letter-spacing: 0.5em;
+      color: var(--pink);
+      text-transform: uppercase;
+      margin-bottom: 0.6rem;
+    }
+
+    .hero-sub {
+      font-size: 13px;
+      color: var(--text-dim);
+      letter-spacing: 0.2em;
+      margin-bottom: 3rem;
+    }
+
+    /* ── Terminal block ─────────────────────────────────────── */
+    .term {
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1.2rem 1.6rem;
+      text-align: left;
+      width: 100%;
+      overflow-x: auto;
+    }
+
+    .term-bar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 1rem;
+      padding-bottom: 0.7rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--border);
+    }
+
+    .term-title {
+      font-size: 11px;
+      color: var(--muted);
+      margin-left: 6px;
+      letter-spacing: 0.08em;
+    }
+
+    .term code {
+      display: block;
+      font-family: inherit;
+      font-size: 13px;
+      line-height: 2;
+      white-space: pre;
+      background: var(--bg-panel); /* terminal background */
+      color: inherit;
+      -webkit-text-fill-color: inherit;
+    }
+
+    /* selection color (subtle, non-yellow) */
+    ::selection { background: rgba(224,64,251,0.08); }
+    code::selection, pre::selection { background: rgba(224,64,251,0.08); }
+
+    .term .prompt { color: var(--pink); }
+    .term .cmd    { color: var(--text); }
+    .term .cmt    { color: var(--muted); }
+    .term .ok     { color: #50fa7b; }
+
+    /* ── Section headings ───────────────────────────────────── */
+    .sec-label {
+      font-size: 11px;
+      letter-spacing: 0.3em;
+      color: var(--pink-dim);
+      text-transform: uppercase;
+      margin-bottom: 0.4rem;
+    }
+
+    .sec-title {
+      font-size: 18px;
+      color: var(--pink);
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      margin-bottom: 0.5rem;
+    }
+
+    .sec-divider {
+      color: var(--muted);
+      font-size: 12px;
+      letter-spacing: 0.05em;
+      margin-bottom: 2.2rem;
+    }
+
+    /* ── Two-col grid ───────────────────────────────────────── */
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+      margin-top: 2rem;
+    }
+
+    @media (max-width: 600px) {
+      .grid-2 { grid-template-columns: 1fr; }
+      .nav-links { gap: 1rem; }
+      .spade-art { font-size: 9px; }
+    }
+
+    /* ── Panel card ─────────────────────────────────────────── */
+    .panel {
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1.6rem;
+    }
+
+    .panel-title {
+      font-size: 13px;
+      color: var(--pink);
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      margin-bottom: 1rem;
+      padding-bottom: 0.6rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    /* ── Feature list ───────────────────────────────────────── */
+    .feat-list {
+      list-style: none;
+      margin-top: 1.2rem;
+    }
+
+    .feat-list li {
+      display: flex;
+      gap: 0.8rem;
+      padding: 0.4rem 0;
+      font-size: 13px;
+      color: var(--text);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .feat-list li:last-child { border-bottom: none; }
+
+    .feat-list .icon { color: var(--pink); flex-shrink: 0; }
+
+    /* ── Inline code ────────────────────────────────────────── */
+    code.inline {
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 2px;
+      padding: 0 5px;
+      font-size: 12px;
+      color: var(--pink);
+      font-family: inherit;
+    }
+
+    /* ── Mode badge ─────────────────────────────────────────── */
+    .badge {
+      display: inline-block;
+      font-size: 10px;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--pink);
+      border: 1px solid var(--pink-dim);
+      border-radius: 2px;
+      padding: 1px 7px;
+      margin-bottom: 0.7rem;
+    }
+
+    /* ── Body text ──────────────────────────────────────────── */
+    p {
+      color: var(--text-dim);
+      font-size: 13px;
+      margin-bottom: 1rem;
+      line-height: 1.8;
+    }
+
+    p:last-child { margin-bottom: 0; }
+
+    /* ── Footer ─────────────────────────────────────────────── */
+    footer {
+      border-top: 1px solid var(--border);
+      text-align: center;
+      padding: 2rem;
+      font-size: 12px;
+      color: var(--muted);
+      letter-spacing: 0.08em;
+    }
+
+    footer a {
+      color: var(--pink-dim);
+      text-decoration: none;
+    }
+
+    footer a:hover { color: var(--pink); }
+
+    /* ── Validation rule box ────────────────────────────────── */
+    .rule-box {
+      background: var(--bg-panel);
+      border-left: 2px solid var(--pink);
+      padding: 0.8rem 1.2rem;
+      margin-top: 1rem;
+      font-size: 12px;
+      color: var(--text-dim);
+    }
+
+    .rule-box strong { color: var(--pink); }
+
+    /* ── Wide term (hero) ───────────────────────────────────── */
+    #hero .term { max-width: 560px; }
+
+    /* ── Separator line ─────────────────────────────────────── */
+    .ascii-sep {
+      color: var(--border);
+      font-size: 12px;
+      letter-spacing: 0.05em;
+      margin: 2rem 0;
+      overflow: hidden;
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Navigation ─────────────────────────────────────────── -->
+<nav>
+  <a class="nav-brand" href="#hero">cardman</a>
+  <ul class="nav-links">
+    <li><a href="#how-it-works">how it works</a></li>
+    <li><a href="#collection">collection</a></li>
+    <li><a href="#lists">lists</a></li>
+    <li><a href="#decks">decks</a></li>
+  </ul>
+</nav>
+
+<div class="page">
+
+<!-- ── Hero ───────────────────────────────────────────────── -->
+<section id="hero">
+
+  <!-- Dotted spade reproduced in Unicode block characters -->
+  <pre class="spade-art" aria-hidden="true">
+        · · · · · · · · · · ·
+      · · · · · · · · · · · · ·
+    · · · · ·     ·     · · · · ·
+  · · · · · ·   · · ·   · · · · · ·
+  · · · · · · · · · · · · · · · · ·
+  · · · · · · · · · · · · · · · · ·
+  · · · · · · · · · · · · · · · · ·
+    · · · · · · · · · · · · · · ·
+      · · · · · · · · · · · · ·
+        · · · · · · · · · · ·
+          · · · · · · · · ·
+            · · · · · · ·
+              · · · · ·
+            · · · · · · ·
+          · · ·     · · ·
+        · · · ·     · · · ·
+        · · · · · · · · · ·
+  </pre>
+
+  <h1 class="hero-title">C A R D M A N</h1>
+  <p class="hero-sub">~ Terminal UI Card Collection Manager ~</p>
+
+  <div class="term">
+    <div class="term-bar">
+      <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+      <span class="term-title">install</span>
+    </div>
+    <code>
+<span class="cmt"># download latest binary (linux amd64)</span>
+<span class="prompt">$</span> <span class="cmd">curl -L https://github.com/laiambryant/tui-cardman/releases/latest/download/cardman_linux-amd64.tar.gz | tar xz</span>
+<span class="prompt">$</span> <span class="cmd">sudo mv cardman /usr/local/bin/</span>
+
+<span class="cmt"># initialise and launch</span>
+<span class="prompt">$</span> <span class="cmd">cardman migrate &amp;&amp; cardman import-full</span>
+<span class="prompt">$</span> <span class="cmd">cardman serve</span>
+<span class="ok">✓ cardman is running</span>
+    </code>
+  </div>
+
+</section>
+
+<!-- ── How It Works ────────────────────────────────────────── -->
+<section id="how-it-works">
+  <div class="sec-label">// 01</div>
+  <div class="sec-title">How It Works</div>
+  <div class="sec-divider">────────────────────────────────────────────────</div>
+
+  <p>
+    Cardman is a fully self-hosted card collection manager that runs entirely in your terminal.
+    There are no accounts, no cloud, no browser required — just a single binary and a SQLite file.
+    Pick the mode that fits your setup.
+  </p>
+
+  <div class="grid-2">
+
+    <!-- Local mode -->
+    <div class="panel">
+      <div class="panel-title">▶ Local Mode</div>
+      <span class="badge">single user</span>
+      <p>
+        Run cardman directly on your machine. Your collection lives in a local
+        <code class="inline">cardman.db</code> SQLite file. No network, no dependencies.
+      </p>
+      <div class="term" style="margin-top:1rem;">
+        <div class="term-bar">
+          <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+          <span class="term-title">local mode</span>
+        </div>
+        <code>
+<span class="prompt">$</span> <span class="cmd">cardman serve</span>
+        </code>
+      </div>
+      <ul class="feat-list" style="margin-top:1.2rem;">
+        <li><span class="icon">○</span> Single-user setup, zero config</li>
+        <li><span class="icon">○</span> Keybindings stored locally</li>
+        <li><span class="icon">○</span> Works completely offline</li>
+        <li><span class="icon">○</span> Data in a portable <code class="inline">.db</code> file</li>
+      </ul>
+    </div>
+
+    <!-- SSH mode -->
+    <div class="panel">
+      <div class="panel-title">▶ SSH Server Mode</div>
+      <span class="badge">multi-user</span>
+      <p>
+        Deploy cardman as a shared SSH server. Each user authenticates with their
+        own username and gets an isolated collection — all on the same host.
+      </p>
+      <div class="term" style="margin-top:1rem;">
+        <div class="term-bar">
+          <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+          <span class="term-title">ssh mode</span>
+        </div>
+        <code>
+<span class="cmt"># on the server</span>
+<span class="prompt">$</span> <span class="cmd">cardman serve-ssh</span>
+
+<span class="cmt"># from any client</span>
+<span class="prompt">$</span> <span class="cmd">ssh -p 2222 username@your-server</span>
+        </code>
+      </div>
+      <ul class="feat-list" style="margin-top:1.2rem;">
+        <li><span class="icon">○</span> Multiple independent users</li>
+        <li><span class="icon">○</span> Per-user keybinding config in DB</li>
+        <li><span class="icon">○</span> Docker-ready for easy deployment</li>
+        <li><span class="icon">○</span> Ed25519 host key authentication</li>
+      </ul>
+    </div>
+
+  </div>
+
+  <!-- Config table -->
+  <div class="ascii-sep">────────────────────────────────────────────────</div>
+
+  <div class="term">
+    <div class="term-bar">
+      <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+      <span class="term-title">.env configuration</span>
+    </div>
+    <code>
+<span class="cmt">DATABASE_DSN</span>   <span class="cmd">=  cardman.db          </span><span class="cmt"># path to sqlite file</span>
+<span class="cmt">LOG_LEVEL    </span>   <span class="cmd">=  INFO                </span><span class="cmt"># DEBUG | INFO | WARN | ERROR</span>
+<span class="cmt">SSH_MODE     </span>   <span class="cmd">=  false               </span><span class="cmt"># true to enable ssh server</span>
+<span class="cmt">PORT         </span>   <span class="cmd">=  2222                </span><span class="cmt"># ssh listen port</span>
+<span class="cmt">SSH_HOST_KEY </span>   <span class="cmd">=  ./host_key          </span><span class="cmt"># ed25519 key path</span>
+<span class="cmt">API_KEY      </span>   <span class="cmd">=                       </span><span class="cmt"># tcgdex api key (optional)</span>
+    </code>
+  </div>
+
+</section>
+
+<!-- ── Collection ──────────────────────────────────────────── -->
+<section id="collection">
+  <div class="sec-label">// 02</div>
+  <div class="sec-title">Collection</div>
+  <div class="sec-divider">────────────────────────────────────────────────</div>
+
+  <p>
+    Your collection is the foundation of cardman. Track every card you own,
+    see how complete each set is, monitor its total market value over time,
+    and export it in formats your other tools understand.
+  </p>
+
+  <div class="grid-2" style="margin-top:2rem;">
+
+    <div>
+      <ul class="feat-list">
+        <li><span class="icon">★</span> Track owned cards with per-card quantities</li>
+        <li><span class="icon">★</span> Browse by set with completion percentage</li>
+        <li><span class="icon">★</span> TCGPlayer &amp; CardMarket price snapshots</li>
+        <li><span class="icon">★</span> Total collection value with history chart</li>
+        <li><span class="icon">★</span> Search across the full card database</li>
+        <li><span class="icon">★</span> Full and incremental import from TCGDex API</li>
+        <li><span class="icon">★</span> Import specific sets by ID</li>
+      </ul>
+    </div>
+
+    <div>
+      <div class="panel">
+        <div class="panel-title">▶ Export Formats</div>
+        <ul class="feat-list">
+          <li><span class="icon">↓</span> <strong style="color:var(--text)">CSV</strong> &nbsp;—&nbsp; spreadsheet-compatible</li>
+          <li><span class="icon">↓</span> <strong style="color:var(--text)">Text</strong> &nbsp;—&nbsp; human-readable table</li>
+          <li><span class="icon">↓</span> <strong style="color:var(--text)">PTCGO</strong> &nbsp;—&nbsp; Pokemon TCG Online import</li>
+        </ul>
+        <div class="ascii-sep" style="margin:1rem 0;">──────────────</div>
+        <div class="term">
+          <div class="term-bar">
+            <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+            <span class="term-title">import commands</span>
+          </div>
+          <code>
+<span class="prompt">$</span> <span class="cmd">cardman import-full</span>
+<span class="prompt">$</span> <span class="cmd">cardman import-updates</span>
+<span class="prompt">$</span> <span class="cmd">cardman import-sets base1</span>
+          </code>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+</section>
+
+<!-- ── Lists ───────────────────────────────────────────────── -->
+<section id="lists">
+  <div class="sec-label">// 03</div>
+  <div class="sec-title">Lists</div>
+  <div class="sec-divider">────────────────────────────────────────────────</div>
+
+  <p>
+    Lists are flexible card groupings you define yourself. Use them as wishlists,
+    trade binders, want lists, or any custom grouping. Each list is named,
+    optionally described, and tagged with a color label so you can tell them apart at a glance.
+  </p>
+
+  <div class="grid-2" style="margin-top:2rem;">
+
+    <div class="panel">
+      <div class="panel-title">≡ What You Can Do</div>
+      <ul class="feat-list">
+        <li><span class="icon">○</span> Create unlimited named lists</li>
+        <li><span class="icon">○</span> Assign a color label to each list</li>
+        <li><span class="icon">○</span> Add cards with individual quantities</li>
+        <li><span class="icon">○</span> Update or remove cards in bulk</li>
+        <li><span class="icon">○</span> Delete entire lists when done</li>
+        <li><span class="icon">○</span> See which lists contain a given card</li>
+      </ul>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">≡ Example Use Cases</div>
+      <ul class="feat-list">
+        <li><span class="icon">◆</span> Wishlist &mdash; cards you want to acquire</li>
+        <li><span class="icon">◆</span> Trade binder &mdash; cards available to trade</li>
+        <li><span class="icon">◆</span> Set target &mdash; cards missing from a set</li>
+        <li><span class="icon">◆</span> Duplicates &mdash; extras to sell or trade away</li>
+        <li><span class="icon">◆</span> Gift list &mdash; cards you're buying for others</li>
+      </ul>
+    </div>
+
+  </div>
+
+</section>
+
+<!-- ── Decks ───────────────────────────────────────────────── -->
+<section id="decks">
+  <div class="sec-label">// 04</div>
+  <div class="sec-title">Decks</div>
+  <div class="sec-divider">────────────────────────────────────────────────</div>
+
+  <p>
+    The deck builder lets you construct and validate 60-card Pokemon TCG decks without leaving your terminal.
+    Add cards, adjust quantities, and get immediate validation feedback before you sleeve up.
+  </p>
+
+  <div class="grid-2" style="margin-top:2rem;">
+
+    <div>
+      <ul class="feat-list">
+        <li><span class="icon">★</span> Create multiple named decks per format</li>
+        <li><span class="icon">★</span> Add any card from your imported database</li>
+        <li><span class="icon">★</span> Adjust card counts with live feedback</li>
+        <li><span class="icon">★</span> Real-time deck validation on save</li>
+        <li><span class="icon">★</span> Rename or delete decks at any time</li>
+      </ul>
+
+      <div class="ascii-sep" style="margin:1.5rem 0;">────────────────────────</div>
+
+      <div class="rule-box">
+        <strong>Validation rules enforced:</strong><br /><br />
+        — Deck must contain exactly <strong>60 cards</strong><br />
+        — No more than <strong>4 copies</strong> of any non-energy card<br />
+        — Basic energy cards are <strong>exempt</strong> from the copy limit
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">▶ Deck Workflow</div>
+      <div class="term">
+        <div class="term-bar">
+          <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+          <span class="term-title">deck builder</span>
+        </div>
+        <code>
+<span class="cmt"># create a new deck</span>
+<span class="cmd">  name   : Charizard Ex</span>
+<span class="cmd">  format : Standard</span>
+
+<span class="cmt"># add cards</span>
+<span class="cmd">  4x Charizard ex</span>
+<span class="cmd">  4x Pidgeot ex</span>
+<span class="cmd">  2x Moltres ex</span>
+<span class="cmd">  ...</span>
+
+<span class="cmt"># validate on save</span>
+<span class="ok">  ✓ 60 cards</span>
+<span class="ok">  ✓ no copy limit violations</span>
+<span class="ok">  ✓ deck is legal</span>
+        </code>
+      </div>
+    </div>
+
+  </div>
+
+</section>
+
+<!-- ── Footer ─────────────────────────────────────────────── -->
+<footer>
+  <p>
+    cardman &nbsp;·&nbsp; MIT License &nbsp;·&nbsp;
+    <a href="https://github.com/laiambryant/tui-cardman" target="_blank" rel="noopener">github.com/laiambryant/tui-cardman</a>
+  </p>
+  <p style="margin-top:0.4rem; font-size:11px; color:var(--muted);">
+    built with &nbsp;<a href="https://github.com/charmbracelet/bubbletea" target="_blank" rel="noopener">bubbletea</a>
+    &nbsp;·&nbsp; sqlite &nbsp;·&nbsp; go
+  </p>
+</footer>
+
+</div><!-- /.page -->
+</body>
+</html>
