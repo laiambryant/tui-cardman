@@ -46,7 +46,7 @@ type KeyItem struct {
 func (h *HelpBuilder) Pair(action1, default1, action2, default2, description string) string {
 	k1 := h.resolveKey(action1, default1)
 	k2 := h.resolveKey(action2, default2)
-	return fmt.Sprintf("%s/%s: %s", k1, k2, description)
+	return fmt.Sprintf("%s / %s: %s", k1, k2, description)
 }
 
 // Build constructs help text from a list of key items
@@ -55,7 +55,25 @@ func (h *HelpBuilder) Build(items ...KeyItem) string {
 	for _, item := range items {
 		parts = append(parts, h.formatKeyItem(item))
 	}
-	return strings.Join(parts, " • ")
+	return strings.Join(parts, " | ")
+}
+
+// isModifierKey returns true for non-printable / modifier key combos that should
+// always be routed to shortcut handlers even when a search textinput is focused.
+// Printable single characters return false and should be forwarded to the textinput.
+func isModifierKey(s string) bool {
+	if strings.HasPrefix(s, "ctrl+") || strings.HasPrefix(s, "alt+") {
+		return true
+	}
+	switch s {
+	case "tab", "shift+tab", "enter", "\r", "\n",
+		"esc", "up", "down", "left", "right",
+		"home", "end",
+		"pgup", "pgdown", "f1", "f2", "f3", "f4",
+		"f5", "f6", "f7", "f8", "f9", "f10", "f11", "f12":
+		return true
+	}
+	return false
 }
 
 // Truncate shortens strings to `max` characters, appending an ellipsis when truncated

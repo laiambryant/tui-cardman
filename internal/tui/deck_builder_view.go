@@ -256,7 +256,7 @@ func (m DeckBuilderModel) handleDeckPanelKeys(msg tea.KeyMsg) (DeckBuilderModel,
 		}
 		return m, nil
 	}
-	if s == "n" {
+	if action == "create_new" {
 		m.mode = DeckModeCreate
 		m.nameInput.SetValue("")
 		m.nameInput.Focus()
@@ -264,7 +264,7 @@ func (m DeckBuilderModel) handleDeckPanelKeys(msg tea.KeyMsg) (DeckBuilderModel,
 		m.formFocus = 0
 		return m, nil
 	}
-	if s == "e" && m.selectedDeck != nil {
+	if action == "edit" && m.selectedDeck != nil {
 		m.mode = DeckModeEdit
 		m.nameInput.SetValue(m.selectedDeck.Name)
 		m.nameInput.Focus()
@@ -277,7 +277,7 @@ func (m DeckBuilderModel) handleDeckPanelKeys(msg tea.KeyMsg) (DeckBuilderModel,
 		m.formFocus = 0
 		return m, nil
 	}
-	if s == "d" && m.selectedDeck != nil {
+	if action == "delete" && m.selectedDeck != nil {
 		m.modal = newModal(
 			"Delete Deck",
 			fmt.Sprintf("Delete deck '%s'?", m.selectedDeck.Name),
@@ -299,7 +299,8 @@ func (m DeckBuilderModel) handleDeckPanelKeys(msg tea.KeyMsg) (DeckBuilderModel,
 func (m DeckBuilderModel) handleCardPanelKeys(msg tea.KeyMsg) (DeckBuilderModel, tea.Cmd) {
 	s := msg.String()
 	action := MatchActionOrDefault(m.configManager, s, "")
-	if action == "nav_up" || s == "up" || s == "k" {
+	// Arrow navigation — always safe
+	if action == "nav_up" || s == "up" {
 		if m.cardSubFocus == cardSubFocusDeck {
 			m.deckContentsTable, _ = m.deckContentsTable.Update(msg)
 		} else {
@@ -307,7 +308,7 @@ func (m DeckBuilderModel) handleCardPanelKeys(msg tea.KeyMsg) (DeckBuilderModel,
 		}
 		return m, nil
 	}
-	if action == "nav_down" || s == "down" || s == "j" {
+	if action == "nav_down" || s == "down" {
 		if m.cardSubFocus == cardSubFocusDeck {
 			if m.deckContentsTable.Cursor() < len(m.deckContentsTable.Rows())-1 {
 				m.deckContentsTable, _ = m.deckContentsTable.Update(msg)
@@ -319,37 +320,38 @@ func (m DeckBuilderModel) handleCardPanelKeys(msg tea.KeyMsg) (DeckBuilderModel,
 		}
 		return m, nil
 	}
-	if s == "ctrl+n" {
+	// Modifier-key shortcuts — safe regardless of search focus
+	if action == "page_next" {
 		m.cardPagination.NextPage()
 		m.updateCardTable()
 		m.cardTable.SetCursor(0)
 		return m, nil
 	}
-	if s == "ctrl+p" {
+	if action == "page_prev" {
 		m.cardPagination.PrevPage()
 		m.updateCardTable()
 		m.cardTable.SetCursor(0)
 		return m, nil
 	}
-	if action == "increment_quantity" {
+	if action == "increment_quantity" && m.cardSubFocus != cardSubFocusSearch {
 		return m.handleIncrement()
 	}
-	if action == "decrement_quantity" {
+	if action == "decrement_quantity" && m.cardSubFocus != cardSubFocusSearch {
 		return m.handleDecrement()
 	}
 	if action == "save" {
 		return m.handleSave()
 	}
-	if s == "x" && m.selectedDeck != nil {
+	if action == "export" && m.selectedDeck != nil {
 		m.exportState = NewExportState("deck", m.selectedDeck.Name, true, m.selectedDeck.Name, m.buildDeckExportRows)
 		return m, nil
 	}
-	if s == "i" && m.selectedDeck != nil {
+	if action == "import" && m.selectedDeck != nil {
 		m.importState = NewImportState(m.cardService, m.styleManager)
 		return m, nil
 	}
-	// Only forward to search input when focused on the search sub-panel
-	if m.cardSubFocus == cardSubFocusSearch {
+	// Forward non-modifier printable keys to the search textinput when it is focused
+	if m.cardSubFocus == cardSubFocusSearch && !isModifierKey(s) {
 		var cmd tea.Cmd
 		m.searchInput, cmd = m.searchInput.Update(msg)
 		m.filterCards()
@@ -727,15 +729,25 @@ func (m DeckBuilderModel) renderFooter() string {
 	hb := NewHelpBuilder(m.configManager)
 	var footer string
 	if m.mode != DeckModeNormal {
-		footer = m.styleManager.GetHelpStyle().Render("Tab: Switch field • Enter: Confirm • Esc: Cancel")
+		footer = m.styleManager.GetHelpStyle().Render("Tab: Switch field | Enter: Confirm | Esc: Cancel")
 	} else if m.focus == DeckFocusCardPanel {
-		footer = m.styleManager.GetHelpStyle().Render("Tab: Switch panel • " + hb.Build(
-			KeyItem{"increment_quantity", "+", "Add"},
-			KeyItem{"decrement_quantity", "Delete", "Remove"},
-			KeyItem{"save", "Ctrl+S", "Save"},
-		) + " • x: Export • i: Import • Ctrl+N/P: Page • " + hb.Build(KeyItem{"back", "Q", "Back"}))
+		footer = m.styleManager.GetHelpStyle().Render(strings.Join([]string{
+			"Tab: Switch panel",
+			hb.Build(
+				KeyItem{"increment_quantity", "+", "Add"},
+				KeyItem{"decrement_quantity", "Delete", "Remove"},
+				KeyItem{"save", "Ctrl+S", "Save"},
+			),
+			hb.Build(KeyItem{"export", "x", "Export"}, KeyItem{"import", "i", "Import"}),
+			hb.Pair("page_next", "Ctrl+N", "page_prev", "Ctrl+P", "Page"),
+			hb.Build(KeyItem{"back", "Q", "Back"}),
+		}, " | "))
 	} else {
-		footer = m.styleManager.GetHelpStyle().Render("Tab: Switch panel • n: New • e: Edit • d: Delete • " + hb.Build(KeyItem{"back", "Q", "Back"}))
+		footer = m.styleManager.GetHelpStyle().Render(strings.Join([]string{
+			"Tab: Switch panel",
+			hb.Build(KeyItem{"create_new", "n", "New"}, KeyItem{"edit", "e", "Edit"}, KeyItem{"delete", "d", "Delete"}),
+			hb.Build(KeyItem{"back", "Q", "Back"}),
+		}, " | "))
 	}
 	if m.exportState.statusMsg != "" {
 		footer = m.styleManager.GetHelpStyle().Render(m.exportState.statusMsg) + "  " + footer

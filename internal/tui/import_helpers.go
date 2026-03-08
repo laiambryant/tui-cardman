@@ -339,12 +339,29 @@ func (m ImportModel) renderStatusBar(contentWidth int) string {
 
 func (m ImportModel) renderHelp() string {
 	hb := NewHelpBuilder(m.configManager)
-	help := "Tab: Switch Panel • " + hb.Pair("nav_up", "↑", "nav_down", "↓", "Navigate") + " • " + hb.Build(
-		KeyItem{"select", "Enter", "Execute"},
-		KeyItem{"back", "Q", "Back"},
-	)
-	help += "\n" + helpStyle.Render("Sets: a: Queue • r: Unqueue • Queue: r: Remove • s: Start • c: Clear Done")
-	return helpStyle.Render(help)
+	common := strings.Join([]string{
+		"Tab: Switch Panel",
+		hb.Pair("nav_up", "↑", "nav_down", "↓", "Navigate"),
+		hb.Build(KeyItem{"back", "Q", "Back"}),
+	}, " | ")
+	var contextual string
+	switch m.focus {
+	case importFocusSets:
+		contextual = hb.Build(
+			KeyItem{"queue_add", "Ctrl+A", "Queue set"},
+			KeyItem{"queue_remove", "Ctrl+R", "Unqueue set"},
+			KeyItem{"queue_start", "Ctrl+G", "Start queue"},
+		)
+	case importFocusActions:
+		contextual = hb.Build(KeyItem{"select", "Enter", "Execute"})
+	case importFocusQueue:
+		contextual = hb.Build(
+			KeyItem{"queue_remove", "Ctrl+R", "Remove"},
+			KeyItem{"queue_start", "Ctrl+G", "Start"},
+			KeyItem{"queue_clear", "Ctrl+L", "Clear Done"},
+		)
+	}
+	return helpStyle.Render(common) + "\n" + helpStyle.Render(contextual)
 }
 
 func (m ImportModel) renderImportProgress() string {

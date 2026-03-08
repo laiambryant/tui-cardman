@@ -86,6 +86,8 @@ func NewImportModel(db *sql.DB, cfg *runtimecfg.Manager, styleManager *StyleMana
 	searchInput := textinput.New()
 	searchInput.Placeholder = "Search sets..."
 	searchInput.Width = 30
+	styleManager.ApplyTextInputStyles(&searchInput)
+	searchInput.Focus()
 	apiKey := config.GetAPIKey()
 	client := pokemontcg.NewClient(apiKey)
 	importRunService := importruns.NewImportRunService(db)
@@ -316,19 +318,19 @@ func (m ImportModel) handleKeyMsg(msg tea.KeyMsg) (ImportModel, tea.Cmd) {
 func (m ImportModel) handleSetListNavigation(msg tea.KeyMsg) (ImportModel, tea.Cmd) {
 	s := msg.String()
 	action := GetAction(m.configManager, s)
-	if action == "nav_up" || s == "up" || s == "k" {
+	if action == "nav_up" || s == "up" {
 		if m.cursor > 0 {
 			m.cursor--
 			return m, m.checkSelectedSetInDB()
 		}
 	}
-	if action == "nav_down" || s == "down" || s == "j" {
+	if action == "nav_down" || s == "down" {
 		if m.cursor < len(m.filteredSets)-1 {
 			m.cursor++
 			return m, m.checkSelectedSetInDB()
 		}
 	}
-	if s == "a" && len(m.filteredSets) > 0 && m.cursor < len(m.filteredSets) {
+	if action == "queue_add" && len(m.filteredSets) > 0 && m.cursor < len(m.filteredSets) {
 		set := m.filteredSets[m.cursor]
 		if !m.databaseSetIDs[set.ID] {
 			m.addToQueue(set.ID, set.Name)
@@ -336,28 +338,32 @@ func (m ImportModel) handleSetListNavigation(msg tea.KeyMsg) (ImportModel, tea.C
 		}
 		return m, nil
 	}
-	if s == "r" && len(m.filteredSets) > 0 && m.cursor < len(m.filteredSets) {
+	if action == "queue_remove" && len(m.filteredSets) > 0 && m.cursor < len(m.filteredSets) {
 		set := m.filteredSets[m.cursor]
 		m.removeFromQueue(set.ID)
 		m.statusMsg = fmt.Sprintf("Removed %s from queue (%d pending)", set.Name, m.queuePendingCount())
 		return m, nil
 	}
-	if s == "s" && len(m.importQueue) > 0 && !m.queueProcessing {
+	if action == "queue_start" && len(m.importQueue) > 0 && !m.queueProcessing {
 		return m.startQueueProcessing()
 	}
-	if s == "c" && !m.queueProcessing {
+	if action == "queue_clear" && !m.queueProcessing {
 		m.clearCompletedFromQueue()
 		m.statusMsg = "Cleared completed items from queue"
 		return m, nil
 	}
-	var cmd tea.Cmd
-	m.searchInput, cmd = m.searchInput.Update(msg)
-	if m.searchInput.Value() != "" {
-		m = m.filterSets()
-	} else {
-		m.filteredSets = m.availableSets
+	// Forward non-modifier printable keys to search textinput
+	if !isModifierKey(s) {
+		var cmd tea.Cmd
+		m.searchInput, cmd = m.searchInput.Update(msg)
+		if m.searchInput.Value() != "" {
+			m = m.filterSets()
+		} else {
+			m.filteredSets = m.availableSets
+		}
+		return m, cmd
 	}
-	return m, cmd
+	return m, nil
 }
 
 func (m ImportModel) startQueueProcessing() (ImportModel, tea.Cmd) {
@@ -421,7 +427,7 @@ func (m ImportModel) handleQueueNavigation(msg tea.KeyMsg) (ImportModel, tea.Cmd
 		}
 		return m, nil
 	}
-	if s == "r" {
+	if action == "queue_remove" {
 		if m.queueCursor < len(m.importQueue) {
 			item := m.importQueue[m.queueCursor]
 			m.removeFromQueue(item.setID)
@@ -432,10 +438,10 @@ func (m ImportModel) handleQueueNavigation(msg tea.KeyMsg) (ImportModel, tea.Cmd
 		}
 		return m, nil
 	}
-	if s == "s" && !m.queueProcessing {
+	if action == "queue_start" && !m.queueProcessing {
 		return m.startQueueProcessing()
 	}
-	if s == "c" && !m.queueProcessing {
+	if action == "queue_clear" && !m.queueProcessing {
 		m.clearCompletedFromQueue()
 		m.statusMsg = "Cleared completed items from queue"
 		return m, nil
@@ -561,7 +567,7 @@ func (m ImportModel) executeConfirmedAction() (ImportModel, tea.Cmd) {
 		for _, set := range m.availableSets {
 			m.addToQueue(set.ID, set.Name)
 		}
-		m.statusMsg = fmt.Sprintf("Added %d sets to queue. Press 's' to start.", len(m.availableSets))
+		m.statusMsg = fmt.Sprintf("Added %d sets to queue. Press Ctrl+G to start.", len(m.availableSets))
 		return m, nil
 	case ActionImportUpdates:
 		added := 0
@@ -571,7 +577,7 @@ func (m ImportModel) executeConfirmedAction() (ImportModel, tea.Cmd) {
 				added++
 			}
 		}
-		m.statusMsg = fmt.Sprintf("Added %d new sets to queue. Press 's' to start.", added)
+		m.statusMsg = fmt.Sprintf("Added %d new sets to queue. Press Ctrl+G to start.", added)
 		return m, nil
 	}
 	return m, nil
