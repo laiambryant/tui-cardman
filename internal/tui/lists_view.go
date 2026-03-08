@@ -34,6 +34,13 @@ const (
 	ListsModeEdit
 )
 
+type listCardPanelSubFocus int
+
+const (
+	listCardSubFocusSearch listCardPanelSubFocus = iota
+	listCardSubFocusContents
+)
+
 var listColorOptions = []struct {
 	Name  string
 	Color string
@@ -76,6 +83,8 @@ type ListsModel struct {
 	filteredCards       []model.Card
 	searchInput         textinput.Model
 	cardTable           table.Model
+	listContentsTable   table.Model
+	cardSubFocus        listCardPanelSubFocus
 	focus               ListsFocus
 	tempQuantityChanges map[int64]int
 	dbQuantities        map[int64]int
@@ -109,6 +118,14 @@ func NewListsModel(game *model.CardGame, user *auth.User, listSvc listservice.Li
 		{Title: "Quantity", Width: 8},
 	}
 	cardTable := NewStyledTable(columns, 10, true, sm)
+	listContentsColumns := []table.Column{
+		{Title: "Name", Width: 25},
+		{Title: "Expansion", Width: 15},
+		{Title: "Rarity", Width: 12},
+		{Title: "Card #", Width: 8},
+		{Title: "Quantity", Width: 8},
+	}
+	listContentsTable := NewStyledTable(listContentsColumns, 5, false, sm)
 	return ListsModel{
 		selectedGame:        game,
 		user:                user,
@@ -122,6 +139,7 @@ func NewListsModel(game *model.CardGame, user *auth.User, listSvc listservice.Li
 		nameInput:           nameInput,
 		descInput:           descInput,
 		cardTable:           cardTable,
+		listContentsTable:   listContentsTable,
 		tempQuantityChanges: make(map[int64]int),
 		dbQuantities:        make(map[int64]int),
 	}
@@ -193,7 +211,7 @@ func (m ListsModel) Update(msg tea.Msg) (ListsModel, tea.Cmd) {
 		}
 		return m.handleCardPanelKeys(msg, s, action)
 	}
-	if m.focus == ListsFocusCardPanel {
+	if m.focus == ListsFocusCardPanel && m.cardSubFocus == listCardSubFocusSearch {
 		if keyMsg, ok := msg.(tea.KeyMsg); ok {
 			s := keyMsg.String()
 			action := MatchActionOrDefault(m.configManager, s, "")
@@ -230,8 +248,10 @@ func (m ListsModel) handleListPanelKeys(s, action string) (ListsModel, tea.Cmd) 
 	if action == "nav_right" || s == "right" || s == "tab" {
 		if m.selectedList != nil {
 			m.focus = ListsFocusCardPanel
+			m.cardSubFocus = listCardSubFocusSearch
 			m.searchInput.Focus()
 			m.cardTable.Focus()
+			m.listContentsTable.Blur()
 		}
 		return m, nil
 	}
@@ -275,24 +295,62 @@ func (m ListsModel) handleListPanelKeys(s, action string) (ListsModel, tea.Cmd) 
 }
 
 func (m ListsModel) handleCardPanelKeys(msg tea.KeyMsg, s, action string) (ListsModel, tea.Cmd) {
+	if s == "tab" {
+		if m.cardSubFocus == listCardSubFocusSearch {
+			m.cardSubFocus = listCardSubFocusContents
+			m.cardTable.Blur()
+			m.searchInput.Blur()
+			m.listContentsTable.Focus()
+		} else {
+			m.focus = ListsFocusListPanel
+			m.cardSubFocus = listCardSubFocusSearch
+			m.cardTable.Blur()
+			m.searchInput.Blur()
+			m.listContentsTable.Blur()
+		}
+		return m, nil
+	}
 	if action == "nav_left" || s == "left" || s == "shift+tab" {
 		m.focus = ListsFocusListPanel
+		m.cardSubFocus = listCardSubFocusSearch
 		m.searchInput.Blur()
 		m.cardTable.Blur()
+		m.listContentsTable.Blur()
 		return m, nil
 	}
 	if isBackKey(action, s) {
+		if m.cardSubFocus == listCardSubFocusContents {
+			m.cardSubFocus = listCardSubFocusSearch
+			m.listContentsTable.Blur()
+			m.cardTable.Focus()
+			m.searchInput.Focus()
+			return m, nil
+		}
 		m.focus = ListsFocusListPanel
+		m.cardSubFocus = listCardSubFocusSearch
 		m.searchInput.Blur()
 		m.cardTable.Blur()
+		m.listContentsTable.Blur()
 		return m, nil
 	}
 	if action == "nav_up" || s == "up" || s == "k" {
-		m.cardTable, _ = m.cardTable.Update(msg)
+		if m.cardSubFocus == listCardSubFocusContents {
+			m.listContentsTable, _ = m.listContentsTable.Update(msg)
+		} else {
+			m.cardTable, _ = m.cardTable.Update(msg)
+		}
 		return m, nil
 	}
 	if action == "nav_down" || s == "down" || s == "j" {
-		m.cardTable, _ = m.cardTable.Update(msg)
+		if m.cardSubFocus == listCardSubFocusContents {
+			if m.listContentsTable.Cursor() < len(m.listContentsTable.Rows())-1 {
+				m.listContentsTable, _ = m.listContentsTable.Update(msg)
+			}
+		} else {
+			if m.cardTable.Cursor() < len(m.cardTable.Rows())-1 {
+				m.cardTable, _ = m.cardTable.Update(msg)
+			}
+		}
 		return m, nil
 	}
 	if action == "increment_quantity" {
@@ -312,12 +370,15 @@ func (m ListsModel) handleCardPanelKeys(msg tea.KeyMsg, s, action string) (Lists
 		m.importState = NewImportState(m.cardService, m.styleManager)
 		return m, nil
 	}
-	var cmd tea.Cmd
-	m.searchInput, cmd = m.searchInput.Update(msg)
-	m.filteredCards = m.filterListCards(m.searchInput.Value())
-	m.updateListCardTable()
-	m.cardTable.SetCursor(0)
-	return m, cmd
+	if m.cardSubFocus == listCardSubFocusSearch {
+		var cmd tea.Cmd
+		m.searchInput, cmd = m.searchInput.Update(msg)
+		m.filteredCards = m.filterListCards(m.searchInput.Value())
+		m.updateListCardTable()
+		m.cardTable.SetCursor(0)
+		return m, cmd
+	}
+	return m, nil
 }
 
 func (m ListsModel) handleFormKeys(s, action string) (ListsModel, tea.Cmd) {
@@ -437,9 +498,9 @@ func (m ListsModel) renderBody(availableHeight int) string {
 	}
 	leftWidth := contentWidth * 35 / 100
 	rightWidth := contentWidth - leftWidth
-	leftPanel := m.renderListPanel(leftWidth, availableHeight)
+	leftContent := m.renderListPanel(leftWidth, availableHeight)
 	rightPanel := m.renderCardPanel(rightWidth, availableHeight)
-	return lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, rightPanel)
+	return lipgloss.JoinHorizontal(lipgloss.Top, leftContent, rightPanel)
 }
 
 func (m ListsModel) renderListPanel(width, height int) string {
@@ -505,41 +566,59 @@ func (m ListsModel) renderForm() string {
 }
 
 func (m ListsModel) renderCardPanel(width, height int) string {
-	var b strings.Builder
+	tableWidth := max(width-4, 20)
 	if m.selectedList == nil {
+		var b strings.Builder
 		b.WriteString(m.styleManager.GetBlurredStyle().Render("Select a list to manage cards.") + "\n")
 		return RenderPanel(m.styleManager, b.String(), width, height, m.focus == ListsFocusCardPanel, 1, 0)
 	}
+	topHeight := max(height*6/10, 5)
+	bottomHeight := max(height-topHeight, 5)
 	colorDot := m.styleManager.applyBGFG(lipgloss.NewStyle().Foreground(lipgloss.Color(m.selectedList.Color))).Render("●")
-	b.WriteString(colorDot + " " + m.styleManager.GetTitleStyle().Render(m.selectedList.Name) + "\n")
-	b.WriteString(m.styleManager.GetBlurredStyle().Render("Search: ") + m.styleManager.GetNoStyle().Render(m.searchInput.View()) + "\n")
+	searchFocused := m.cardSubFocus == listCardSubFocusSearch
+	var top strings.Builder
+	if searchFocused {
+		top.WriteString(colorDot + " " + m.styleManager.GetTitleStyle().Render(m.selectedList.Name) + "\n")
+	} else {
+		top.WriteString(colorDot + " " + m.styleManager.GetBlurredStyle().Render(m.selectedList.Name) + "\n")
+	}
+	top.WriteString(m.styleManager.GetBlurredStyle().Render("Search: ") + m.styleManager.GetNoStyle().Render(m.searchInput.View()) + "\n")
 	showAll := m.searchInput.Value() == ""
 	var rows []table.Row
 	if showAll {
 		for _, card := range m.cards {
-			dbQty := m.dbQuantities[card.ID]
-			tempDelta := m.tempQuantityChanges[card.ID]
-			rows = append(rows, cardToRow(card, dbQty, tempDelta))
+			rows = append(rows, cardToRow(card, m.dbQuantities[card.ID], m.tempQuantityChanges[card.ID]))
 		}
 	} else {
 		for _, card := range m.filteredCards {
-			dbQty := m.dbQuantities[card.ID]
-			tempDelta := m.tempQuantityChanges[card.ID]
-			rows = append(rows, cardToRow(card, dbQty, tempDelta))
+			rows = append(rows, cardToRow(card, m.dbQuantities[card.ID], m.tempQuantityChanges[card.ID]))
 		}
 	}
 	if len(rows) == 0 {
-		b.WriteString(m.styleManager.GetBlurredStyle().Render("No cards match your search.") + "\n")
+		top.WriteString(m.styleManager.GetBlurredStyle().Render("No cards match your search.") + "\n")
 	} else {
-		tableHeight := CalcTableHeight(height-2, 3, 3)
-		// panelPadX=1, borderOverhead=2: inner table area = width - 4
-		tableWidth := max(width-4, 20)
+		searchTableHeight := CalcTableHeight(topHeight, 2, 3)
 		m.cardTable.SetColumns(scaledCardSearchColumns(tableWidth))
 		m.cardTable.SetRows(rows)
-		m.cardTable.SetHeight(tableHeight)
-		b.WriteString(m.cardTable.View())
+		m.cardTable.SetHeight(searchTableHeight)
+		top.WriteString(m.cardTable.View())
 	}
-	return RenderPanel(m.styleManager, b.String(), width, height, m.focus == ListsFocusCardPanel, 1, 0)
+	contentsFocused := m.cardSubFocus == listCardSubFocusContents
+	var bottom strings.Builder
+	if contentsFocused {
+		bottom.WriteString(m.styleManager.GetTitleStyle().Render("List Contents") + "\n")
+	} else {
+		bottom.WriteString(m.styleManager.GetBlurredStyle().Render("List Contents") + "\n")
+	}
+	if len(m.listContentsTable.Rows()) == 0 {
+		bottom.WriteString(m.styleManager.GetBlurredStyle().Render("No cards in list yet.") + "\n")
+	} else {
+		contentsTableHeight := CalcTableHeight(bottomHeight, 1, 3)
+		m.listContentsTable.SetColumns(scaledCardSearchColumns(tableWidth))
+		m.listContentsTable.SetHeight(contentsTableHeight)
+		bottom.WriteString(m.listContentsTable.View())
+	}
+	return renderSplitCardPanel(m.styleManager, top.String(), searchFocused, bottom.String(), contentsFocused, width, topHeight, bottomHeight)
 }
 
 func (m ListsModel) renderFooter() string {
@@ -555,7 +634,7 @@ func (m ListsModel) renderFooter() string {
 		footer = m.styleManager.GetHelpStyle().Render("Tab: next field • Enter: confirm • Esc: cancel")
 	} else if m.focus == ListsFocusCardPanel {
 		footer = m.styleManager.GetHelpStyle().Render(
-			hb.Build(
+			"Tab: Switch panel • " + hb.Build(
 				KeyItem{"increment_quantity", "+", "Add"},
 				KeyItem{"decrement_quantity", "Delete", "Remove"},
 				KeyItem{"save", "Ctrl+S", "Save"},
@@ -626,12 +705,7 @@ func (m ListsModel) handleSaveListCards() (ListsModel, tea.Cmd) {
 	if len(m.tempQuantityChanges) == 0 || m.selectedList == nil {
 		return m, nil
 	}
-	changeCount := 0
-	for _, delta := range m.tempQuantityChanges {
-		if delta != 0 {
-			changeCount++
-		}
-	}
+	changeCount := countNonZeroDeltas(m.tempQuantityChanges)
 	if changeCount == 0 {
 		return m, nil
 	}
@@ -650,12 +724,7 @@ func (m ListsModel) performSaveListCards() (ListsModel, tea.Cmd) {
 	if m.selectedList == nil {
 		return m, nil
 	}
-	updates := make(map[int64]int)
-	for cardID, tempDelta := range m.tempQuantityChanges {
-		dbQty := m.dbQuantities[cardID]
-		newQty := dbQty + tempDelta
-		updates[cardID] = newQty
-	}
+	updates := buildQuantityUpdates(m.dbQuantities, m.tempQuantityChanges)
 	ctx := context.Background()
 	err := m.listService.UpsertListCardBatch(ctx, m.selectedList.ID, updates)
 	if err != nil {
@@ -739,6 +808,19 @@ func (m *ListsModel) updateListCardTable() {
 		rows = append(rows, cardToRow(card, dbQty, tempDelta))
 	}
 	m.cardTable.SetRows(rows)
+	m.updateListContentsTable()
+}
+
+func (m *ListsModel) updateListContentsTable() {
+	var rows []table.Row
+	for _, card := range m.cards {
+		qty := m.dbQuantities[card.ID] + m.tempQuantityChanges[card.ID]
+		if qty <= 0 {
+			continue
+		}
+		rows = append(rows, cardToRow(card, 0, qty))
+	}
+	m.listContentsTable.SetRows(rows)
 }
 
 func (m ListsModel) filterListCards(query string) []model.Card {

@@ -410,44 +410,18 @@ func (m *DeckBuilderModel) selectCurrentDeck() {
 }
 
 func (m *DeckBuilderModel) filterCards() {
-	query := strings.ToLower(m.searchInput.Value())
-	if query == "" {
-		m.filteredCards = m.cards
-		return
-	}
-	var filtered []model.Card
-	for _, c := range m.cards {
-		if strings.Contains(strings.ToLower(c.Name), query) ||
-			strings.Contains(strings.ToLower(c.Number), query) {
-			filtered = append(filtered, c)
-		}
-	}
-	m.filteredCards = filtered
+	m.filteredCards = filterCardsByQuery(m.cards, m.searchInput.Value())
 }
 
 func (m *DeckBuilderModel) updateCardTable() {
 	var rows []table.Row
 	for _, card := range m.filteredCards {
-		dbQty := m.dbQuantities[card.ID]
-		tempDelta := m.tempQuantityChanges[card.ID]
-		setName := ""
-		if card.Set != nil {
-			setName = card.Set.Name
-		}
-		rows = append(rows, table.Row{
-			Truncate(card.Name, 20),
-			Truncate(setName, 12),
-			Truncate(card.Rarity, 10),
-			Truncate(card.Number, 6),
-			fmt.Sprintf("%d", dbQty+tempDelta),
-		})
+		rows = append(rows, cardToRow(card, m.dbQuantities[card.ID], m.tempQuantityChanges[card.ID]))
 	}
 	m.cardTable.SetRows(rows)
 	m.updateDeckContentsTable()
 }
 
-// updateDeckContentsTable rebuilds the deck contents table from cards that
-// have a non-zero combined quantity (db + temp) in the selected deck.
 func (m *DeckBuilderModel) updateDeckContentsTable() {
 	var rows []table.Row
 	for _, card := range m.cards {
@@ -455,17 +429,7 @@ func (m *DeckBuilderModel) updateDeckContentsTable() {
 		if qty <= 0 {
 			continue
 		}
-		setName := ""
-		if card.Set != nil {
-			setName = card.Set.Name
-		}
-		rows = append(rows, table.Row{
-			Truncate(card.Name, 20),
-			Truncate(setName, 12),
-			Truncate(card.Rarity, 10),
-			Truncate(card.Number, 6),
-			fmt.Sprintf("%d", qty),
-		})
+		rows = append(rows, cardToRow(card, 0, qty))
 	}
 	m.deckContentsTable.SetRows(rows)
 }
@@ -525,12 +489,7 @@ func (m DeckBuilderModel) handleSave() (DeckBuilderModel, tea.Cmd) {
 	if m.selectedDeck == nil || len(m.tempQuantityChanges) == 0 {
 		return m, nil
 	}
-	changeCount := 0
-	for _, delta := range m.tempQuantityChanges {
-		if delta != 0 {
-			changeCount++
-		}
-	}
+	changeCount := countNonZeroDeltas(m.tempQuantityChanges)
 	if changeCount == 0 {
 		return m, nil
 	}
@@ -548,10 +507,7 @@ func (m DeckBuilderModel) performSave() (DeckBuilderModel, tea.Cmd) {
 	if m.selectedDeck == nil {
 		return m, nil
 	}
-	updates := make(map[int64]int)
-	for cardID, delta := range m.tempQuantityChanges {
-		updates[cardID] = m.dbQuantities[cardID] + delta
-	}
+	updates := buildQuantityUpdates(m.dbQuantities, m.tempQuantityChanges)
 	ctx := context.Background()
 	err := m.deckService.UpsertDeckCardBatch(ctx, m.selectedDeck.ID, updates)
 	if err != nil {
@@ -634,9 +590,7 @@ func (m DeckBuilderModel) renderBody(availableHeight int) string {
 	}
 	leftWidth := contentWidth * 35 / 100
 	rightWidth := contentWidth - leftWidth
-	leftContent := m.renderDeckPanel(leftWidth, availableHeight)
-	leftPanel := RenderPanel(m.styleManager, leftContent, leftWidth, availableHeight, m.focus == DeckFocusDeckPanel, 1, 0)
-	// renderCardPanel returns its own pre-paneled content (two stacked RenderPanel boxes)
+	leftPanel := m.renderDeckPanel(leftWidth, availableHeight)
 	rightPanel := m.renderCardPanel(rightWidth, availableHeight)
 	return lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, rightPanel)
 }
@@ -664,11 +618,11 @@ func (m DeckBuilderModel) renderDeckPanel(width, height int) string {
 			}
 		}
 		b.WriteString("\n")
-		return b.String()
+		return RenderPanel(m.styleManager, b.String(), width, height, m.focus == DeckFocusDeckPanel, 1, 0)
 	}
 	if len(m.decks) == 0 {
 		b.WriteString(m.styleManager.GetBlurredStyle().Render("No decks yet. Press 'n' to create.") + "\n")
-		return b.String()
+		return RenderPanel(m.styleManager, b.String(), width, height, m.focus == DeckFocusDeckPanel, 1, 0)
 	}
 	for i, d := range m.decks {
 		line := fmt.Sprintf("%s (%s)", d.Name, d.Format)
@@ -692,7 +646,7 @@ func (m DeckBuilderModel) renderDeckPanel(width, height int) string {
 			}
 		}
 	}
-	return b.String()
+	return RenderPanel(m.styleManager, b.String(), width, height, m.focus == DeckFocusDeckPanel, 1, 0)
 }
 
 func (m DeckBuilderModel) renderCardPanel(width, height int) string {
@@ -700,16 +654,11 @@ func (m DeckBuilderModel) renderCardPanel(width, height int) string {
 	if m.selectedDeck == nil {
 		return m.styleManager.GetBlurredStyle().Render("Select a deck to add cards.") + "\n"
 	}
-
-	// Split the available height: top ~60% for search/add, bottom ~40% for deck contents.
-	// Each sub-section has 2 header lines (title + search/label row).
 	topHeight := max(height*6/10, 5)
 	bottomHeight := max(height-topHeight, 5)
-
-	// --- Top: search/add table ---
-	var top strings.Builder
 	searchFocused := m.cardSubFocus == cardSubFocusSearch
 	titleStyle := m.styleManager.GetTitleStyle()
+	var top strings.Builder
 	if searchFocused {
 		top.WriteString(titleStyle.Render("Add Cards: "+m.selectedDeck.Name) + "\n")
 	} else {
@@ -724,11 +673,8 @@ func (m DeckBuilderModel) renderCardPanel(width, height int) string {
 		m.cardTable.SetHeight(searchTableHeight)
 		top.WriteString(m.cardTable.View())
 	}
-	topPanel := RenderPanel(m.styleManager, top.String(), width, topHeight, searchFocused, 1, 0)
-
-	// --- Bottom: deck contents ---
-	var bottom strings.Builder
 	deckFocused := m.cardSubFocus == cardSubFocusDeck
+	var bottom strings.Builder
 	if deckFocused {
 		bottom.WriteString(titleStyle.Render("Deck Contents") + "\n")
 	} else {
@@ -742,9 +688,7 @@ func (m DeckBuilderModel) renderCardPanel(width, height int) string {
 		m.deckContentsTable.SetHeight(deckTableHeight)
 		bottom.WriteString(m.deckContentsTable.View())
 	}
-	bottomPanel := RenderPanel(m.styleManager, bottom.String(), width, bottomHeight, deckFocused, 1, 0)
-
-	return lipgloss.JoinVertical(lipgloss.Left, topPanel, bottomPanel)
+	return renderSplitCardPanel(m.styleManager, top.String(), searchFocused, bottom.String(), deckFocused, width, topHeight, bottomHeight)
 }
 
 func (m DeckBuilderModel) renderFooter() string {

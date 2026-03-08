@@ -214,6 +214,30 @@ func filterCardsByQuery(cards []model.Card, query string) []model.Card {
 	return filtered
 }
 
+func renderSplitCardPanel(sm *StyleManager, topContent string, topFocused bool, bottomContent string, bottomFocused bool, width, topHeight, bottomHeight int) string {
+	topPanel := RenderPanel(sm, topContent, width, topHeight, topFocused, 1, 0)
+	bottomPanel := RenderPanel(sm, bottomContent, width, bottomHeight, bottomFocused, 1, 0)
+	return lipgloss.JoinVertical(lipgloss.Left, topPanel, bottomPanel)
+}
+
+func countNonZeroDeltas(deltas map[int64]int) int {
+	count := 0
+	for _, delta := range deltas {
+		if delta != 0 {
+			count++
+		}
+	}
+	return count
+}
+
+func buildQuantityUpdates(dbQtys, tempDeltas map[int64]int) map[int64]int {
+	updates := make(map[int64]int)
+	for cardID, delta := range tempDeltas {
+		updates[cardID] = dbQtys[cardID] + delta
+	}
+	return updates
+}
+
 // buildCardExportRows produces a CSV-ready row slice from a card list and quantity maps.
 // Cards with a combined quantity of zero or below are omitted.
 func buildCardExportRows(cards []model.Card, dbQtys, tempDeltas map[int64]int) []export.CardRow {
