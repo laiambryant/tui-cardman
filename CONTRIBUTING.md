@@ -43,7 +43,6 @@ Tests use an in-memory SQLite database and apply all migrations automatically. N
 
 - Run `go fmt ./...` before committing
 - Run `go vet ./...` to catch common issues
-- Follow the conventions in [AGENTS.md](AGENTS.md) — import grouping, error handling, logging with `slog`
 - Interfaces for all service layers; dependency injection via constructors
 
 ## Project Structure

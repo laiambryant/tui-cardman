@@ -36,41 +36,42 @@ type setCompletionData struct {
 	Total   int
 	Percent float64
 }
+
 type CardGameTabsModel struct {
-	selectedGame        *model.CardGame
-	currentTab          Tab
-	searchInput         textinput.Model
-	cards               []model.Card
-	userCollections     []model.UserCollection
-	filteredCards       []model.Card
-	filteredCollection  []model.UserCollection
-	cursor              int
-	cardTable           table.Model
-	configManager       *runtimecfg.Manager
-	styleManager        *StyleManager
-	width               int
-	height              int
-	tempQuantityChanges map[int64]int
-	dbQuantities        map[int64]int
-	collectionService   usercollection.UserCollectionService
-	user                *auth.User
-	modal               ModalModel
-	setCompletionTable  table.Model
-	setCompletions      []setCompletionData
-	spotlightSetID      int64
-	collectionTabFocus  int
-	spotlightScroll     int
-	collectionValue     float64
-	rarityBreakdown     string
-	userSearchTable     table.Model
-	userSearchInput     textinput.Model
-	searchTabFocus      int
-	cardDetail          *CardDetailModel
-	valueHistory        []usercollection.ValueSnapshot
-	exportState         ExportState
-	searchCache         *SearchCache
-	collectionCache     *SearchCache
-	cardPagination      Pagination
+	selectedGame         *model.CardGame
+	currentTab           Tab
+	searchInput          textinput.Model
+	cards                []model.Card
+	userCollections      []model.UserCollection
+	filteredCards        []model.Card
+	filteredCollection   []model.UserCollection
+	cursor               int
+	cardTable            table.Model
+	configManager        *runtimecfg.Manager
+	styleManager         *StyleManager
+	width                int
+	height               int
+	tempQuantityChanges  map[int64]int
+	dbQuantities         map[int64]int
+	collectionService    usercollection.UserCollectionService
+	user                 *auth.User
+	modal                ModalModel
+	setCompletionTable   table.Model
+	setCompletions       []setCompletionData
+	spotlightSetID       int64
+	collectionTabFocus   int
+	spotlightScroll      int
+	collectionValue      float64
+	rarityBreakdown      string
+	userSearchTable      table.Model
+	userSearchInput      textinput.Model
+	searchTabFocus       int
+	cardDetail           *CardDetailModel
+	valueHistory         []usercollection.ValueSnapshot
+	exportState          ExportState
+	searchCache          *SearchCache
+	collectionCache      *SearchCache
+	cardPagination       Pagination
 	collectionPagination Pagination
 }
 

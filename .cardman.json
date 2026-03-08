@@ -1,7 +1,7 @@
 {
   "keybindings": {
     "back": "q",
-    "decrement_quantity": "delete",
+    "decrement_quantity": "-",
     "increment_quantity": "+",
     "nav_down": "down",
     "nav_left": "left",

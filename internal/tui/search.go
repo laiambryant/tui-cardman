@@ -236,7 +236,6 @@ func (p Pagination) Slice() (int, int) {
 	start := p.CurrentPage * p.PageSize
 	if start >= p.TotalItems {
 		start = max((p.TotalPages()-1)*p.PageSize, 0)
-		p.CurrentPage = max(p.TotalPages()-1, 0)
 	}
 	end := start + p.PageSize
 	if end > p.TotalItems {
