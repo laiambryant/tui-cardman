@@ -581,11 +581,7 @@ func (m ImportModel) View() string {
 	if m.isImporting {
 		return m.renderImportProgress()
 	}
-	view := m.renderImportView()
-	if m.modal.IsVisible() {
-		return m.modal.View()
-	}
-	return view
+	return m.renderImportView()
 }
 
 func (m ImportModel) fetchSetsCmd() tea.Cmd {
