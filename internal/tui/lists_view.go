@@ -537,7 +537,7 @@ func (m ListsModel) renderCardPanel(width, height int) string {
 		m.cardTable.SetColumns(scaledCardSearchColumns(tableWidth))
 		m.cardTable.SetRows(rows)
 		m.cardTable.SetHeight(tableHeight)
-		b.WriteString(m.styleManager.GetTableBaseStyle().Render(m.cardTable.View()))
+		b.WriteString(m.cardTable.View())
 	}
 	return RenderPanel(m.styleManager, b.String(), width, height, m.focus == ListsFocusCardPanel, 1, 0)
 }
