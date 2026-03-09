@@ -33,8 +33,8 @@ type SettingsModel struct {
 	shouldClose    bool
 	width          int
 	height         int
-	activeTab    int
-	columnCursor int
+	activeTab      int
+	columnCursor   int
 }
 
 // NewSettingsModel creates a new settings model

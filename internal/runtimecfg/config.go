@@ -69,10 +69,10 @@ func Default() *RuntimeConfig {
 			"page_prev": "ctrl+p",
 
 			// Import queue operations (ctrl+ to avoid search conflicts)
-			"queue_add":   "ctrl+a",
+			"queue_add":    "ctrl+a",
 			"queue_remove": "ctrl+r",
-			"queue_start": "ctrl+g",
-			"queue_clear": "ctrl+l",
+			"queue_start":  "ctrl+g",
+			"queue_clear":  "ctrl+l",
 		},
 		UI: UIConfig{
 			CompactLists:   false,

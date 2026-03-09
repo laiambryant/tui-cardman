@@ -800,7 +800,6 @@ func (m *CardGameTabsModel) paginateCollections(collections []model.UserCollecti
 	return collections[start:end]
 }
 
-
 // filterUserCollection filters user collection based on search query using fuzzy matching
 func (m CardGameTabsModel) filterUserCollection(query string) []model.UserCollection {
 	if query == "" {
@@ -828,7 +827,6 @@ func (m *CardGameTabsModel) updateCardTable() {
 	m.cardTable.SetColumns(vcs.Columns)
 	m.cardTable.SetRows(buildCardRows(page, m.dbQuantities, m.tempQuantityChanges, vcs))
 }
-
 
 // handleIncrementQuantity increments the quantity of the selected card
 func (m CardGameTabsModel) handleIncrementQuantity() (CardGameTabsModel, tea.Cmd) {
