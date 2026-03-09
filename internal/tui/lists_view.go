@@ -597,15 +597,13 @@ func (m ListsModel) renderCardPanel(width, height int) string {
 	m.cardPagination.TotalItems = len(source)
 	start, end := m.cardPagination.Slice()
 	page := source[start:end]
-	var rows []table.Row
-	for _, card := range page {
-		rows = append(rows, cardToRow(card, m.dbQuantities[card.ID], m.tempQuantityChanges[card.ID]))
-	}
+	vcs := BuildVisibleColumnSet(CardSearchColumns, GetVisibleColumns(m.configManager), GetColumnOrder(m.configManager), tableWidth)
+	rows := buildCardRows(page, m.dbQuantities, m.tempQuantityChanges, vcs)
 	if len(rows) == 0 {
 		top.WriteString(m.styleManager.GetBlurredStyle().Render("No cards match your search.") + "\n")
 	} else {
 		searchTableHeight := CalcTableHeight(topHeight, 2, 3)
-		m.cardTable.SetColumns(scaledCardSearchColumns(tableWidth))
+		m.cardTable.SetColumns(vcs.Columns)
 		m.cardTable.SetRows(rows)
 		m.cardTable.SetHeight(searchTableHeight)
 		top.WriteString(m.cardTable.View())
@@ -621,7 +619,7 @@ func (m ListsModel) renderCardPanel(width, height int) string {
 		bottom.WriteString(m.styleManager.GetBlurredStyle().Render("No cards in list yet.") + "\n")
 	} else {
 		contentsTableHeight := CalcTableHeight(bottomHeight, 1, 3)
-		m.listContentsTable.SetColumns(scaledCardSearchColumns(tableWidth))
+		m.listContentsTable.SetColumns(vcs.Columns)
 		m.listContentsTable.SetHeight(contentsTableHeight)
 		bottom.WriteString(m.listContentsTable.View())
 	}
@@ -823,24 +821,21 @@ func (m *ListsModel) updateListCardTable() {
 	m.cardPagination.TotalItems = len(source)
 	start, end := m.cardPagination.Slice()
 	page := source[start:end]
-	var rows []table.Row
-	for _, card := range page {
-		dbQty := m.dbQuantities[card.ID]
-		tempDelta := m.tempQuantityChanges[card.ID]
-		rows = append(rows, cardToRow(card, dbQty, tempDelta))
-	}
-	m.cardTable.SetRows(rows)
-	m.updateListContentsTable()
+	vcs := BuildVisibleColumnSet(CardSearchColumns, GetVisibleColumns(m.configManager), GetColumnOrder(m.configManager), 80)
+	m.cardTable.SetColumns(vcs.Columns)
+	m.cardTable.SetRows(buildCardRows(page, m.dbQuantities, m.tempQuantityChanges, vcs))
+	m.listContentsTable.SetColumns(vcs.Columns)
+	m.updateListContentsTable(vcs)
 }
 
-func (m *ListsModel) updateListContentsTable() {
+func (m *ListsModel) updateListContentsTable(vcs VisibleColumnSet) {
 	var rows []table.Row
 	for _, card := range m.cards {
 		qty := m.dbQuantities[card.ID] + m.tempQuantityChanges[card.ID]
 		if qty <= 0 {
 			continue
 		}
-		rows = append(rows, cardToRow(card, 0, qty))
+		rows = append(rows, vcs.BuildRow(CardToDataMap(card, 0, qty)))
 	}
 	m.listContentsTable.SetRows(rows)
 }

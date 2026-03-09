@@ -47,6 +47,7 @@ func fuzzySearchCards(cards []model.Card, query string) []FuzzySearchResult {
 		func(c model.Card) string { return c.Name },
 		func(c model.Card) string { return c.Number },
 		func(c model.Card) string { return c.Rarity },
+		func(c model.Card) string { return c.Artist },
 	}
 
 	for _, field := range fields {
@@ -98,6 +99,12 @@ func fuzzySearchCollections(collections []model.UserCollection, query string) []
 		func(c model.UserCollection) string {
 			if c.Card != nil {
 				return c.Card.Rarity
+			}
+			return ""
+		},
+		func(c model.UserCollection) string {
+			if c.Card != nil {
+				return c.Card.Artist
 			}
 			return ""
 		},

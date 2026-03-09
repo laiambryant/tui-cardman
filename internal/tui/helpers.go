@@ -76,7 +76,185 @@ func isModifierKey(s string) bool {
 	return false
 }
 
-// Truncate shortens strings to `max` characters, appending an ellipsis when truncated
+type ColumnDef struct {
+	Key        string
+	Title      string
+	Proportion int
+	MinWidth   int
+}
+
+var CardSearchColumns = []ColumnDef{
+	{"name", "Name", 37, 8},
+	{"expansion", "Expansion", 22, 5},
+	{"rarity", "Rarity", 18, 5},
+	{"number", "Card #", 12, 4},
+	{"quantity", "Quantity", 11, 3},
+	{"artist", "Artist", 15, 5},
+}
+
+var CollectionColumns = []ColumnDef{
+	{"name", "Name", 42, 8},
+	{"expansion", "Expansion", 25, 5},
+	{"rarity", "Rarity", 20, 5},
+	{"quantity", "Amount", 13, 3},
+	{"artist", "Artist", 15, 5},
+}
+
+var DeckColumns = []ColumnDef{
+	{"name", "Name", 38, 8},
+	{"expansion", "Set", 23, 4},
+	{"rarity", "Rarity", 19, 4},
+	{"number", "#", 11, 3},
+	{"quantity", "Qty", 9, 3},
+	{"artist", "Artist", 15, 5},
+}
+
+type VisibleColumnSet struct {
+	Columns []table.Column
+	Keys    []string
+	Widths  map[string]int
+}
+
+func BuildVisibleColumnSet(allCols []ColumnDef, visible map[string]bool, order []string, availableWidth int) VisibleColumnSet {
+	active := filterActiveDefsOrdered(allCols, visible, order)
+	cellPadding := len(active) * 2
+	usable := max(availableWidth-cellPadding, len(active)*3)
+	totalProportion := sumProportions(active)
+	widths := distributeWidths(active, usable, totalProportion)
+	return buildColumnSet(active, widths)
+}
+
+func filterActiveDefsOrdered(allCols []ColumnDef, visible map[string]bool, order []string) []ColumnDef {
+	defMap := make(map[string]ColumnDef, len(allCols))
+	for _, c := range allCols {
+		defMap[c.Key] = c
+	}
+	var active []ColumnDef
+	added := make(map[string]bool)
+	for _, key := range order {
+		if !visible[key] {
+			continue
+		}
+		if def, ok := defMap[key]; ok {
+			active = append(active, def)
+			added[key] = true
+		}
+	}
+	for _, c := range allCols {
+		if visible[c.Key] && !added[c.Key] {
+			active = append(active, c)
+		}
+	}
+	return active
+}
+
+func sumProportions(cols []ColumnDef) int {
+	total := 0
+	for _, c := range cols {
+		total += c.Proportion
+	}
+	return total
+}
+
+func distributeWidths(cols []ColumnDef, usable, totalProportion int) []int {
+	widths := make([]int, len(cols))
+	remaining := usable
+	for i, c := range cols {
+		if i == len(cols)-1 {
+			widths[i] = max(remaining, c.MinWidth)
+			break
+		}
+		widths[i] = max(usable*c.Proportion/totalProportion, c.MinWidth)
+		remaining -= widths[i]
+	}
+	return widths
+}
+
+func buildColumnSet(active []ColumnDef, widths []int) VisibleColumnSet {
+	vcs := VisibleColumnSet{
+		Columns: make([]table.Column, len(active)),
+		Keys:    make([]string, len(active)),
+		Widths:  make(map[string]int, len(active)),
+	}
+	for i, c := range active {
+		vcs.Columns[i] = table.Column{Title: c.Title, Width: widths[i]}
+		vcs.Keys[i] = c.Key
+		vcs.Widths[c.Key] = widths[i]
+	}
+	return vcs
+}
+
+func (vcs VisibleColumnSet) BuildRow(data map[string]string) table.Row {
+	row := make(table.Row, len(vcs.Keys))
+	for i, key := range vcs.Keys {
+		row[i] = Truncate(data[key], vcs.Widths[key])
+	}
+	return row
+}
+
+func CardToDataMap(card model.Card, dbQty, tempDelta int) map[string]string {
+	setDisplay := ""
+	if card.Set != nil {
+		setDisplay = card.Set.Name
+	} else if card.SetID > 0 {
+		setDisplay = fmt.Sprintf("Set#%d", card.SetID)
+	}
+	return map[string]string{
+		"name":      card.Name,
+		"expansion": setDisplay,
+		"rarity":    card.Rarity,
+		"number":    card.Number,
+		"quantity":  fmt.Sprintf("%d", dbQty+tempDelta),
+		"artist":    card.Artist,
+	}
+}
+
+func CollectionToDataMap(c model.UserCollection) map[string]string {
+	name := "Unknown Card"
+	setDisplay := ""
+	rarity := ""
+	artist := ""
+	if c.Card != nil {
+		name = c.Card.Name
+		if c.Card.Set != nil {
+			setDisplay = c.Card.Set.Name
+		} else if c.Card.SetID > 0 {
+			setDisplay = fmt.Sprintf("Set#%d", c.Card.SetID)
+		}
+		rarity = c.Card.Rarity
+		artist = c.Card.Artist
+	}
+	return map[string]string{
+		"name":      name,
+		"expansion": setDisplay,
+		"rarity":    rarity,
+		"quantity":  fmt.Sprintf("%d", c.Quantity),
+		"artist":    artist,
+	}
+}
+
+func GetVisibleColumns(cfg *runtimecfg.Manager) map[string]bool {
+	if cfg == nil {
+		return runtimecfg.DefaultVisibleColumns()
+	}
+	c := cfg.Get()
+	if c.UI.VisibleColumns == nil {
+		return runtimecfg.DefaultVisibleColumns()
+	}
+	return c.UI.VisibleColumns
+}
+
+func GetColumnOrder(cfg *runtimecfg.Manager) []string {
+	if cfg == nil {
+		return runtimecfg.DefaultColumnOrder()
+	}
+	c := cfg.Get()
+	if len(c.UI.ColumnOrder) == 0 {
+		return runtimecfg.DefaultColumnOrder()
+	}
+	return c.UI.ColumnOrder
+}
+
 func Truncate(s string, max int) string {
 	if len(s) > max {
 		return s[:max-3] + "..."

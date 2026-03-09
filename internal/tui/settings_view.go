@@ -33,6 +33,8 @@ type SettingsModel struct {
 	shouldClose    bool
 	width          int
 	height         int
+	activeTab    int
+	columnCursor int
 }
 
 // NewSettingsModel creates a new settings model
@@ -145,11 +147,23 @@ func (m SettingsModel) handleNormalKey(action, s string) (SettingsModel, tea.Cmd
 	case action == "back" || action == "quit_alt":
 		m.initiateSave()
 		return m, nil
+	case s == "tab" || action == "nav_next_tab":
+		m.activeTab = (m.activeTab + 1) % 2
+		return m, nil
+	case s == "shift+tab" || action == "nav_prev_tab":
+		m.activeTab = (m.activeTab + 1) % 2
+		return m, nil
 	case action == "nav_up" || s == "k" || s == "up":
 		m.navigateUp()
 		return m, nil
 	case action == "nav_down" || s == "j" || s == "down":
 		m.navigateDown()
+		return m, nil
+	case m.activeTab == 1 && s == "shift+up":
+		m.moveColumnUp()
+		return m, nil
+	case m.activeTab == 1 && s == "shift+down":
+		m.moveColumnDown()
 		return m, nil
 	case action == "select":
 		m.handleSelectKey()
@@ -159,15 +173,26 @@ func (m SettingsModel) handleNormalKey(action, s string) (SettingsModel, tea.Cmd
 }
 
 func (m *SettingsModel) navigateUp() {
-	if m.cursor > 0 {
-		m.cursor--
+	if m.activeTab == 0 {
+		if m.cursor > 0 {
+			m.cursor--
+		}
+	} else {
+		if m.columnCursor > 0 {
+			m.columnCursor--
+		}
 	}
 }
 
 func (m *SettingsModel) navigateDown() {
-	maxCursor := len(m.actions) - 1
-	if m.cursor < maxCursor {
-		m.cursor++
+	if m.activeTab == 0 {
+		if m.cursor < len(m.actions)-1 {
+			m.cursor++
+		}
+	} else {
+		if m.columnCursor < len(m.tempConfig.UI.ColumnOrder)-1 {
+			m.columnCursor++
+		}
 	}
 }
 
@@ -178,11 +203,15 @@ func (m *SettingsModel) stopEditing() {
 }
 
 func (m *SettingsModel) handleSelectKey() {
-	if m.cursor < len(m.actions) {
-		m.editing = true
-		m.editingAction = m.actions[m.cursor]
-		m.errorMsg = ""
+	if m.activeTab == 0 {
+		if m.cursor < len(m.actions) {
+			m.editing = true
+			m.editingAction = m.actions[m.cursor]
+			m.errorMsg = ""
+		}
+		return
 	}
+	m.toggleSelectedColumn()
 }
 
 func (m SettingsModel) View() string {
@@ -198,7 +227,7 @@ func (m SettingsModel) renderSettingsHeader() string {
 		title += " *"
 	}
 	b.WriteString(m.styleManager.GetTitleStyle().Render(title) + "\n")
-	b.WriteString(RenderTabBar(m.styleManager, []string{"Keybindings"}, 0))
+	b.WriteString(RenderTabBar(m.styleManager, []string{"Keybindings", "Columns"}, m.activeTab))
 	return b.String()
 }
 
@@ -212,7 +241,11 @@ func (m SettingsModel) renderSettingsBody(maxLines int) string {
 	if availableLines < 1 {
 		availableLines = 1
 	}
-	b.WriteString(m.renderKeybindingsSection(availableLines))
+	if m.activeTab == 0 {
+		b.WriteString(m.renderKeybindingsSection(availableLines))
+	} else {
+		b.WriteString(m.renderColumnsSection(availableLines))
+	}
 	return b.String()
 }
 
@@ -290,29 +323,119 @@ func (m SettingsModel) renderKeybindingsSection(maxLines int) string {
 
 func (m SettingsModel) buildHelpText() string {
 	hb := NewHelpBuilder(m.configManager)
-	help := hb.Build(KeyItem{"settings", "F1", "Settings"}) + " • " + hb.Pair("nav_up", "↑", "nav_down", "↓", "Navigate") + " • " + hb.Build(
-		KeyItem{"select", "Enter", "Edit"},
-		KeyItem{"quit_alt", "Esc", "Close"},
-	)
+	selectLabel := "Edit"
+	if m.activeTab == 1 {
+		selectLabel = "Toggle"
+	}
+	parts := []string{
+		"Tab: Switch tab",
+		hb.Pair("nav_up", "↑", "nav_down", "↓", "Navigate"),
+		hb.Build(KeyItem{"select", "Enter", selectLabel}, KeyItem{"quit_alt", "Esc", "Close"}),
+	}
+	if m.activeTab == 1 {
+		parts = append(parts, "Shift+↑/↓: Reorder")
+	}
+	help := strings.Join(parts, " • ")
 	if m.hasChanges {
 		help += " • Ctrl+S: Save"
 	}
 	return help
 }
 
-// copyConfig creates a deep copy of a RuntimeConfig
+func (m *SettingsModel) moveColumnUp() {
+	if m.columnCursor <= 0 || m.columnCursor >= len(m.tempConfig.UI.ColumnOrder) {
+		return
+	}
+	o := m.tempConfig.UI.ColumnOrder
+	o[m.columnCursor], o[m.columnCursor-1] = o[m.columnCursor-1], o[m.columnCursor]
+	m.columnCursor--
+	m.hasChanges = true
+}
+
+func (m *SettingsModel) moveColumnDown() {
+	if m.columnCursor < 0 || m.columnCursor >= len(m.tempConfig.UI.ColumnOrder)-1 {
+		return
+	}
+	o := m.tempConfig.UI.ColumnOrder
+	o[m.columnCursor], o[m.columnCursor+1] = o[m.columnCursor+1], o[m.columnCursor]
+	m.columnCursor++
+	m.hasChanges = true
+}
+
+func (m *SettingsModel) toggleSelectedColumn() {
+	if m.columnCursor >= len(m.tempConfig.UI.ColumnOrder) {
+		return
+	}
+	key := m.tempConfig.UI.ColumnOrder[m.columnCursor]
+	if key == "name" {
+		return
+	}
+	m.tempConfig.UI.VisibleColumns[key] = !m.tempConfig.UI.VisibleColumns[key]
+	m.hasChanges = true
+}
+
+func (m SettingsModel) renderColumnsSection(maxLines int) string {
+	var b strings.Builder
+	headerSpace := m.styleManager.GetNoStyle().Render(strings.Repeat(" ", 20))
+	b.WriteString(m.styleManager.GetTitleStyle().Render("Column") + headerSpace + m.styleManager.GetTitleStyle().Render("Visible") + "\n")
+	b.WriteString(m.styleManager.GetNoStyle().Render(strings.Repeat("─", 40)) + "\n")
+	for i, key := range m.tempConfig.UI.ColumnOrder {
+		visible := m.tempConfig.UI.VisibleColumns[key]
+		checkbox := "[ ]"
+		if visible {
+			checkbox = "[x]"
+		}
+		label := columnDisplayName(key)
+		if key == "name" {
+			checkbox += " (required)"
+		}
+		display := fmt.Sprintf("%-25s %s", label, checkbox)
+		if i == m.columnCursor {
+			b.WriteString(m.styleManager.GetSettingsSelectedStyle().Render("> "+display) + "\n")
+		} else {
+			b.WriteString(m.styleManager.GetBlurredStyle().Render("  "+display) + "\n")
+		}
+	}
+	return b.String()
+}
+
+func columnDisplayName(key string) string {
+	names := map[string]string{
+		"name":      "Name",
+		"expansion": "Expansion / Set",
+		"rarity":    "Rarity",
+		"number":    "Card Number",
+		"quantity":  "Quantity",
+		"artist":    "Artist",
+	}
+	if n, ok := names[key]; ok {
+		return n
+	}
+	return key
+}
+
 func copyConfig(cfg *runtimecfg.RuntimeConfig) *runtimecfg.RuntimeConfig {
 	if cfg == nil {
 		return nil
 	}
-	copy := &runtimecfg.RuntimeConfig{
-		UI: cfg.UI,
+	cp := &runtimecfg.RuntimeConfig{
+		UI: runtimecfg.UIConfig{
+			CompactLists: cfg.UI.CompactLists,
+		},
 	}
 	if cfg.Keybindings != nil {
-		copy.Keybindings = make(map[string]string)
-		maps.Copy(copy.Keybindings, cfg.Keybindings)
+		cp.Keybindings = make(map[string]string)
+		maps.Copy(cp.Keybindings, cfg.Keybindings)
 	}
-	return copy
+	if cfg.UI.VisibleColumns != nil {
+		cp.UI.VisibleColumns = make(map[string]bool)
+		maps.Copy(cp.UI.VisibleColumns, cfg.UI.VisibleColumns)
+	}
+	if cfg.UI.ColumnOrder != nil {
+		cp.UI.ColumnOrder = make([]string, len(cfg.UI.ColumnOrder))
+		copy(cp.UI.ColumnOrder, cfg.UI.ColumnOrder)
+	}
+	return cp
 }
 
 func (m *SettingsModel) initiateSave() {

@@ -237,10 +237,26 @@ func (m CardGameTabsModel) getSelectedCard() (model.Card, bool) {
 	return source[actualIndex], true
 }
 
-func buildCollectionRows(collections []model.UserCollection) []table.Row {
+func (m CardGameTabsModel) cardSearchVCS(width int) VisibleColumnSet {
+	return BuildVisibleColumnSet(CardSearchColumns, GetVisibleColumns(m.configManager), GetColumnOrder(m.configManager), width)
+}
+
+func (m CardGameTabsModel) collectionVCS(width int) VisibleColumnSet {
+	return BuildVisibleColumnSet(CollectionColumns, GetVisibleColumns(m.configManager), GetColumnOrder(m.configManager), width)
+}
+
+func buildCardRows(cards []model.Card, dbQtys, tempDeltas map[int64]int, vcs VisibleColumnSet) []table.Row {
+	var rows []table.Row
+	for _, card := range cards {
+		rows = append(rows, vcs.BuildRow(CardToDataMap(card, dbQtys[card.ID], tempDeltas[card.ID])))
+	}
+	return rows
+}
+
+func buildCollectionRows(collections []model.UserCollection, vcs VisibleColumnSet) []table.Row {
 	var rows []table.Row
 	for _, collection := range collections {
-		rows = append(rows, collectionToRow(collection))
+		rows = append(rows, vcs.BuildRow(CollectionToDataMap(collection)))
 	}
 	return rows
 }
@@ -423,7 +439,7 @@ func (m CardGameTabsModel) Update(msg tea.Msg) (CardGameTabsModel, tea.Cmd) {
 				} else {
 					m.collectionPagination.NextPage()
 					m.filteredCollection = m.filterUserCollection(m.userSearchInput.Value())
-					m.userSearchTable.SetRows(buildCollectionRows(m.paginateCollections(m.filteredCollection)))
+					m.updateUserSearchTable(m.paginateCollections(m.filteredCollection))
 					m.userSearchTable.SetCursor(0)
 				}
 				return m, nil
@@ -436,7 +452,7 @@ func (m CardGameTabsModel) Update(msg tea.Msg) (CardGameTabsModel, tea.Cmd) {
 				} else {
 					m.collectionPagination.PrevPage()
 					m.filteredCollection = m.filterUserCollection(m.userSearchInput.Value())
-					m.userSearchTable.SetRows(buildCollectionRows(m.paginateCollections(m.filteredCollection)))
+					m.updateUserSearchTable(m.paginateCollections(m.filteredCollection))
 					m.userSearchTable.SetCursor(0)
 				}
 				return m, nil
@@ -477,7 +493,7 @@ func (m CardGameTabsModel) Update(msg tea.Msg) (CardGameTabsModel, tea.Cmd) {
 				m.filteredCollection = m.filterUserCollection(m.userSearchInput.Value())
 				m.collectionPagination.Reset()
 				m.collectionPagination.TotalItems = len(m.filteredCollection)
-				m.userSearchTable.SetRows(buildCollectionRows(m.paginateCollections(m.filteredCollection)))
+				m.updateUserSearchTable(m.paginateCollections(m.filteredCollection))
 				m.userSearchTable.SetCursor(0)
 				return m, cmd
 			}
@@ -610,7 +626,7 @@ func (m CardGameTabsModel) updateTableForTab() CardGameTabsModel {
 		m.cardTable.Focus()
 		m.userSearchTable.Blur()
 		m.filteredCollection = m.filterUserCollection(m.userSearchInput.Value())
-		m.userSearchTable.SetRows(buildCollectionRows(m.filteredCollection))
+		m.updateUserSearchTable(m.filteredCollection)
 	case TabCollection:
 		m.setCompletionTable.Focus()
 		m.collectionTabFocus = 0
@@ -747,7 +763,9 @@ func (m CardGameTabsModel) renderSearchLeftPanel(tableHeight, tableWidth int) st
 		}
 		return b.String()
 	}
-	m.cardTable.SetColumns(scaledCardSearchColumns(tableWidth))
+	visible := GetVisibleColumns(m.configManager)
+	vcs := BuildVisibleColumnSet(CardSearchColumns, visible, GetColumnOrder(m.configManager), tableWidth)
+	m.cardTable.SetColumns(vcs.Columns)
 	m.cardTable.SetHeight(tableHeight)
 	b.WriteString(m.cardTable.View())
 	return b.String()
@@ -761,8 +779,10 @@ func (m CardGameTabsModel) renderSearchRightPanel(tableHeight, tableWidth int) s
 		b.WriteString(m.renderEmptySearchMessage(m.userSearchInput.Value(), "No cards in your collection yet.", "No cards match your search."))
 		return b.String()
 	}
-	m.userSearchTable.SetColumns(scaledCollectionColumns(tableWidth))
-	m.userSearchTable.SetRows(buildCollectionRows(m.paginateCollections(m.filteredCollection)))
+	visible := GetVisibleColumns(m.configManager)
+	vcs := BuildVisibleColumnSet(CollectionColumns, visible, GetColumnOrder(m.configManager), tableWidth)
+	m.userSearchTable.SetColumns(vcs.Columns)
+	m.userSearchTable.SetRows(buildCollectionRows(m.paginateCollections(m.filteredCollection), vcs))
 	m.userSearchTable.SetHeight(tableHeight)
 	b.WriteString(m.userSearchTable.View())
 	return b.String()
@@ -780,67 +800,6 @@ func (m *CardGameTabsModel) paginateCollections(collections []model.UserCollecti
 	return collections[start:end]
 }
 
-// scaledCardSearchColumns returns 5 table columns whose widths sum to availableWidth,
-// distributed proportionally (Name 37%, Expansion 22%, Rarity 18%, Card# 12%, Qty 11%).
-// Each column has a sensible minimum width so narrow terminals remain usable.
-func scaledCardSearchColumns(availableWidth int) []table.Column {
-	// Each cell has Padding(0, 1), so each column consumes Width+2 chars.
-	// Subtract the total cell padding (5 columns × 2) before distributing.
-	availableWidth = max(availableWidth-10, 20)
-	// proportions: 37, 22, 18, 12, 11  (sum = 100)
-	name := max(availableWidth*37/100, 8)
-	exp := max(availableWidth*22/100, 5)
-	rar := max(availableWidth*18/100, 5)
-	num := max(availableWidth*12/100, 4)
-	qty := max(availableWidth-name-exp-rar-num, 3)
-	return []table.Column{
-		{Title: "Name", Width: name},
-		{Title: "Expansion", Width: exp},
-		{Title: "Rarity", Width: rar},
-		{Title: "Card #", Width: num},
-		{Title: "Quantity", Width: qty},
-	}
-}
-
-// scaledDeckColumns returns 5 table columns for the deck builder card panel,
-// proportionally distributed (Name 38%, Set 23%, Rarity 19%, # 11%, Qty 9%).
-func scaledDeckColumns(availableWidth int) []table.Column {
-	// Each cell has Padding(0, 1), so each column consumes Width+2 chars.
-	// Subtract the total cell padding (5 columns × 2) before distributing.
-	availableWidth = max(availableWidth-10, 15)
-	// proportions: 38, 23, 19, 11, 9 (sum = 100)
-	name := max(availableWidth*38/100, 8)
-	set := max(availableWidth*23/100, 4)
-	rar := max(availableWidth*19/100, 4)
-	num := max(availableWidth*11/100, 3)
-	qty := max(availableWidth-name-set-rar-num, 3)
-	return []table.Column{
-		{Title: "Name", Width: name},
-		{Title: "Set", Width: set},
-		{Title: "Rarity", Width: rar},
-		{Title: "#", Width: num},
-		{Title: "Qty", Width: qty},
-	}
-}
-
-// scaledCollectionColumns returns 4 table columns whose widths sum to availableWidth,
-// distributed proportionally (Name 42%, Expansion 25%, Rarity 20%, Amount 13%).
-func scaledCollectionColumns(availableWidth int) []table.Column {
-	// Each cell has Padding(0, 1), so each column consumes Width+2 chars.
-	// Subtract the total cell padding (4 columns × 2) before distributing.
-	availableWidth = max(availableWidth-8, 16)
-	// proportions: 42, 25, 20, 13 (sum = 100)
-	name := max(availableWidth*42/100, 8)
-	exp := max(availableWidth*25/100, 5)
-	rar := max(availableWidth*20/100, 5)
-	amt := max(availableWidth-name-exp-rar, 3)
-	return []table.Column{
-		{Title: "Name", Width: name},
-		{Title: "Expansion", Width: exp},
-		{Title: "Rarity", Width: rar},
-		{Title: "Amount", Width: amt},
-	}
-}
 
 // filterUserCollection filters user collection based on search query using fuzzy matching
 func (m CardGameTabsModel) filterUserCollection(query string) []model.UserCollection {
@@ -851,6 +810,12 @@ func (m CardGameTabsModel) filterUserCollection(query string) []model.UserCollec
 }
 
 // updateCardTable updates the table with current cards, applying pagination.
+func (m *CardGameTabsModel) updateUserSearchTable(collections []model.UserCollection) {
+	vcs := m.collectionVCS(80)
+	m.userSearchTable.SetColumns(vcs.Columns)
+	m.userSearchTable.SetRows(buildCollectionRows(collections, vcs))
+}
+
 func (m *CardGameTabsModel) updateCardTable() {
 	source := m.filteredCards
 	if m.searchInput.Value() == "" {
@@ -859,57 +824,11 @@ func (m *CardGameTabsModel) updateCardTable() {
 	m.cardPagination.TotalItems = len(source)
 	start, end := m.cardPagination.Slice()
 	page := source[start:end]
-	var rows []table.Row
-	for _, card := range page {
-		dbQty := m.dbQuantities[card.ID]
-		tempDelta := m.tempQuantityChanges[card.ID]
-		rows = append(rows, cardToRow(card, dbQty, tempDelta))
-	}
-	m.cardTable.SetRows(rows)
+	vcs := m.cardSearchVCS(80)
+	m.cardTable.SetColumns(vcs.Columns)
+	m.cardTable.SetRows(buildCardRows(page, m.dbQuantities, m.tempQuantityChanges, vcs))
 }
 
-// cardToRow converts a Card into a table.Row with appropriate truncation and quantity.
-func cardToRow(card model.Card, dbQty, tempDelta int) table.Row {
-	setDisplay := ""
-	if card.Set != nil {
-		setDisplay = card.Set.Name
-	} else if card.SetID > 0 {
-		setDisplay = fmt.Sprintf("Set#%d", card.SetID)
-	}
-	totalQty := dbQty + tempDelta
-	return table.Row{
-		Truncate(card.Name, 25),
-		Truncate(setDisplay, 15),
-		Truncate(card.Rarity, 12),
-		Truncate(card.Number, 8),
-		fmt.Sprintf("%d", totalQty),
-	}
-}
-
-// collectionToRow converts a UserCollection into a table.Row with truncation.
-func collectionToRow(c model.UserCollection) table.Row {
-	name := "Unknown Card"
-	setDisplay := ""
-	rarity := ""
-	qty := fmt.Sprintf("%d", c.Quantity)
-
-	if c.Card != nil {
-		name = c.Card.Name
-		if c.Card.Set != nil {
-			setDisplay = c.Card.Set.Name
-		} else if c.Card.SetID > 0 {
-			setDisplay = fmt.Sprintf("Set#%d", c.Card.SetID)
-		}
-		rarity = c.Card.Rarity
-	}
-
-	return table.Row{
-		Truncate(name, 25),
-		Truncate(setDisplay, 15),
-		Truncate(rarity, 12),
-		qty,
-	}
-}
 
 // handleIncrementQuantity increments the quantity of the selected card
 func (m CardGameTabsModel) handleIncrementQuantity() (CardGameTabsModel, tea.Cmd) {

@@ -14,9 +14,10 @@ type RuntimeConfig struct {
 	UI          UIConfig          `json:"ui"`
 }
 
-// UIConfig holds UI-related settings
 type UIConfig struct {
-	CompactLists bool `json:"compact_lists"`
+	CompactLists   bool            `json:"compact_lists"`
+	VisibleColumns map[string]bool `json:"visible_columns"`
+	ColumnOrder    []string        `json:"column_order"`
 }
 
 // Default returns a RuntimeConfig with sensible defaults
@@ -74,7 +75,9 @@ func Default() *RuntimeConfig {
 			"queue_clear": "ctrl+l",
 		},
 		UI: UIConfig{
-			CompactLists: false,
+			CompactLists:   false,
+			VisibleColumns: DefaultVisibleColumns(),
+			ColumnOrder:    DefaultColumnOrder(),
 		},
 	}
 }
@@ -94,7 +97,52 @@ func Load(path string) (*RuntimeConfig, error) {
 	}
 	defaults := Default()
 	initializeKeybindings(&cfg, defaults)
+	initializeVisibleColumns(&cfg, defaults)
+	initializeColumnOrder(&cfg, defaults)
 	return &cfg, nil
+}
+
+func DefaultVisibleColumns() map[string]bool {
+	return map[string]bool{
+		"name":      true,
+		"expansion": true,
+		"rarity":    true,
+		"number":    true,
+		"quantity":  true,
+		"artist":    false,
+	}
+}
+
+func DefaultColumnOrder() []string {
+	return []string{"name", "expansion", "rarity", "number", "quantity", "artist"}
+}
+
+func initializeColumnOrder(cfg, defaults *RuntimeConfig) {
+	if len(cfg.UI.ColumnOrder) == 0 {
+		cfg.UI.ColumnOrder = defaults.UI.ColumnOrder
+		return
+	}
+	existing := make(map[string]bool, len(cfg.UI.ColumnOrder))
+	for _, k := range cfg.UI.ColumnOrder {
+		existing[k] = true
+	}
+	for _, k := range defaults.UI.ColumnOrder {
+		if !existing[k] {
+			cfg.UI.ColumnOrder = append(cfg.UI.ColumnOrder, k)
+		}
+	}
+}
+
+func initializeVisibleColumns(cfg, defaults *RuntimeConfig) {
+	if cfg.UI.VisibleColumns == nil {
+		cfg.UI.VisibleColumns = defaults.UI.VisibleColumns
+	} else {
+		for col, vis := range defaults.UI.VisibleColumns {
+			if _, exists := cfg.UI.VisibleColumns[col]; !exists {
+				cfg.UI.VisibleColumns[col] = vis
+			}
+		}
+	}
 }
 
 func initializeKeybindings(cfg, defaults *RuntimeConfig) {

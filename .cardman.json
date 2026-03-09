@@ -1,7 +1,12 @@
 {
   "keybindings": {
     "back": "q",
+    "create_new": "n",
     "decrement_quantity": "-",
+    "delete": "d",
+    "edit": "e",
+    "export": "x",
+    "import": "i",
     "increment_quantity": "+",
     "nav_down": "down",
     "nav_left": "left",
@@ -9,6 +14,12 @@
     "nav_prev_tab": "shift+tab",
     "nav_right": "right",
     "nav_up": "up",
+    "page_next": "ctrl+n",
+    "page_prev": "ctrl+p",
+    "queue_add": "ctrl+a",
+    "queue_clear": "ctrl+l",
+    "queue_remove": "ctrl+r",
+    "queue_start": "ctrl+g",
     "quit": "ctrl+c",
     "quit_alt": "esc",
     "save": "ctrl+s",
@@ -23,6 +34,22 @@
     "tab_search": "3"
   },
   "ui": {
-    "compact_lists": false
+    "compact_lists": false,
+    "visible_columns": {
+      "artist": true,
+      "expansion": true,
+      "name": true,
+      "number": false,
+      "quantity": true,
+      "rarity": false
+    },
+    "column_order": [
+      "name",
+      "rarity",
+      "number",
+      "artist",
+      "expansion",
+      "quantity"
+    ]
   }
 }

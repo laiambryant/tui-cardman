@@ -433,26 +433,29 @@ func (m *DeckBuilderModel) filterCards() {
 	m.filteredCards = filterCardsByQueryCached(m.cards, m.searchInput.Value(), m.searchCache)
 }
 
+func (m *DeckBuilderModel) deckVCS(width int) VisibleColumnSet {
+	return BuildVisibleColumnSet(DeckColumns, GetVisibleColumns(m.configManager), GetColumnOrder(m.configManager), width)
+}
+
 func (m *DeckBuilderModel) updateCardTable() {
 	m.cardPagination.TotalItems = len(m.filteredCards)
 	start, end := m.cardPagination.Slice()
 	page := m.filteredCards[start:end]
-	var rows []table.Row
-	for _, card := range page {
-		rows = append(rows, cardToRow(card, m.dbQuantities[card.ID], m.tempQuantityChanges[card.ID]))
-	}
-	m.cardTable.SetRows(rows)
-	m.updateDeckContentsTable()
+	vcs := m.deckVCS(80)
+	m.cardTable.SetColumns(vcs.Columns)
+	m.cardTable.SetRows(buildCardRows(page, m.dbQuantities, m.tempQuantityChanges, vcs))
+	m.deckContentsTable.SetColumns(vcs.Columns)
+	m.updateDeckContentsTable(vcs)
 }
 
-func (m *DeckBuilderModel) updateDeckContentsTable() {
+func (m *DeckBuilderModel) updateDeckContentsTable(vcs VisibleColumnSet) {
 	var rows []table.Row
 	for _, card := range m.cards {
 		qty := m.dbQuantities[card.ID] + m.tempQuantityChanges[card.ID]
 		if qty <= 0 {
 			continue
 		}
-		rows = append(rows, cardToRow(card, 0, qty))
+		rows = append(rows, vcs.BuildRow(CardToDataMap(card, 0, qty)))
 	}
 	m.deckContentsTable.SetRows(rows)
 }
@@ -693,11 +696,12 @@ func (m DeckBuilderModel) renderCardPanel(width, height int) string {
 		top.WriteString(m.styleManager.GetBlurredStyle().Render("Add Cards: "+m.selectedDeck.Name) + "\n")
 	}
 	top.WriteString(m.styleManager.GetBlurredStyle().Render("Search: ") + m.searchInput.View() + " " + m.styleManager.GetBlurredStyle().Render(m.cardPagination.StatusText()) + "\n")
+	vcs := m.deckVCS(tableWidth)
 	if len(m.cardTable.Rows()) == 0 {
 		top.WriteString(m.styleManager.GetBlurredStyle().Render("No cards match your search.") + "\n")
 	} else {
 		searchTableHeight := CalcTableHeight(topHeight, 2, 3)
-		m.cardTable.SetColumns(scaledDeckColumns(tableWidth))
+		m.cardTable.SetColumns(vcs.Columns)
 		m.cardTable.SetHeight(searchTableHeight)
 		top.WriteString(m.cardTable.View())
 	}
@@ -712,7 +716,7 @@ func (m DeckBuilderModel) renderCardPanel(width, height int) string {
 		bottom.WriteString(m.styleManager.GetBlurredStyle().Render("No cards in deck yet.") + "\n")
 	} else {
 		deckTableHeight := CalcTableHeight(bottomHeight, 1, 3)
-		m.deckContentsTable.SetColumns(scaledDeckColumns(tableWidth))
+		m.deckContentsTable.SetColumns(vcs.Columns)
 		m.deckContentsTable.SetHeight(deckTableHeight)
 		bottom.WriteString(m.deckContentsTable.View())
 	}
