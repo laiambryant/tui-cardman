@@ -113,6 +113,33 @@ type DeckCard struct {
 	Card      *Card
 }
 
+// PokemonCard represents Pokemon-specific card data
+type PokemonCard struct {
+	ID, CardID                                                    int64
+	HP, Retreat                                                   int
+	Category, Stage, EvolveFrom, Description, Level, RegulationMark string
+	LegalStandard, LegalExpanded                                  bool
+	Types                                                         []string
+	Attacks                                                       []PokemonCardAttack
+	Abilities                                                     []PokemonCardAbility
+	Weaknesses, Resistances                                       []PokemonCardWeakRes
+}
+
+type PokemonCardAttack struct {
+	Name   string
+	Cost   []string
+	Effect string
+	Damage string
+}
+
+type PokemonCardAbility struct {
+	Type, Name, Effect string
+}
+
+type PokemonCardWeakRes struct {
+	Type, Value string
+}
+
 type Set struct {
 	ID           int64     `json:"id"`
 	APIID        string    `json:"api_id"`

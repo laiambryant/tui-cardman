@@ -12,14 +12,47 @@ type Set struct {
 
 // Card represents a Pokemon TCG card
 type Card struct {
-	ID         string            `json:"id"`
-	Name       string            `json:"name"`
-	Set        Set               `json:"set"`
-	Number     string            `json:"number"`
-	Artist     string            `json:"artist,omitempty"`
-	Rarity     string            `json:"rarity,omitempty"`
-	TCGPlayer  *TCGPlayerPrices  `json:"tcgplayer,omitempty"`
-	CardMarket *CardMarketPrices `json:"cardmarket,omitempty"`
+	ID             string            `json:"id"`
+	Name           string            `json:"name"`
+	Set            Set               `json:"set"`
+	Number         string            `json:"number"`
+	Artist         string            `json:"artist,omitempty"`
+	Rarity         string            `json:"rarity,omitempty"`
+	TCGPlayer      *TCGPlayerPrices  `json:"tcgplayer,omitempty"`
+	CardMarket     *CardMarketPrices `json:"cardmarket,omitempty"`
+	HP             int
+	Retreat        int
+	Category       string
+	Stage          string
+	EvolveFrom     string
+	Description    string
+	Level          string
+	RegulationMark string
+	LegalStandard  bool
+	LegalExpanded  bool
+	Types          []string
+	Attacks        []CardAttack
+	Abilities      []CardAbility
+	Weaknesses     []CardWeakRes
+	Resistances    []CardWeakRes
+}
+
+type CardAttack struct {
+	Name   string
+	Cost   []string
+	Effect string
+	Damage string
+}
+
+type CardAbility struct {
+	Type   string
+	Name   string
+	Effect string
+}
+
+type CardWeakRes struct {
+	Type  string
+	Value string
 }
 
 type TCGPlayerPrices struct {

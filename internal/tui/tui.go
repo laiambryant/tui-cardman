@@ -18,6 +18,7 @@ import (
 	card "github.com/laiambryant/tui-cardman/internal/services/cards"
 	"github.com/laiambryant/tui-cardman/internal/services/deck"
 	listservice "github.com/laiambryant/tui-cardman/internal/services/list"
+	"github.com/laiambryant/tui-cardman/internal/services/pokemoncard"
 	"github.com/laiambryant/tui-cardman/internal/services/prices"
 	"github.com/laiambryant/tui-cardman/internal/services/user"
 	"github.com/laiambryant/tui-cardman/internal/services/usercollection"
@@ -794,6 +795,8 @@ func (m *Model) createCardGameTabsModel(selectedGame *model.CardGame) (CardGameT
 	cardGameTabs.modal = cardGameTabs.modal.SetDimensions(m.width, m.height)
 	cardGameTabs.collectionService = m.collectionService
 	cardGameTabs.user = m.user
+	pokemonCardSvc := pokemoncard.NewPokemonCardService(m.db)
+	pokemonRenderer := NewPokemonCardRenderer(pokemonCardSvc, selectedGame.ID)
 	cardGameTabs.cardDetail = &CardDetailModel{
 		styleManager: m.styleManager,
 		tcgService:   m.tcgPriceService,
@@ -801,6 +804,7 @@ func (m *Model) createCardGameTabsModel(selectedGame *model.CardGame) (CardGameT
 		listService:  m.listService,
 		width:        m.width,
 		height:       m.height,
+		renderers:    []CardDetailRenderer{pokemonRenderer},
 	}
 	if m.user != nil {
 		cardGameTabs.cardDetail.userID = m.user.ID

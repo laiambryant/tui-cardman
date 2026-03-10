@@ -17,6 +17,7 @@ import (
 	"github.com/laiambryant/tui-cardman/internal/runtimecfg"
 	card "github.com/laiambryant/tui-cardman/internal/services/cards"
 	"github.com/laiambryant/tui-cardman/internal/services/importruns"
+	"github.com/laiambryant/tui-cardman/internal/services/pokemoncard"
 	"github.com/laiambryant/tui-cardman/internal/services/prices"
 	"github.com/laiambryant/tui-cardman/internal/services/sets"
 )
@@ -95,10 +96,12 @@ func NewImportModel(db *sql.DB, cfg *runtimecfg.Manager, styleManager *StyleMana
 	cardService := card.NewCardService(db)
 	tcgPlayerPriceService := prices.NewTCGPlayerPriceService(db)
 	cardMarketPriceService := prices.NewCardMarketPriceService(db)
+	pokemonCardService := pokemoncard.NewPokemonCardService(db)
 	importService := pokemontcg.NewImportService(
 		db, client, slog.Default(),
 		importRunService, setService, cardService,
 		tcgPlayerPriceService, cardMarketPriceService,
+		pokemonCardService,
 	)
 	s := spinner.New()
 	s.Spinner = ImportSpinner

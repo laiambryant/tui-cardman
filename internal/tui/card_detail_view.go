@@ -28,12 +28,15 @@ type CardDetailModel struct {
 	cmService       prices.CardMarketPriceService
 	listService     listservice.ListService
 	userID          int64
+	renderers       []CardDetailRenderer
+	extraData       any
 }
 
 type cardDetailLoadedMsg struct {
 	tcgPrices       []model.TCGPlayerPriceRow
 	cardMarketPrice *model.CardMarketPriceRow
 	lists           []model.UserList
+	extraData       any
 }
 
 func (m *CardDetailModel) Open(card model.Card, ownedQty int) tea.Cmd {
@@ -44,6 +47,7 @@ func (m *CardDetailModel) Open(card model.Card, ownedQty int) tea.Cmd {
 	m.tcgPrices = nil
 	m.cardMarketPrice = nil
 	m.listsContaining = nil
+	m.extraData = nil
 	return m.fetchDetailCmd(card.ID)
 }
 
@@ -65,10 +69,18 @@ func (m *CardDetailModel) fetchDetailCmd(cardID int64) tea.Cmd {
 		if m.listService != nil && m.userID > 0 {
 			lists, _ = m.listService.GetListsContainingCard(m.userID, cardID)
 		}
+		var extraData any
+		for _, r := range m.renderers {
+			if r.CanRender(m.card.CardGameID) {
+				extraData = r.FetchExtra(cardID)
+				break
+			}
+		}
 		return cardDetailLoadedMsg{
 			tcgPrices:       tcgPrices,
 			cardMarketPrice: cmPrice,
 			lists:           lists,
+			extraData:       extraData,
 		}
 	}
 }
@@ -79,6 +91,7 @@ func (m *CardDetailModel) Update(msg tea.Msg) tea.Cmd {
 		m.tcgPrices = msg.tcgPrices
 		m.cardMarketPrice = msg.cardMarketPrice
 		m.listsContaining = msg.lists
+		m.extraData = msg.extraData
 		return nil
 	case tea.KeyMsg:
 		s := msg.String()
@@ -102,10 +115,65 @@ func (m *CardDetailModel) Update(msg tea.Msg) tea.Cmd {
 	return nil
 }
 
+func (m *CardDetailModel) activeRenderer() CardDetailRenderer {
+	for _, r := range m.renderers {
+		if r.CanRender(m.card.CardGameID) {
+			return r
+		}
+	}
+	return nil
+}
+
 func (m *CardDetailModel) View() string {
 	if !m.visible {
 		return ""
 	}
+	renderer := m.activeRenderer()
+	if renderer != nil && m.width >= 70 {
+		return m.renderWideView(renderer)
+	}
+	return m.renderModalView()
+}
+
+// renderWideView renders the card detail as a full-screen framed view (header/body/footer).
+func (m *CardDetailModel) renderWideView(renderer CardDetailRenderer) string {
+	sm := m.styleManager
+
+	// Header: card name
+	header := sm.GetTitleStyle().Render(m.card.Name)
+
+	// Footer: help text
+	footer := sm.GetBlurredStyle().Render("Esc: Close • ↑/↓: Scroll")
+
+	// Compute layout
+	layout := calculateFrameLayout(lipgloss.Height(header), lipgloss.Height(footer), m.width, m.height)
+
+	leftHalf := layout.ContentWidth / 2
+	rightHalf := layout.ContentWidth - leftHalf
+
+	// Left panel: game-specific renderer, fills full body height
+	leftPanel := renderer.RenderLeft(m.card, m.extraData, leftHalf, layout.BodyContentHeight, sm)
+
+	// Right panel: scrollable card details
+	// RenderPanel with padX=1, padY=0, border=2: inner width = rightHalf-4, inner height = BodyContentHeight-2
+	rightInnerWidth := max(rightHalf-4, 10)
+	rightInnerHeight := max(layout.BodyContentHeight-2, 1)
+	rightContent := m.renderContent(rightInnerWidth)
+	rightLines := strings.Split(rightContent, "\n")
+	m.maxScroll = max(0, len(rightLines)-rightInnerHeight)
+	if m.scroll > m.maxScroll {
+		m.scroll = m.maxScroll
+	}
+	end := min(m.scroll+rightInnerHeight, len(rightLines))
+	visibleRight := strings.Join(rightLines[m.scroll:end], "\n")
+	rightPanel := RenderPanel(sm, visibleRight, rightHalf, layout.BodyContentHeight, true, 1, 0)
+
+	body := lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, rightPanel)
+	return renderFramedViewWithLayout(header, body, footer, layout, sm)
+}
+
+// renderModalView is the fallback for narrow terminals or cards without a renderer.
+func (m *CardDetailModel) renderModalView() string {
 	modalWidth := 50
 	if m.width > 0 {
 		modalWidth = min(50, m.width-10)
@@ -125,12 +193,8 @@ func (m *CardDetailModel) View() string {
 	if m.scroll > m.maxScroll {
 		m.scroll = m.maxScroll
 	}
-	start := m.scroll
-	end := start + visibleLines
-	if end > len(lines) {
-		end = len(lines)
-	}
-	visible := strings.Join(lines[start:end], "\n")
+	end := min(m.scroll+visibleLines, len(lines))
+	visible := strings.Join(lines[m.scroll:end], "\n")
 	modalStyle := m.styleManager.Box(m.styleManager.scheme.Focused, modalWidth, modalHeight, 0, 2, 1)
 	modal := modalStyle.Render(visible)
 	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, modal)

@@ -12,6 +12,7 @@ import (
 	"github.com/laiambryant/tui-cardman/internal/model"
 	card "github.com/laiambryant/tui-cardman/internal/services/cards"
 	"github.com/laiambryant/tui-cardman/internal/services/importruns"
+	"github.com/laiambryant/tui-cardman/internal/services/pokemoncard"
 	"github.com/laiambryant/tui-cardman/internal/services/prices"
 	"github.com/laiambryant/tui-cardman/internal/services/sets"
 	"github.com/laiambryant/tui-cardman/internal/testutil"
@@ -167,7 +168,8 @@ func createTestImportService(db *sql.DB) *ImportService {
 	tcgPlayerService := prices.NewTCGPlayerPriceService(db)
 	cardMarketService := prices.NewCardMarketPriceService(db)
 
-	return NewImportService(db, client, logger, importRunService, setService, cardService, tcgPlayerService, cardMarketService)
+	pokemonCardService := pokemoncard.NewPokemonCardService(db)
+	return NewImportService(db, client, logger, importRunService, setService, cardService, tcgPlayerService, cardMarketService, pokemonCardService)
 }
 
 func TestNewImportService(t *testing.T) {
@@ -195,8 +197,9 @@ func TestNewImportService(t *testing.T) {
 		cardService := card.NewCardService(db)
 		tcgPlayerService := prices.NewTCGPlayerPriceService(db)
 		cardMarketService := prices.NewCardMarketPriceService(db)
+		pokemonCardService := pokemoncard.NewPokemonCardService(db)
 
-		service := NewImportService(db, client, logger, importRunService, setService, cardService, tcgPlayerService, cardMarketService)
+		service := NewImportService(db, client, logger, importRunService, setService, cardService, tcgPlayerService, cardMarketService, pokemonCardService)
 
 		require.NotNil(t, service)
 		// pokemonGameID should be 1 (the ID from the migration)

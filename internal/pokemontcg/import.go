@@ -9,8 +9,10 @@ import (
 	"time"
 
 	"github.com/laiambryant/tui-cardman/internal/logging"
+	"github.com/laiambryant/tui-cardman/internal/model"
 	card "github.com/laiambryant/tui-cardman/internal/services/cards"
 	"github.com/laiambryant/tui-cardman/internal/services/importruns"
+	"github.com/laiambryant/tui-cardman/internal/services/pokemoncard"
 	"github.com/laiambryant/tui-cardman/internal/services/prices"
 	"github.com/laiambryant/tui-cardman/internal/services/sets"
 )
@@ -24,6 +26,7 @@ type ImportService struct {
 	cardService            card.CardService
 	tcgPlayerPriceService  prices.TCGPlayerPriceService
 	cardMarketPriceService prices.CardMarketPriceService
+	pokemonCardService     pokemoncard.PokemonCardService
 	pokemonGameID          int64
 }
 
@@ -36,6 +39,7 @@ func NewImportService(
 	cardService card.CardService,
 	tcgPlayerPriceService prices.TCGPlayerPriceService,
 	cardMarketPriceService prices.CardMarketPriceService,
+	pokemonCardService pokemoncard.PokemonCardService,
 ) *ImportService {
 	service := &ImportService{
 		db:                     db,
@@ -46,6 +50,7 @@ func NewImportService(
 		cardService:            cardService,
 		tcgPlayerPriceService:  tcgPlayerPriceService,
 		cardMarketPriceService: cardMarketPriceService,
+		pokemonCardService:     pokemonCardService,
 	}
 
 	// Fetch Pokemon card game ID
@@ -122,7 +127,51 @@ func (s *ImportService) upsertCardTx(ctx context.Context, tx *sql.Tx, card Card,
 	if err := s.replaceCardChildren(ctx, tx, cardID, card); err != nil {
 		return err
 	}
+	if err := s.upsertPokemonCardTx(ctx, tx, cardID, card); err != nil {
+		return err
+	}
 	return nil
+}
+
+func (s *ImportService) upsertPokemonCardTx(ctx context.Context, tx *sql.Tx, cardID int64, card Card) error {
+	if s.pokemonCardService == nil {
+		return nil
+	}
+	pc := &model.PokemonCard{
+		CardID:         cardID,
+		HP:             card.HP,
+		Retreat:        card.Retreat,
+		Category:       card.Category,
+		Stage:          card.Stage,
+		EvolveFrom:     card.EvolveFrom,
+		Description:    card.Description,
+		Level:          card.Level,
+		RegulationMark: card.RegulationMark,
+		LegalStandard:  card.LegalStandard,
+		LegalExpanded:  card.LegalExpanded,
+		Types:          card.Types,
+	}
+	for _, a := range card.Attacks {
+		pc.Attacks = append(pc.Attacks, model.PokemonCardAttack{
+			Name: a.Name, Cost: a.Cost, Effect: a.Effect, Damage: a.Damage,
+		})
+	}
+	for _, a := range card.Abilities {
+		pc.Abilities = append(pc.Abilities, model.PokemonCardAbility{
+			Type: a.Type, Name: a.Name, Effect: a.Effect,
+		})
+	}
+	for _, w := range card.Weaknesses {
+		pc.Weaknesses = append(pc.Weaknesses, model.PokemonCardWeakRes{
+			Type: w.Type, Value: w.Value,
+		})
+	}
+	for _, r := range card.Resistances {
+		pc.Resistances = append(pc.Resistances, model.PokemonCardWeakRes{
+			Type: r.Type, Value: r.Value,
+		})
+	}
+	return s.pokemonCardService.UpsertPokemonCard(ctx, tx, cardID, pc)
 }
 
 func (s *ImportService) replaceCardChildren(ctx context.Context, tx *sql.Tx, cardID int64, card Card) error {

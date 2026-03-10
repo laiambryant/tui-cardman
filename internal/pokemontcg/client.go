@@ -131,7 +131,7 @@ func mapTCGDexSetToSet(tcgdexSet tcgdexModels.SetResume) Set {
 
 // mapTCGDexCardToCard converts tcgdex Card model to our Card model
 func mapTCGDexCardToCard(tcgdexCard tcgdexModels.Card) Card {
-	return Card{
+	c := Card{
 		ID:   tcgdexCard.ID,
 		Name: tcgdexCard.Name,
 		Set: Set{
@@ -140,12 +140,57 @@ func mapTCGDexCardToCard(tcgdexCard tcgdexModels.Card) Card {
 			PrintedTotal: tcgdexCard.Set.CardCount.Official,
 			Total:        tcgdexCard.Set.CardCount.Total,
 		},
-		Number:     tcgdexCard.LocalID,
-		Artist:     getStringOrEmpty(tcgdexCard.Illustrator),
-		Rarity:     tcgdexCard.Rarity,
-		TCGPlayer:  mapTCGPlayerPrices(tcgdexCard.Pricing),
-		CardMarket: mapCardMarketPrices(tcgdexCard.Pricing),
+		Number:         tcgdexCard.LocalID,
+		Artist:         getStringOrEmpty(tcgdexCard.Illustrator),
+		Rarity:         tcgdexCard.Rarity,
+		TCGPlayer:      mapTCGPlayerPrices(tcgdexCard.Pricing),
+		CardMarket:     mapCardMarketPrices(tcgdexCard.Pricing),
+		HP:             getIntOrZero(tcgdexCard.HP),
+		Retreat:        getIntOrZero(tcgdexCard.Retreat),
+		Category:       tcgdexCard.Category,
+		Stage:          getStringOrEmpty(tcgdexCard.Stage),
+		EvolveFrom:     getStringOrEmpty(tcgdexCard.EvolveFrom),
+		Description:    getStringOrEmpty(tcgdexCard.Description),
+		Level:          getStringOrEmpty(tcgdexCard.Level),
+		RegulationMark: getStringOrEmpty(tcgdexCard.RegulationMark),
+		LegalStandard:  tcgdexCard.Legal.Standard,
+		LegalExpanded:  tcgdexCard.Legal.Expanded,
+		Types:          tcgdexCard.Types,
 	}
+
+	for _, a := range tcgdexCard.Attacks {
+		var dmg string
+		if a.Damage != nil {
+			dmg = string(*a.Damage)
+		}
+		c.Attacks = append(c.Attacks, CardAttack{
+			Name:   getStringOrEmpty(a.Name),
+			Cost:   a.Cost,
+			Effect: getStringOrEmpty(a.Effect),
+			Damage: dmg,
+		})
+	}
+	for _, a := range tcgdexCard.Abilities {
+		c.Abilities = append(c.Abilities, CardAbility{
+			Type:   a.Type,
+			Name:   getStringOrEmpty(a.Name),
+			Effect: getStringOrEmpty(a.Effect),
+		})
+	}
+	for _, w := range tcgdexCard.Weaknesses {
+		c.Weaknesses = append(c.Weaknesses, CardWeakRes{
+			Type:  w.Type,
+			Value: getStringOrEmpty(w.Value),
+		})
+	}
+	for _, r := range tcgdexCard.Resistances {
+		c.Resistances = append(c.Resistances, CardWeakRes{
+			Type:  r.Type,
+			Value: getStringOrEmpty(r.Value),
+		})
+	}
+
+	return c
 }
 
 func getFloat(f *float64) float64 {
@@ -230,6 +275,13 @@ func mapCardMarketPrices(pricing *tcgdexModels.Pricing) *CardMarketPrices {
 		UpdatedAt: updatedAt,
 		Prices:    prices,
 	}
+}
+
+func getIntOrZero(i *int) int {
+	if i == nil {
+		return 0
+	}
+	return *i
 }
 
 func getStringOrEmpty(s *string) string {

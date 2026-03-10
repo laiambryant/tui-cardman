@@ -10,6 +10,7 @@ import (
 	"github.com/laiambryant/tui-cardman/internal/pokemontcg"
 	card "github.com/laiambryant/tui-cardman/internal/services/cards"
 	"github.com/laiambryant/tui-cardman/internal/services/importruns"
+	"github.com/laiambryant/tui-cardman/internal/services/pokemoncard"
 	"github.com/laiambryant/tui-cardman/internal/services/prices"
 	"github.com/laiambryant/tui-cardman/internal/services/sets"
 )
@@ -40,10 +41,12 @@ func buildImportService() (*importDeps, error) {
 	tcgPlayerPriceService := prices.NewTCGPlayerPriceService(database)
 	cardMarketPriceService := prices.NewCardMarketPriceService(database)
 
+	pokemonCardService := pokemoncard.NewPokemonCardService(database)
 	importService := pokemontcg.NewImportService(
 		database, client, logger,
 		importRunService, setService, cardService,
 		tcgPlayerPriceService, cardMarketPriceService,
+		pokemonCardService,
 	)
 
 	return &importDeps{
