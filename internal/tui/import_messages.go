@@ -1,11 +1,11 @@
 package tui
 
 import (
-	"github.com/laiambryant/tui-cardman/internal/pokemontcg"
+	"github.com/laiambryant/tui-cardman/internal/gameimporter"
 )
 
 type fetchSetsSuccessMsg struct {
-	sets []pokemontcg.Set
+	sets []gameimporter.GameSet
 }
 
 type fetchSetsErrorMsg struct {
@@ -13,7 +13,7 @@ type fetchSetsErrorMsg struct {
 }
 
 type fetchDatabaseSetsSuccessMsg struct {
-	apiIDs []string
+	apiIDs map[string]bool
 }
 
 type fetchDatabaseSetsErrorMsg struct {

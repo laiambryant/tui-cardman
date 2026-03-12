@@ -333,10 +333,10 @@ func (m DeckBuilderModel) handleCardPanelKeys(msg tea.KeyMsg) (DeckBuilderModel,
 		m.cardTable.SetCursor(0)
 		return m, nil
 	}
-	if action == "increment_quantity" && m.cardSubFocus != cardSubFocusSearch {
+	if action == "increment_quantity" {
 		return m.handleIncrement()
 	}
-	if action == "decrement_quantity" && m.cardSubFocus != cardSubFocusSearch {
+	if action == "decrement_quantity" {
 		return m.handleDecrement()
 	}
 	if action == "save" {
@@ -468,7 +468,11 @@ func (m *DeckBuilderModel) updateValidation() {
 	for id, delta := range m.tempQuantityChanges {
 		combined[id] += delta
 	}
-	m.validationErrors = m.deckService.ValidateDeck(m.cards, combined)
+	gameName := ""
+	if m.selectedGame != nil {
+		gameName = m.selectedGame.Name
+	}
+	m.validationErrors = m.deckService.ValidateDeck(m.cards, combined, gameName)
 }
 
 func (m DeckBuilderModel) getSelectedCard() (model.Card, bool) {
@@ -560,14 +564,34 @@ func (m DeckBuilderModel) performCreateDeck() (DeckBuilderModel, tea.Cmd) {
 	name := m.nameInput.Value()
 	format := deckFormatOptions[m.formatIndex]
 	ctx := context.Background()
+	var editID int64
 	if m.mode == DeckModeEdit && m.selectedDeck != nil {
-		_ = m.deckService.UpdateDeck(ctx, m.selectedDeck.ID, name, format)
+		editID = m.selectedDeck.ID
+		_ = m.deckService.UpdateDeck(ctx, editID, name, format)
 	} else {
 		_, _ = m.deckService.CreateDeck(ctx, m.user.ID, m.selectedGame.ID, name, format)
 	}
 	m.mode = DeckModeNormal
 	m.nameInput.Blur()
 	m.refreshDecks()
+	if editID != 0 {
+		for i, d := range m.decks {
+			if d.ID == editID {
+				m.deckCursor = i
+				break
+			}
+		}
+	} else {
+		for i, d := range m.decks {
+			if d.Name == name {
+				m.deckCursor = i
+				break
+			}
+		}
+	}
+	if len(m.decks) > 0 {
+		m.selectCurrentDeck()
+	}
 	return m, nil
 }
 

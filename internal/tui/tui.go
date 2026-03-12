@@ -12,16 +12,23 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/laiambryant/tui-cardman/internal/auth"
+	"github.com/laiambryant/tui-cardman/internal/config"
+	"github.com/laiambryant/tui-cardman/internal/gameimporter"
 	"github.com/laiambryant/tui-cardman/internal/model"
+	"github.com/laiambryant/tui-cardman/internal/pokemontcg"
 	"github.com/laiambryant/tui-cardman/internal/runtimecfg"
 	"github.com/laiambryant/tui-cardman/internal/services/cardgame"
 	card "github.com/laiambryant/tui-cardman/internal/services/cards"
 	"github.com/laiambryant/tui-cardman/internal/services/deck"
+	"github.com/laiambryant/tui-cardman/internal/services/importruns"
 	listservice "github.com/laiambryant/tui-cardman/internal/services/list"
 	"github.com/laiambryant/tui-cardman/internal/services/pokemoncard"
 	"github.com/laiambryant/tui-cardman/internal/services/prices"
+	"github.com/laiambryant/tui-cardman/internal/services/sets"
 	"github.com/laiambryant/tui-cardman/internal/services/user"
 	"github.com/laiambryant/tui-cardman/internal/services/usercollection"
+	"github.com/laiambryant/tui-cardman/internal/services/yugiohcard"
+	"github.com/laiambryant/tui-cardman/internal/yugioh"
 )
 
 // Screen represents different views in the application
@@ -98,6 +105,7 @@ type Model struct {
 	gameStats         *GameStats
 	statsLoading      bool
 	importModel       *ImportModel
+	importers         map[int64]gameimporter.GameImporter
 	postSplashScreen  Screen
 	width             int
 	height            int
@@ -115,6 +123,7 @@ func NewModel(db *sql.DB, isSSHMode bool) (*Model, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to load card games: %w", err)
 	}
+	importers := initImporters(db, cardGames, slog.Default())
 	m := &Model{
 		authService:       authSvc,
 		userService:       userService,
@@ -132,6 +141,7 @@ func NewModel(db *sql.DB, isSSHMode bool) (*Model, error) {
 		inputs:            make([]textinput.Model, 2),
 		cardGames:         cardGames,
 		cursor:            0,
+		importers:         importers,
 	}
 	if isSSHMode {
 		m.postSplashScreen = ScreenLogin
@@ -160,6 +170,44 @@ func NewModel(db *sql.DB, isSSHMode bool) (*Model, error) {
 	}
 	m.screen = ScreenSplash
 	return m, nil
+}
+
+// initImporters constructs game-specific importers keyed by card game DB ID.
+func initImporters(db *sql.DB, cardGames []model.CardGame, logger *slog.Logger) map[int64]gameimporter.GameImporter {
+	importers := make(map[int64]gameimporter.GameImporter)
+
+	setService := sets.NewSetService(db)
+	cardService := card.NewCardService(db)
+	importRunService := importruns.NewImportRunService(db)
+
+	// Pokemon
+	apiKey := config.GetAPIKey()
+	ptcgClient := pokemontcg.NewClient(apiKey)
+	pokemonCardSvc := pokemoncard.NewPokemonCardService(db)
+	tcgPriceSvc := prices.NewTCGPlayerPriceService(db)
+	cmPriceSvc := prices.NewCardMarketPriceService(db)
+	ptcgService := pokemontcg.NewImportService(db, ptcgClient, logger,
+		importRunService, setService, cardService,
+		tcgPriceSvc, cmPriceSvc, pokemonCardSvc)
+	ptcgImporter := pokemontcg.NewPokemonGameImporter(ptcgClient, ptcgService, setService)
+
+	// Yu-Gi-Oh!
+	ygoClient := yugioh.NewClient()
+	yugiohCardSvc := yugiohcard.NewYuGiOhCardService(db)
+	ygoService := yugioh.NewImportService(db, ygoClient, logger,
+		importRunService, setService, cardService, yugiohCardSvc)
+	ygoImporter := yugioh.NewYuGiOhGameImporter(ygoClient, ygoService, setService)
+
+	for i := range cardGames {
+		g := &cardGames[i]
+		switch g.Name {
+		case "Pokemon":
+			importers[g.ID] = ptcgImporter
+		case "Yu-Gi-Oh!":
+			importers[g.ID] = ygoImporter
+		}
+	}
+	return importers
 }
 
 func initServices(db *sql.DB) (user.UserService, cardgame.CardGameService, card.CardService, usercollection.UserCollectionService, listservice.ListService, deck.DeckService, prices.TCGPlayerPriceService, prices.CardMarketPriceService, *auth.Service) {
@@ -287,7 +335,10 @@ func (m *Model) selectCardGame() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) initMainScreenImport() {
-	importModel, err := m.createImportModel()
+	if len(m.cardGames) == 0 {
+		return
+	}
+	importModel, err := m.createImportModel(&m.cardGames[0])
 	if err != nil {
 		slog.Error("failed to create import model", "error", err)
 		m.errorMsg = fmt.Sprintf("Failed to load import panel: %v", err)
@@ -500,14 +551,15 @@ func (m *Model) navigateToMode(game *model.CardGame, modeIdx int) (tea.Model, te
 		m.screen = ScreenDeckBuilder
 		return m, m.deckBuilderModel.Init()
 	case MenuImportSets:
-		if m.importModel == nil {
-			m.initMainScreenImport()
+		newImport, err := m.createImportModel(game)
+		if err != nil {
+			slog.Error("failed to create import model", "error", err)
+			m.errorMsg = fmt.Sprintf("Failed to load import panel: %v", err)
+			return m, nil
 		}
+		m.importModel = &newImport
 		m.screen = ScreenImport
-		if m.importModel != nil {
-			return m, m.importModel.Init()
-		}
-		return m, nil
+		return m, m.importModel.Init()
 	}
 	return m, nil
 }
@@ -797,6 +849,8 @@ func (m *Model) createCardGameTabsModel(selectedGame *model.CardGame) (CardGameT
 	cardGameTabs.user = m.user
 	pokemonCardSvc := pokemoncard.NewPokemonCardService(m.db)
 	pokemonRenderer := NewPokemonCardRenderer(pokemonCardSvc, selectedGame.ID)
+	yugiohCardSvc := yugiohcard.NewYuGiOhCardService(m.db)
+	yugiohRenderer := NewYuGiOhCardRenderer(yugiohCardSvc, selectedGame.ID)
 	cardGameTabs.cardDetail = &CardDetailModel{
 		styleManager: m.styleManager,
 		tcgService:   m.tcgPriceService,
@@ -804,7 +858,7 @@ func (m *Model) createCardGameTabsModel(selectedGame *model.CardGame) (CardGameT
 		listService:  m.listService,
 		width:        m.width,
 		height:       m.height,
-		renderers:    []CardDetailRenderer{pokemonRenderer},
+		renderers:    []CardDetailRenderer{pokemonRenderer, yugiohRenderer},
 	}
 	if m.user != nil {
 		cardGameTabs.cardDetail.userID = m.user.ID
@@ -889,8 +943,12 @@ func (m *Model) createDeckBuilderModel(selectedGame *model.CardGame) (*DeckBuild
 	return &deckModel, nil
 }
 
-func (m *Model) createImportModel() (ImportModel, error) {
-	importModel, err := NewImportModel(m.db, m.configManager, m.styleManager, m.cardGames)
+func (m *Model) createImportModel(game *model.CardGame) (ImportModel, error) {
+	importer, ok := m.importers[game.ID]
+	if !ok {
+		return ImportModel{}, fmt.Errorf("no importer registered for game %q (id=%d)", game.Name, game.ID)
+	}
+	importModel, err := NewImportModel(importer, game, m.configManager, m.styleManager, m.cardGames)
 	if err != nil {
 		return ImportModel{}, err
 	}

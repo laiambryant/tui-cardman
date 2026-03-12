@@ -356,7 +356,7 @@ func TestValidateDeck_Valid60Cards(t *testing.T) {
 		quantities[c.ID] = 6 // 10 cards × 6 = 60 (but 6 > 4, so expect duplicate errors)
 	}
 
-	errs := svc.ValidateDeck(cards, quantities)
+	errs := svc.ValidateDeck(cards, quantities, "Pokemon")
 	// Should only have duplicate errors, not count error
 	hasCountErr := false
 	for _, e := range errs {
@@ -375,7 +375,7 @@ func TestValidateDeck_WrongCount(t *testing.T) {
 	}
 	quantities := map[int64]int{1: 4} // 4 cards, not 60
 
-	errs := svc.ValidateDeck(cards, quantities)
+	errs := svc.ValidateDeck(cards, quantities, "Pokemon")
 	require.Len(t, errs, 1)
 	assert.Equal(t, "card_count", errs[0].Type)
 	assert.Contains(t, errs[0].Message, "4")
@@ -392,7 +392,7 @@ func TestValidateDeck_Exactly60(t *testing.T) {
 		quantities[int64(i+1)] = 4
 	}
 
-	errs := svc.ValidateDeck(cards, quantities)
+	errs := svc.ValidateDeck(cards, quantities, "Pokemon")
 	assert.Empty(t, errs)
 }
 
@@ -410,7 +410,7 @@ func TestValidateDeck_DuplicateViolation(t *testing.T) {
 		2: 55,
 	}
 
-	errs := svc.ValidateDeck(cards, quantities)
+	errs := svc.ValidateDeck(cards, quantities, "Pokemon")
 	hasDuplicateErr := false
 	for _, e := range errs {
 		if e.Type == "duplicate_limit" && e.Message != "" {
@@ -433,7 +433,7 @@ func TestValidateDeck_BasicEnergyExempt(t *testing.T) {
 		2: 56,
 	}
 
-	errs := svc.ValidateDeck(cards, quantities)
+	errs := svc.ValidateDeck(cards, quantities, "Pokemon")
 	// Should have no errors at all: count is correct, Charizard ≤ 4, energy is exempt
 	assert.Empty(t, errs)
 }
@@ -460,7 +460,7 @@ func TestValidateDeck_BasicEnergyVariants(t *testing.T) {
 			}
 
 			allCards := append(cards, otherCards...)
-			errs := svc.ValidateDeck(allCards, quantities)
+			errs := svc.ValidateDeck(allCards, quantities, "Pokemon")
 			for _, e := range errs {
 				assert.NotEqual(t, "duplicate_limit", e.Type, "basic energy should be exempt: %s", name)
 			}
@@ -478,7 +478,7 @@ func TestValidateDeck_ZeroQuantityIgnored(t *testing.T) {
 	// Only pikachu counts; charizard has qty=0
 	quantities := map[int64]int{1: 0, 2: 4}
 
-	errs := svc.ValidateDeck(cards, quantities)
+	errs := svc.ValidateDeck(cards, quantities, "Pokemon")
 	// 4 cards total → count error, but no duplicate error
 	hasDuplicateErr := false
 	for _, e := range errs {
@@ -499,6 +499,6 @@ func TestValidateDeck_MultipleErrors(t *testing.T) {
 	// Wrong count AND duplicate violation
 	quantities := map[int64]int{1: 5, 2: 5} // total = 10, both > 4
 
-	errs := svc.ValidateDeck(cards, quantities)
+	errs := svc.ValidateDeck(cards, quantities, "Pokemon")
 	assert.GreaterOrEqual(t, len(errs), 3) // count error + 2 duplicate errors
 }

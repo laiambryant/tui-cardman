@@ -26,7 +26,7 @@ type DeckService interface {
 	DeleteDeck(ctx context.Context, deckID int64) error
 	GetAllQuantitiesForDeck(deckID int64) (map[int64]int, error)
 	UpsertDeckCardBatch(ctx context.Context, deckID int64, updates map[int64]int) error
-	ValidateDeck(cards []model.Card, quantities map[int64]int) []DeckValidationError
+	ValidateDeck(cards []model.Card, quantities map[int64]int, gameName string) []DeckValidationError
 }
 
 type DeckServiceImpl struct {
@@ -184,7 +184,14 @@ func (s *DeckServiceImpl) UpsertDeckCardBatch(ctx context.Context, deckID int64,
 	})
 }
 
-func (s *DeckServiceImpl) ValidateDeck(cards []model.Card, quantities map[int64]int) []DeckValidationError {
+func (s *DeckServiceImpl) ValidateDeck(cards []model.Card, quantities map[int64]int, gameName string) []DeckValidationError {
+	if strings.EqualFold(gameName, "yu-gi-oh!") || strings.EqualFold(gameName, "yugioh") {
+		return validateYGODeck(cards, quantities)
+	}
+	return validatePokemonDeck(cards, quantities)
+}
+
+func validatePokemonDeck(cards []model.Card, quantities map[int64]int) []DeckValidationError {
 	var errors []DeckValidationError
 	cardsByID := make(map[int64]model.Card)
 	for _, c := range cards {
@@ -212,6 +219,40 @@ func (s *DeckServiceImpl) ValidateDeck(cards []model.Card, quantities map[int64]
 			errors = append(errors, DeckValidationError{
 				Type:    "duplicate_limit",
 				Message: name + ": max 4 copies allowed (" + strconv.Itoa(qty) + " found)",
+			})
+		}
+	}
+	return errors
+}
+
+func validateYGODeck(cards []model.Card, quantities map[int64]int) []DeckValidationError {
+	var errors []DeckValidationError
+	cardsByID := make(map[int64]model.Card)
+	for _, c := range cards {
+		cardsByID[c.ID] = c
+	}
+	totalCards := 0
+	nameQty := make(map[string]int)
+	for cardID, qty := range quantities {
+		if qty <= 0 {
+			continue
+		}
+		totalCards += qty
+		if c, ok := cardsByID[cardID]; ok {
+			nameQty[c.Name] += qty
+		}
+	}
+	if totalCards < 40 || totalCards > 60 {
+		errors = append(errors, DeckValidationError{
+			Type:    "card_count",
+			Message: "Main deck must have 40-60 cards (currently " + strconv.Itoa(totalCards) + ")",
+		})
+	}
+	for name, qty := range nameQty {
+		if qty > 3 {
+			errors = append(errors, DeckValidationError{
+				Type:    "duplicate_limit",
+				Message: name + ": max 3 copies allowed (" + strconv.Itoa(qty) + " found)",
 			})
 		}
 	}

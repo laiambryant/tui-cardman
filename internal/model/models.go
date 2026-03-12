@@ -140,6 +140,18 @@ type PokemonCardWeakRes struct {
 	Type, Value string
 }
 
+// YuGiOhCard represents Yu-Gi-Oh!-specific card data
+type YuGiOhCard struct {
+	ID, CardID  int64
+	CardType    string
+	FrameType   string
+	Description string
+	ATK, DEF, Level *int
+	Attribute, Race *string
+	Scale, LinkVal  *int
+	LinkMarkers     []string
+}
+
 type Set struct {
 	ID           int64     `json:"id"`
 	APIID        string    `json:"api_id"`

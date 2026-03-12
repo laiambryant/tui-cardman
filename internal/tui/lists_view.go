@@ -358,10 +358,10 @@ func (m ListsModel) handleCardPanelKeys(msg tea.KeyMsg, s, action string) (Lists
 		m.cardTable.SetCursor(0)
 		return m, nil
 	}
-	if action == "increment_quantity" && m.cardSubFocus != listCardSubFocusSearch {
+	if action == "increment_quantity" {
 		return m.handleIncrementQuantity()
 	}
-	if action == "decrement_quantity" && m.cardSubFocus != listCardSubFocusSearch {
+	if action == "decrement_quantity" {
 		return m.handleDecrementQuantity()
 	}
 	if action == "save" {

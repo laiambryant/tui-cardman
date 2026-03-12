@@ -105,7 +105,11 @@ func (m ImportModel) renderImportView() string {
 
 func (m ImportModel) renderImportHeader() string {
 	var b strings.Builder
-	b.WriteString(m.styleManager.GetTitleStyle().Render("CardMan - Import Pokemon TCG Sets") + "\n")
+	gameName := ""
+	if m.selectedCardGame != nil {
+		gameName = " - " + m.selectedCardGame.Name
+	}
+	b.WriteString(m.styleManager.GetTitleStyle().Render("CardMan - Import Sets"+gameName) + "\n")
 	b.WriteString(m.renderCardGameSelector() + "\n")
 	return b.String()
 }
@@ -195,9 +199,9 @@ func (m ImportModel) renderSetsListContent(itemsPerPage int) string {
 
 func (m ImportModel) renderSetListItem(index int) string {
 	set := m.filteredSets[index]
-	status := getSetStatusIcon(m.databaseSetIDs[set.ID])
-	line := fmt.Sprintf("%s %s - %s (%d cards)", status, set.ID, set.Name, set.Total)
-	if m.isInQueue(set.ID) {
+	status := getSetStatusIcon(m.databaseSetIDs[set.APIID])
+	line := fmt.Sprintf("%s %s - %s (%d cards)", status, set.APIID, set.Name, set.Total)
+	if m.isInQueue(set.APIID) {
 		line += " [Q]"
 	}
 	return RenderListItem(line, m.cursor == index && m.focus == importFocusSets)
@@ -263,8 +267,8 @@ func (m ImportModel) renderQueueList() string {
 func (m ImportModel) renderSelectedSetInfo() string {
 	var b strings.Builder
 	selectedSet := m.filteredSets[m.cursor]
-	b.WriteString(renderStyledLine(m.styleManager.GetBlurredStyle(), "Selected: %s", selectedSet.ID))
-	if m.databaseSetIDs[selectedSet.ID] {
+	b.WriteString(renderStyledLine(m.styleManager.GetBlurredStyle(), "Selected: %s", selectedSet.APIID))
+	if m.databaseSetIDs[selectedSet.APIID] {
 		b.WriteString(renderStyledLine(m.styleManager.GetBlurredStyle(), "Status: Imported"))
 	} else {
 		b.WriteString(renderStyledLine(m.styleManager.GetBlurredStyle(), "Status: Not Imported"))

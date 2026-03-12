@@ -2,24 +2,16 @@ package tui
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
-	"log/slog"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/laiambryant/tui-cardman/internal/config"
+	"github.com/laiambryant/tui-cardman/internal/gameimporter"
 	"github.com/laiambryant/tui-cardman/internal/model"
-	"github.com/laiambryant/tui-cardman/internal/pokemontcg"
 	"github.com/laiambryant/tui-cardman/internal/runtimecfg"
-	card "github.com/laiambryant/tui-cardman/internal/services/cards"
-	"github.com/laiambryant/tui-cardman/internal/services/importruns"
-	"github.com/laiambryant/tui-cardman/internal/services/pokemoncard"
-	"github.com/laiambryant/tui-cardman/internal/services/prices"
-	"github.com/laiambryant/tui-cardman/internal/services/sets"
 )
 
 type ActionType int
@@ -49,9 +41,9 @@ type ActionItem struct {
 
 type ImportModel struct {
 	selectedCardGame  *model.CardGame
-	availableSets     []pokemontcg.Set
+	availableSets     []gameimporter.GameSet
 	databaseSetIDs    map[string]bool
-	filteredSets      []pokemontcg.Set
+	filteredSets      []gameimporter.GameSet
 	searchInput       textinput.Model
 	cursor            int
 	actionCursor      int
@@ -59,10 +51,7 @@ type ImportModel struct {
 	focus             importFocus
 	configManager     *runtimecfg.Manager
 	styleManager      *StyleManager
-	db                *sql.DB
-	pokemonClient     *pokemontcg.Client
-	importService     *pokemontcg.ImportService
-	setService        sets.SetService
+	importer          gameimporter.GameImporter
 	isLoading         bool
 	loadingMsg        string
 	errorMsg          string
@@ -71,7 +60,6 @@ type ImportModel struct {
 	importProgress    importProgressMsg
 	selectedSetInDB   bool
 	selectedSetHasCol bool
-	cardGameCursor    int
 	cardGames         []model.CardGame
 	width             int
 	height            int
@@ -83,30 +71,17 @@ type ImportModel struct {
 	queueCurrentIndex int
 }
 
-func NewImportModel(db *sql.DB, cfg *runtimecfg.Manager, styleManager *StyleManager, cardGames []model.CardGame) (ImportModel, error) {
+func NewImportModel(importer gameimporter.GameImporter, selectedGame *model.CardGame, cfg *runtimecfg.Manager, styleManager *StyleManager, cardGames []model.CardGame) (ImportModel, error) {
 	searchInput := textinput.New()
 	searchInput.Placeholder = "Search sets..."
 	searchInput.Width = 30
 	styleManager.ApplyTextInputStyles(&searchInput)
 	searchInput.Focus()
-	apiKey := config.GetAPIKey()
-	client := pokemontcg.NewClient(apiKey)
-	importRunService := importruns.NewImportRunService(db)
-	setService := sets.NewSetService(db)
-	cardService := card.NewCardService(db)
-	tcgPlayerPriceService := prices.NewTCGPlayerPriceService(db)
-	cardMarketPriceService := prices.NewCardMarketPriceService(db)
-	pokemonCardService := pokemoncard.NewPokemonCardService(db)
-	importService := pokemontcg.NewImportService(
-		db, client, slog.Default(),
-		importRunService, setService, cardService,
-		tcgPlayerPriceService, cardMarketPriceService,
-		pokemonCardService,
-	)
+
 	s := spinner.New()
 	s.Spinner = ImportSpinner
 	s.Style = focusedStyle
-	selectedGame := &cardGames[0]
+
 	return ImportModel{
 		selectedCardGame: selectedGame,
 		searchInput:      searchInput,
@@ -116,13 +91,9 @@ func NewImportModel(db *sql.DB, cfg *runtimecfg.Manager, styleManager *StyleMana
 		focus:            importFocusSets,
 		configManager:    cfg,
 		styleManager:     styleManager,
-		db:               db,
-		pokemonClient:    client,
-		importService:    importService,
-		setService:       setService,
+		importer:         importer,
 		databaseSetIDs:   make(map[string]bool),
 		cardGames:        cardGames,
-		cardGameCursor:   0,
 		spinner:          s,
 	}, nil
 }
@@ -228,10 +199,7 @@ func (m ImportModel) Update(msg tea.Msg) (ImportModel, tea.Cmd) {
 		m.errorMsg = fmt.Sprintf("Failed to fetch sets: %v", msg.err)
 		return m, nil
 	case fetchDatabaseSetsSuccessMsg:
-		m.databaseSetIDs = make(map[string]bool)
-		for _, id := range msg.apiIDs {
-			m.databaseSetIDs[id] = true
-		}
+		m.databaseSetIDs = msg.apiIDs
 		return m, nil
 	case fetchDatabaseSetsErrorMsg:
 		m.errorMsg = fmt.Sprintf("Failed to fetch database sets: %v", msg.err)
@@ -335,15 +303,15 @@ func (m ImportModel) handleSetListNavigation(msg tea.KeyMsg) (ImportModel, tea.C
 	}
 	if action == "queue_add" && len(m.filteredSets) > 0 && m.cursor < len(m.filteredSets) {
 		set := m.filteredSets[m.cursor]
-		if !m.databaseSetIDs[set.ID] {
-			m.addToQueue(set.ID, set.Name)
+		if !m.databaseSetIDs[set.APIID] {
+			m.addToQueue(set.APIID, set.Name)
 			m.statusMsg = fmt.Sprintf("Added %s to queue (%d pending)", set.Name, m.queuePendingCount())
 		}
 		return m, nil
 	}
 	if action == "queue_remove" && len(m.filteredSets) > 0 && m.cursor < len(m.filteredSets) {
 		set := m.filteredSets[m.cursor]
-		m.removeFromQueue(set.ID)
+		m.removeFromQueue(set.APIID)
 		m.statusMsg = fmt.Sprintf("Removed %s from queue (%d pending)", set.Name, m.queuePendingCount())
 		return m, nil
 	}
@@ -453,11 +421,11 @@ func (m ImportModel) handleQueueNavigation(msg tea.KeyMsg) (ImportModel, tea.Cmd
 }
 
 func (m ImportModel) filterSets() ImportModel {
-	query := strings.ToLower(m.searchInput.Value())
-	var filtered []pokemontcg.Set
+	q := strings.ToLower(m.searchInput.Value())
+	var filtered []gameimporter.GameSet
 	for _, set := range m.availableSets {
-		if strings.Contains(strings.ToLower(set.Name), query) ||
-			strings.Contains(strings.ToLower(set.ID), query) {
+		if strings.Contains(strings.ToLower(set.Name), q) ||
+			strings.Contains(strings.ToLower(set.APIID), q) {
 			filtered = append(filtered, set)
 		}
 	}
@@ -475,7 +443,7 @@ func (m ImportModel) getAvailableActions() []ActionItem {
 	var actions []ActionItem
 	if len(m.filteredSets) > 0 && m.cursor < len(m.filteredSets) {
 		selectedSet := m.filteredSets[m.cursor]
-		if m.databaseSetIDs[selectedSet.ID] {
+		if m.databaseSetIDs[selectedSet.APIID] {
 			actions = append(actions, ActionItem{
 				label:       "Reimport Set",
 				description: "Delete and reimport this set",
@@ -522,7 +490,7 @@ func (m ImportModel) executeAction(action ActionItem) (ImportModel, tea.Cmd) {
 	if len(m.filteredSets) > 0 && m.cursor < len(m.filteredSets) {
 		selectedSet := m.filteredSets[m.cursor]
 		if action.actionType == ActionImport || action.actionType == ActionDelete || action.actionType == ActionReimport {
-			message = fmt.Sprintf("%s\nSet: %s - %s", message, selectedSet.ID, selectedSet.Name)
+			message = fmt.Sprintf("%s\nSet: %s - %s", message, selectedSet.APIID, selectedSet.Name)
 		}
 	}
 	m.modal = newModal(
@@ -548,35 +516,35 @@ func (m ImportModel) executeConfirmedAction() (ImportModel, tea.Cmd) {
 		if len(m.filteredSets) > 0 && m.cursor < len(m.filteredSets) {
 			selectedSet := m.filteredSets[m.cursor]
 			m.isImporting = true
-			m.importProgress = importProgressMsg{setID: selectedSet.ID}
-			return m, tea.Batch(m.spinner.Tick, m.importSetCmd(selectedSet.ID))
+			m.importProgress = importProgressMsg{setID: selectedSet.APIID}
+			return m, tea.Batch(m.spinner.Tick, m.importSetCmd(selectedSet.APIID))
 		}
 	case ActionDelete:
 		if len(m.filteredSets) > 0 && m.cursor < len(m.filteredSets) {
 			selectedSet := m.filteredSets[m.cursor]
-			return m, m.deleteSetCmd(selectedSet.ID)
+			return m, m.deleteSetCmd(selectedSet.APIID)
 		}
 	case ActionReimport:
 		if len(m.filteredSets) > 0 && m.cursor < len(m.filteredSets) {
 			selectedSet := m.filteredSets[m.cursor]
 			m.isImporting = true
-			m.importProgress = importProgressMsg{setID: selectedSet.ID}
+			m.importProgress = importProgressMsg{setID: selectedSet.APIID}
 			return m, tea.Batch(m.spinner.Tick, tea.Sequence(
-				m.deleteSetCmd(selectedSet.ID),
-				m.importSetCmd(selectedSet.ID),
+				m.deleteSetCmd(selectedSet.APIID),
+				m.importSetCmd(selectedSet.APIID),
 			))
 		}
 	case ActionImportAll:
 		for _, set := range m.availableSets {
-			m.addToQueue(set.ID, set.Name)
+			m.addToQueue(set.APIID, set.Name)
 		}
 		m.statusMsg = fmt.Sprintf("Added %d sets to queue. Press Ctrl+G to start.", len(m.availableSets))
 		return m, nil
 	case ActionImportUpdates:
 		added := 0
 		for _, set := range m.availableSets {
-			if !m.databaseSetIDs[set.ID] {
-				m.addToQueue(set.ID, set.Name)
+			if !m.databaseSetIDs[set.APIID] {
+				m.addToQueue(set.APIID, set.Name)
 				added++
 			}
 		}
@@ -596,7 +564,7 @@ func (m ImportModel) View() string {
 func (m ImportModel) fetchSetsCmd() tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
-		sets, err := m.pokemonClient.GetSets(ctx)
+		sets, err := m.importer.FetchSets(ctx)
 		if err != nil {
 			return fetchSetsErrorMsg{err}
 		}
@@ -607,7 +575,7 @@ func (m ImportModel) fetchSetsCmd() tea.Cmd {
 func (m ImportModel) fetchDatabaseSetsCmd() tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
-		apiIDs, err := m.setService.GetAllSetAPIIDs(ctx)
+		apiIDs, err := m.importer.GetImportedSetIDs(ctx)
 		if err != nil {
 			return fetchDatabaseSetsErrorMsg{err}
 		}
@@ -622,16 +590,12 @@ func (m ImportModel) checkSelectedSetInDB() tea.Cmd {
 	selectedSet := m.filteredSets[m.cursor]
 	return func() tea.Msg {
 		ctx := context.Background()
-		dbSetID, err := m.setService.GetSetIDByAPIID(ctx, selectedSet.ID)
-		if err == sql.ErrNoRows {
+		inDB, hasCollections, err := m.importer.CheckSetInDB(ctx, selectedSet.APIID)
+		if err != nil {
+			return checkSetInCollectionErrorMsg{err}
+		}
+		if !inDB {
 			return checkSetNotInDBMsg{}
-		}
-		if err != nil {
-			return checkSetInCollectionErrorMsg{err}
-		}
-		hasCollections, err := m.setService.SetHasUserCollections(ctx, dbSetID)
-		if err != nil {
-			return checkSetInCollectionErrorMsg{err}
 		}
 		return checkSetInDBMsg{hasCollections}
 	}
@@ -640,7 +604,7 @@ func (m ImportModel) checkSelectedSetInDB() tea.Cmd {
 func (m ImportModel) importSetCmd(setID string) tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
-		err := m.importService.ImportSpecificSets(ctx, []string{setID})
+		err := m.importer.ImportSet(ctx, setID)
 		if err != nil {
 			return importSetErrorMsg{setID, err}
 		}
@@ -651,7 +615,7 @@ func (m ImportModel) importSetCmd(setID string) tea.Cmd {
 func (m ImportModel) deleteSetCmd(setID string) tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
-		err := m.importService.DeleteSetByAPIID(ctx, setID)
+		err := m.importer.DeleteSet(ctx, setID)
 		if err != nil {
 			return deleteSetErrorMsg{setID, err}
 		}

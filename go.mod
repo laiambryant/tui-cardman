@@ -22,6 +22,8 @@ require (
 	github.com/sahilm/fuzzy v0.1.1
 )
 
+require github.com/laiambryant/sdkygopro v0.0.0-20260311224353-548637b86e53
+
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
