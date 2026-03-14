@@ -3,7 +3,9 @@ package mtg
 import (
 	"context"
 
-	sdk "github.com/MagicTheGathering/mtg-sdk-go"
+	mtgsdk "github.com/laiambryant/mtg-sdk-go"
+	"github.com/laiambryant/mtg-sdk-go/models"
+	"github.com/laiambryant/mtg-sdk-go/query"
 	"golang.org/x/time/rate"
 )
 
@@ -11,32 +13,37 @@ const pageSize = 100
 
 type Client struct {
 	limiter *rate.Limiter
+	sdk     *mtgsdk.MTG
 }
 
 func NewClient() *Client {
-	return &Client{limiter: rate.NewLimiter(rate.Every(100_000_000), 1)} // 100ms
+	return &Client{
+		limiter: rate.NewLimiter(rate.Every(100_000_000), 1), // 100ms
+		sdk:     mtgsdk.New(),
+	}
 }
 
-func (c *Client) GetSets(_ context.Context) ([]MTGSet, error) {
+func (c *Client) GetSets(ctx context.Context) ([]MTGSet, error) {
 	c.limiter.Wait(context.Background())
-	sdkSets, err := sdk.NewSetQuery().All()
+	sdkSets, err := c.sdk.Sets.List(ctx, query.New())
 	if err != nil {
 		return nil, err
 	}
 	sets := make([]MTGSet, 0, len(sdkSets))
 	for _, s := range sdkSets {
 		sets = append(sets, MTGSet{
-			SetCode: string(s.SetCode),
+			SetCode: s.Code,
 			Name:    s.Name,
-			Block:   s.Block,
+			Block:   derefString(s.Block),
 		})
 	}
 	return sets, nil
 }
 
-func (c *Client) GetCardsForSet(_ context.Context, setCode string, page int) (cards []MTGCard, hasMore bool, totalCount int, err error) {
+func (c *Client) GetCardsForSet(ctx context.Context, setCode string, page int) (cards []MTGCard, hasMore bool, totalCount int, err error) {
 	c.limiter.Wait(context.Background())
-	sdkCards, totalCount, err := sdk.NewQuery().Where(sdk.CardSet, setCode).PageS(page, pageSize)
+	q := query.New().SetCode(setCode).Page(page).PageSize(pageSize)
+	sdkCards, err := c.sdk.Cards.List(ctx, q)
 	if err != nil {
 		return nil, false, 0, err
 	}
@@ -44,8 +51,8 @@ func (c *Client) GetCardsForSet(_ context.Context, setCode string, page int) (ca
 	for _, sc := range sdkCards {
 		cards = append(cards, mapSDKCard(sc, setCode))
 	}
-	hasMore = resolveHasMore(page, pageSize, len(cards), totalCount)
-	return cards, hasMore, totalCount, nil
+	hasMore = resolveHasMore(page, pageSize, len(cards), 0)
+	return cards, hasMore, 0, nil
 }
 
 // resolveHasMore determines whether more pages exist.
@@ -58,7 +65,7 @@ func resolveHasMore(page, ps, fetched, totalCount int) bool {
 	return fetched == ps
 }
 
-func mapSDKCard(sc *sdk.Card, setCode string) MTGCard {
+func mapSDKCard(sc models.Card, setCode string) MTGCard {
 	legalities := make([]MTGLegality, 0, len(sc.Legalities))
 	for _, l := range sc.Legalities {
 		legalities = append(legalities, MTGLegality{
@@ -67,10 +74,10 @@ func mapSDKCard(sc *sdk.Card, setCode string) MTGCard {
 		})
 	}
 	return MTGCard{
-		ID:            string(sc.Id),
+		ID:            sc.ID,
 		Name:          sc.Name,
-		ManaCost:      sc.ManaCost,
-		CMC:           sc.CMC,
+		ManaCost:      derefString(sc.ManaCost),
+		CMC:           derefFloat64(sc.CMC),
 		Colors:        sc.Colors,
 		ColorIdentity: sc.ColorIdentity,
 		Type:          sc.Type,
@@ -80,15 +87,36 @@ func mapSDKCard(sc *sdk.Card, setCode string) MTGCard {
 		Rarity:        sc.Rarity,
 		SetCode:       setCode,
 		SetName:       sc.SetName,
-		Text:          sc.Text,
-		Flavor:        sc.Flavor,
+		Text:          derefString(sc.Text),
+		Flavor:        derefString(sc.Flavor),
 		Artist:        sc.Artist,
-		Number:        sc.Number,
-		Power:         sc.Power,
-		Toughness:     sc.Toughness,
-		Loyalty:       sc.Loyalty,
+		Number:        derefString(sc.Number),
+		Power:         derefString(sc.Power),
+		Toughness:     derefString(sc.Toughness),
+		Loyalty:       derefString(sc.Loyalty),
 		Layout:        sc.Layout,
-		MultiverseId:  uint32(sc.MultiverseId),
+		MultiverseId:  uint32(derefInt(sc.MultiverseID)),
 		Legalities:    legalities,
 	}
+}
+
+func derefString(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
+
+func derefFloat64(f *float64) float64 {
+	if f == nil {
+		return 0
+	}
+	return *f
+}
+
+func derefInt(i *int) int {
+	if i == nil {
+		return 0
+	}
+	return *i
 }

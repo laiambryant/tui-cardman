@@ -25,8 +25,8 @@ require (
 require github.com/laiambryant/sdkygopro v0.0.0-20260311224353-548637b86e53
 
 require (
-	github.com/MagicTheGathering/mtg-sdk-go v0.0.0-20190109105601-3aaea97721aa // indirect
-	github.com/laiambryant/optcgapi-go-sdk v0.0.0-20260314094600-cd83a8ed0d73 // indirect
+	github.com/laiambryant/mtg-sdk-go v0.0.0-20260314162548-05d7e1149f1f
+	github.com/laiambryant/optcgapi-go-sdk v0.0.0-20260314094600-cd83a8ed0d73
 )
 
 require (
