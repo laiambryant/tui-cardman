@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
@@ -21,7 +22,13 @@ var serveCmd = &cobra.Command{
 	Long:  `Launch the interactive terminal UI for card management.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		config.LoadConfig()
-		log, err := os.Create(logFileName)
+		logPath, err := resolveLogPath(logFileName)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "warn: could not resolve log path: %v\n", err)
+			logPath = logFileName
+		}
+		fmt.Fprintf(os.Stderr, "log file: %s\n", logPath)
+		log, err := os.Create(logPath)
 		if err != nil {
 			return fmt.Errorf("create log file: %w", err)
 		}
@@ -44,6 +51,14 @@ var serveCmd = &cobra.Command{
 		}
 		return nil
 	},
+}
+
+func resolveLogPath(name string) (string, error) {
+	exe, err := os.Executable()
+	if err != nil {
+		return name, err
+	}
+	return filepath.Join(filepath.Dir(exe), name), nil
 }
 
 func init() {

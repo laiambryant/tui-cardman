@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/laiambryant/tui-cardman/internal/gameimporter"
 )
 
 func getCursorPrefix(isCursor bool) string {
@@ -197,10 +198,24 @@ func (m ImportModel) renderSetsListContent(itemsPerPage int) string {
 	return b.String()
 }
 
+func (m ImportModel) resolveSetCardCount(set gameimporter.GameSet) string {
+	if set.Total > 0 {
+		return fmt.Sprintf("%d cards", set.Total)
+	}
+	if dbCount, ok := m.databaseSetCounts[set.APIID]; ok && dbCount > 0 {
+		return fmt.Sprintf("%d cards", dbCount)
+	}
+	if m.databaseSetIDs[set.APIID] {
+		return "imported"
+	}
+	return "? cards"
+}
+
 func (m ImportModel) renderSetListItem(index int) string {
 	set := m.filteredSets[index]
 	status := getSetStatusIcon(m.databaseSetIDs[set.APIID])
-	line := fmt.Sprintf("%s %s - %s (%d cards)", status, set.APIID, set.Name, set.Total)
+	cardCount := m.resolveSetCardCount(set)
+	line := fmt.Sprintf("%s %s - %s (%s)", status, set.APIID, set.Name, cardCount)
 	if m.isInQueue(set.APIID) {
 		line += " [Q]"
 	}
@@ -273,7 +288,7 @@ func (m ImportModel) renderSelectedSetInfo() string {
 	} else {
 		b.WriteString(renderStyledLine(m.styleManager.GetBlurredStyle(), "Status: Not Imported"))
 	}
-	b.WriteString(renderStyledLine(m.styleManager.GetBlurredStyle(), "Cards: %d", selectedSet.Total))
+	b.WriteString(renderStyledLine(m.styleManager.GetBlurredStyle(), "Cards: %s", m.resolveSetCardCount(selectedSet)))
 	b.WriteString("\n")
 	return b.String()
 }

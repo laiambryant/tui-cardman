@@ -1,3 +1,5 @@
+github.com/MagicTheGathering/mtg-sdk-go v0.0.0-20190109105601-3aaea97721aa h1:OJtPSYA2qr4d+51NY3mR+cmpSvQoWSnTDjU0OkOtjg0=
+github.com/MagicTheGathering/mtg-sdk-go v0.0.0-20190109105601-3aaea97721aa/go.mod h1:N2gc+5YwVfphpjWbjtIfh8/XKQowEXSMNefQeyyQ/lk=
 github.com/anmitsu/go-shlex v0.0.0-20200514113438-38f4b401e2be h1:9AeTilPcZAjCFIImctFaOjnTIavg87rW78vTPkQqLI8=
 github.com/anmitsu/go-shlex v0.0.0-20200514113438-38f4b401e2be/go.mod h1:ySMOLuWl6zY27l47sB3qLNK6tF2fkHG55UZxx8oIVo4=
 github.com/atotto/clipboard v0.1.4 h1:EH0zSVneZPSuFR11BlR9YppQTVDbh5+16AmcJi4g1z4=
@@ -65,6 +67,10 @@ github.com/kylelemons/godebug v1.1.0 h1:RPNrshWIDI6G2gRW9EHilWtl7Z6Sb1BR0xunSBf0
 github.com/kylelemons/godebug v1.1.0/go.mod h1:9/0rRGxNHcop5bhtWyNeEfOS8JIWk580+fNqagV/RAw=
 github.com/laiambryant/gotestutils v1.0.0 h1:0J86+ZMnMMlUBQQrV866AQ2AkAZTnF6rjSGJRiQy2oo=
 github.com/laiambryant/gotestutils v1.0.0/go.mod h1:1GE53WU9wTBNDWhtNQOTg2k9szp+cZbjqXsUcmgCHYo=
+github.com/laiambryant/optcgapi-go-sdk v0.0.0-20260313201012-af1d6af1be21 h1:qGZp4p6qBiRS/np6auVjUjU84WuIfEsjmRnHAb192bc=
+github.com/laiambryant/optcgapi-go-sdk v0.0.0-20260313201012-af1d6af1be21/go.mod h1:5tt5H6PkP27er1bMAgio8lfBPSWLhBaGmZcXzooYJmE=
+github.com/laiambryant/optcgapi-go-sdk v0.0.0-20260314094600-cd83a8ed0d73 h1:CCeyerZG+ShHWUZA/imA405rtRKA38q1/+KI8W5jzE4=
+github.com/laiambryant/optcgapi-go-sdk v0.0.0-20260314094600-cd83a8ed0d73/go.mod h1:5tt5H6PkP27er1bMAgio8lfBPSWLhBaGmZcXzooYJmE=
 github.com/laiambryant/sdkygopro v0.0.0-20260311224353-548637b86e53 h1:1kLFyAxwt1qTj/IzfQlfCCNmYLxVt4ochPYYC/cU7UU=
 github.com/laiambryant/sdkygopro v0.0.0-20260311224353-548637b86e53/go.mod h1:g0e5+kNaaKjwjLuW1Z/JQ09i/SGMUiCrN8iHPtMnNwU=
 github.com/laiambryant/tcgdex v0.0.0-20260119162859-dd84333d72de h1:KJ/aNNecie8cWAldGSLmMDxKmPAki6cc+Ub2KbNGinE=

@@ -152,6 +152,44 @@ type YuGiOhCard struct {
 	LinkMarkers     []string
 }
 
+// MagicCard represents Magic: The Gathering-specific card data
+type MagicCard struct {
+	ID, CardID    int64
+	ManaCost      string
+	CMC           float64
+	Colors        []string
+	ColorIdentity []string
+	TypeLine      string
+	Types         []string
+	Supertypes    []string
+	Subtypes      []string
+	Text          string
+	Flavor        string
+	Power         string
+	Toughness     string
+	Loyalty       string
+	Layout        string
+	Legalities    []MTGLegality
+}
+
+type MTGLegality struct {
+	Format       string
+	LegalityName string
+}
+
+type OnePieceCard struct {
+	ID, CardID    int64
+	CardColor     string
+	CardType      string
+	CardText      string
+	SubTypes      string
+	Attribute     string
+	Life          string
+	CardCost      string
+	CardPower     string
+	CounterAmount string
+}
+
 type Set struct {
 	ID           int64     `json:"id"`
 	APIID        string    `json:"api_id"`

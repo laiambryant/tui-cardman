@@ -16,6 +16,7 @@ type GameSet struct {
 type GameImporter interface {
 	FetchSets(ctx context.Context) ([]GameSet, error)
 	GetImportedSetIDs(ctx context.Context) (map[string]bool, error)
+	GetImportedSetCounts(ctx context.Context) (map[string]int, error)
 	CheckSetInDB(ctx context.Context, apiID string) (inDB bool, hasCollections bool, err error)
 	ImportSet(ctx context.Context, apiID string) error
 	DeleteSet(ctx context.Context, apiID string) error

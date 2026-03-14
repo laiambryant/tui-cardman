@@ -188,6 +188,12 @@ func (s *DeckServiceImpl) ValidateDeck(cards []model.Card, quantities map[int64]
 	if strings.EqualFold(gameName, "yu-gi-oh!") || strings.EqualFold(gameName, "yugioh") {
 		return validateYGODeck(cards, quantities)
 	}
+	if strings.EqualFold(gameName, "magic: the gathering") {
+		return validateMTGDeck(cards, quantities)
+	}
+	if strings.EqualFold(gameName, "one piece") {
+		return validateOnePieceDeck(cards, quantities)
+	}
 	return validatePokemonDeck(cards, quantities)
 }
 
@@ -282,4 +288,84 @@ var basicEnergyNames = map[string]bool{
 
 func isBasicEnergy(name string) bool {
 	return basicEnergyNames[strings.ToLower(name)]
+}
+
+func validateMTGDeck(cards []model.Card, quantities map[int64]int) []DeckValidationError {
+	var errors []DeckValidationError
+	cardsByID := make(map[int64]model.Card)
+	for _, c := range cards {
+		cardsByID[c.ID] = c
+	}
+	totalCards := 0
+	nameQty := make(map[string]int)
+	for cardID, qty := range quantities {
+		if qty <= 0 {
+			continue
+		}
+		totalCards += qty
+		if c, ok := cardsByID[cardID]; ok {
+			nameQty[c.Name] += qty
+		}
+	}
+	if totalCards < 60 {
+		errors = append(errors, DeckValidationError{
+			Type:    "card_count",
+			Message: "Deck must have at least 60 cards (currently " + strconv.Itoa(totalCards) + ")",
+		})
+	}
+	for name, qty := range nameQty {
+		if qty > 4 && !isBasicLand(name) {
+			errors = append(errors, DeckValidationError{
+				Type:    "duplicate_limit",
+				Message: name + ": max 4 copies allowed (" + strconv.Itoa(qty) + " found)",
+			})
+		}
+	}
+	return errors
+}
+
+var basicLandNames = map[string]bool{
+	"plains":   true,
+	"island":   true,
+	"swamp":    true,
+	"mountain": true,
+	"forest":   true,
+}
+
+func isBasicLand(name string) bool {
+	return basicLandNames[strings.ToLower(name)]
+}
+
+func validateOnePieceDeck(cards []model.Card, quantities map[int64]int) []DeckValidationError {
+	var errors []DeckValidationError
+	cardsByID := make(map[int64]model.Card)
+	for _, c := range cards {
+		cardsByID[c.ID] = c
+	}
+	totalCards := 0
+	nameQty := make(map[string]int)
+	for cardID, qty := range quantities {
+		if qty <= 0 {
+			continue
+		}
+		totalCards += qty
+		if c, ok := cardsByID[cardID]; ok {
+			nameQty[c.Name] += qty
+		}
+	}
+	if totalCards != 51 {
+		errors = append(errors, DeckValidationError{
+			Type:    "card_count",
+			Message: "Deck must have exactly 51 cards (1 Leader + 50 main deck, currently " + strconv.Itoa(totalCards) + ")",
+		})
+	}
+	for name, qty := range nameQty {
+		if qty > 4 {
+			errors = append(errors, DeckValidationError{
+				Type:    "duplicate_limit",
+				Message: name + ": max 4 copies allowed (" + strconv.Itoa(qty) + " found)",
+			})
+		}
+	}
+	return errors
 }

@@ -1,4 +1,4 @@
-package pokemontcg
+package onepiece
 
 import (
 	"context"
@@ -9,40 +9,37 @@ import (
 	"github.com/laiambryant/tui-cardman/internal/services/sets"
 )
 
-// PokemonGameImporter implements gameimporter.GameImporter for Pokemon TCG.
-type PokemonGameImporter struct {
+type OnePieceGameImporter struct {
 	client     *Client
 	service    *ImportService
 	setService sets.SetService
 }
 
-// NewPokemonGameImporter creates a new PokemonGameImporter.
-func NewPokemonGameImporter(client *Client, service *ImportService, setService sets.SetService) *PokemonGameImporter {
-	return &PokemonGameImporter{
+func NewOnePieceGameImporter(client *Client, service *ImportService, setService sets.SetService) *OnePieceGameImporter {
+	return &OnePieceGameImporter{
 		client:     client,
 		service:    service,
 		setService: setService,
 	}
 }
 
-func (i *PokemonGameImporter) FetchSets(ctx context.Context) ([]gameimporter.GameSet, error) {
-	ptcgSets, err := i.client.GetSets(ctx)
+func (i *OnePieceGameImporter) FetchSets(ctx context.Context) ([]gameimporter.GameSet, error) {
+	opSets, err := i.client.GetSets(ctx)
 	if err != nil {
 		return nil, err
 	}
-	result := make([]gameimporter.GameSet, 0, len(ptcgSets))
-	for _, s := range ptcgSets {
+	result := make([]gameimporter.GameSet, 0, len(opSets))
+	for _, s := range opSets {
 		result = append(result, gameimporter.GameSet{
-			APIID: s.ID,
-			Name:  s.Name,
-			Code:  s.PtcgoCode,
-			Total: s.Total,
+			APIID: s.SetID,
+			Name:  s.SetName,
+			Code:  s.SetID,
 		})
 	}
 	return result, nil
 }
 
-func (i *PokemonGameImporter) GetImportedSetIDs(ctx context.Context) (map[string]bool, error) {
+func (i *OnePieceGameImporter) GetImportedSetIDs(ctx context.Context) (map[string]bool, error) {
 	apiIDs, err := i.setService.GetAllSetAPIIDs(ctx)
 	if err != nil {
 		return nil, err
@@ -54,11 +51,11 @@ func (i *PokemonGameImporter) GetImportedSetIDs(ctx context.Context) (map[string
 	return result, nil
 }
 
-func (i *PokemonGameImporter) GetImportedSetCounts(ctx context.Context) (map[string]int, error) {
+func (i *OnePieceGameImporter) GetImportedSetCounts(ctx context.Context) (map[string]int, error) {
 	return i.setService.GetAllSetAPIIDsWithCounts(ctx)
 }
 
-func (i *PokemonGameImporter) CheckSetInDB(ctx context.Context, apiID string) (bool, bool, error) {
+func (i *OnePieceGameImporter) CheckSetInDB(ctx context.Context, apiID string) (bool, bool, error) {
 	dbSetID, err := i.setService.GetSetIDByAPIID(ctx, apiID)
 	if err == sql.ErrNoRows {
 		return false, false, nil
@@ -73,22 +70,22 @@ func (i *PokemonGameImporter) CheckSetInDB(ctx context.Context, apiID string) (b
 	return true, hasCollections, nil
 }
 
-func (i *PokemonGameImporter) ImportSet(ctx context.Context, apiID string) error {
+func (i *OnePieceGameImporter) ImportSet(ctx context.Context, apiID string) error {
 	return i.service.ImportSpecificSets(ctx, []string{apiID})
 }
 
-func (i *PokemonGameImporter) DeleteSet(ctx context.Context, apiID string) error {
+func (i *OnePieceGameImporter) DeleteSet(ctx context.Context, apiID string) error {
 	return i.service.DeleteSetByAPIID(ctx, apiID)
 }
 
-func (i *PokemonGameImporter) ImportAll(ctx context.Context) error {
+func (i *OnePieceGameImporter) ImportAll(ctx context.Context) error {
 	return i.service.ImportAllSets(ctx)
 }
 
-func (i *PokemonGameImporter) ImportNew(ctx context.Context) error {
+func (i *OnePieceGameImporter) ImportNew(ctx context.Context) error {
 	return i.service.ImportNewSets(ctx)
 }
 
-func (i *PokemonGameImporter) ImportSpecific(ctx context.Context, apiIDs []string) error {
+func (i *OnePieceGameImporter) ImportSpecific(ctx context.Context, apiIDs []string) error {
 	return i.service.ImportSpecificSets(ctx, apiIDs)
 }

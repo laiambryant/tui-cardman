@@ -27,7 +27,11 @@ import (
 	"github.com/laiambryant/tui-cardman/internal/services/sets"
 	"github.com/laiambryant/tui-cardman/internal/services/user"
 	"github.com/laiambryant/tui-cardman/internal/services/usercollection"
+	"github.com/laiambryant/tui-cardman/internal/services/mtgcard"
+	"github.com/laiambryant/tui-cardman/internal/services/onepiececard"
 	"github.com/laiambryant/tui-cardman/internal/services/yugiohcard"
+	"github.com/laiambryant/tui-cardman/internal/mtg"
+	"github.com/laiambryant/tui-cardman/internal/onepiece"
 	"github.com/laiambryant/tui-cardman/internal/yugioh"
 )
 
@@ -198,6 +202,19 @@ func initImporters(db *sql.DB, cardGames []model.CardGame, logger *slog.Logger) 
 		importRunService, setService, cardService, yugiohCardSvc)
 	ygoImporter := yugioh.NewYuGiOhGameImporter(ygoClient, ygoService, setService)
 
+	// Magic: The Gathering
+	mtgClient := mtg.NewClient()
+	mtgCardSvc := mtgcard.NewMTGCardService(db)
+	mtgService := mtg.NewImportService(db, mtgClient, logger,
+		importRunService, setService, cardService, mtgCardSvc)
+	mtgImporter := mtg.NewMTGGameImporter(mtgClient, mtgService, setService)
+
+	opClient := onepiece.NewClient()
+	opCardSvc := onepiececard.NewOnePieceCardService(db)
+	opService := onepiece.NewImportService(db, opClient, logger,
+		importRunService, setService, cardService, opCardSvc)
+	opImporter := onepiece.NewOnePieceGameImporter(opClient, opService, setService)
+
 	for i := range cardGames {
 		g := &cardGames[i]
 		switch g.Name {
@@ -205,6 +222,10 @@ func initImporters(db *sql.DB, cardGames []model.CardGame, logger *slog.Logger) 
 			importers[g.ID] = ptcgImporter
 		case "Yu-Gi-Oh!":
 			importers[g.ID] = ygoImporter
+		case "Magic: The Gathering":
+			importers[g.ID] = mtgImporter
+		case "One Piece":
+			importers[g.ID] = opImporter
 		}
 	}
 	return importers
@@ -851,6 +872,10 @@ func (m *Model) createCardGameTabsModel(selectedGame *model.CardGame) (CardGameT
 	pokemonRenderer := NewPokemonCardRenderer(pokemonCardSvc, selectedGame.ID)
 	yugiohCardSvc := yugiohcard.NewYuGiOhCardService(m.db)
 	yugiohRenderer := NewYuGiOhCardRenderer(yugiohCardSvc, selectedGame.ID)
+	mtgCardSvc := mtgcard.NewMTGCardService(m.db)
+	mtgRenderer := NewMTGCardRenderer(mtgCardSvc, selectedGame.ID)
+	opCardSvc := onepiececard.NewOnePieceCardService(m.db)
+	opRenderer := NewOnePieceCardRenderer(opCardSvc, selectedGame.ID)
 	cardGameTabs.cardDetail = &CardDetailModel{
 		styleManager: m.styleManager,
 		tcgService:   m.tcgPriceService,
@@ -858,7 +883,7 @@ func (m *Model) createCardGameTabsModel(selectedGame *model.CardGame) (CardGameT
 		listService:  m.listService,
 		width:        m.width,
 		height:       m.height,
-		renderers:    []CardDetailRenderer{pokemonRenderer, yugiohRenderer},
+		renderers:    []CardDetailRenderer{pokemonRenderer, yugiohRenderer, mtgRenderer, opRenderer},
 	}
 	if m.user != nil {
 		cardGameTabs.cardDetail.userID = m.user.ID

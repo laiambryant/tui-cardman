@@ -73,9 +73,9 @@ const (
 	insertCardQuery = `INSERT INTO cards (api_id, set_id, number, name, rarity, artist, card_game_id, updated_at)
 		    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
 
-	updateCardQuery = `UPDATE cards 
-		 SET set_id = ?, number = ?, name = ?, rarity = ?, 
-			 artist = ?, updated_at = ?
+	updateCardQuery = `UPDATE cards
+		 SET set_id = ?, number = ?, name = ?, rarity = ?,
+			 artist = ?, card_game_id = ?, updated_at = ?
 		 WHERE id = ?`
 )
 
@@ -222,7 +222,7 @@ func (s *CardServiceImpl) UpsertCard(ctx context.Context, tx *sql.Tx, apiID stri
 		return 0, fmt.Errorf("failed to query card: %w", err)
 	}
 
-	if _, err := db.ExecContextTx(ctx, tx, updateCardQuery, setID, number, name, rarity, artist, time.Now(), cardID); err != nil {
+	if _, err := db.ExecContextTx(ctx, tx, updateCardQuery, setID, number, name, rarity, artist, cardGameID, time.Now(), cardID); err != nil {
 		slog.Error("failed to update card", "api_id", apiID, "name", name, "card_id", cardID, "error", err)
 		return 0, fmt.Errorf("failed to update card: %w", err)
 	}

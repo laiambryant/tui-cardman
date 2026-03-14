@@ -68,3 +68,11 @@ type importNewSetsErrorMsg struct {
 }
 
 type importConfirmedMsg struct{}
+
+type fetchDatabaseSetCountsSuccessMsg struct {
+	counts map[string]int
+}
+
+type fetchDatabaseSetCountsErrorMsg struct {
+	err error
+}

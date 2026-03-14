@@ -69,6 +69,7 @@ type ImportModel struct {
 	importQueue       []importQueueItem
 	queueProcessing   bool
 	queueCurrentIndex int
+	databaseSetCounts map[string]int
 }
 
 func NewImportModel(importer gameimporter.GameImporter, selectedGame *model.CardGame, cfg *runtimecfg.Manager, styleManager *StyleManager, cardGames []model.CardGame) (ImportModel, error) {
@@ -103,6 +104,7 @@ func (m ImportModel) Init() tea.Cmd {
 		textinput.Blink,
 		m.fetchSetsCmd(),
 		m.fetchDatabaseSetsCmd(),
+		m.fetchDatabaseSetCountsCmd(),
 	)
 }
 
@@ -113,7 +115,7 @@ func (m ImportModel) handleImportSetResult(success bool, setID string, err error
 	if success {
 		m.isImporting = false
 		m.statusMsg = fmt.Sprintf("Successfully imported set: %s", setID)
-		return m, tea.Batch(m.fetchDatabaseSetsCmd(), m.checkSelectedSetInDB())
+		return m, tea.Batch(m.fetchDatabaseSetsCmd(), m.fetchDatabaseSetCountsCmd(), m.checkSelectedSetInDB())
 	}
 	m.isImporting = false
 	m.errorMsg = fmt.Sprintf("Failed to import set %s: %v", setID, err)
@@ -153,14 +155,14 @@ func (m ImportModel) handleQueueItemResult(success bool, setID string, err error
 		}
 	}
 	m.statusMsg = fmt.Sprintf("Queue complete: %d imported, %d errors", completed, errored)
-	return m, tea.Batch(m.fetchDatabaseSetsCmd(), m.checkSelectedSetInDB())
+	return m, tea.Batch(m.fetchDatabaseSetsCmd(), m.fetchDatabaseSetCountsCmd(), m.checkSelectedSetInDB())
 }
 
 func (m ImportModel) handleImportAllResult(success bool, operation string, err error) (ImportModel, tea.Cmd) {
 	if success {
 		m.isImporting = false
 		m.statusMsg = fmt.Sprintf("Successfully imported %s", operation)
-		return m, m.fetchDatabaseSetsCmd()
+		return m, tea.Batch(m.fetchDatabaseSetsCmd(), m.fetchDatabaseSetCountsCmd())
 	}
 	m.isImporting = false
 	m.errorMsg = fmt.Sprintf("Failed to import %s: %v", operation, err)
@@ -204,9 +206,14 @@ func (m ImportModel) Update(msg tea.Msg) (ImportModel, tea.Cmd) {
 	case fetchDatabaseSetsErrorMsg:
 		m.errorMsg = fmt.Sprintf("Failed to fetch database sets: %v", msg.err)
 		return m, nil
+	case fetchDatabaseSetCountsSuccessMsg:
+		m.databaseSetCounts = msg.counts
+		return m, nil
+	case fetchDatabaseSetCountsErrorMsg:
+		return m, nil
 	case deleteSetSuccessMsg:
 		m.statusMsg = fmt.Sprintf("Successfully deleted set: %s", msg.setID)
-		return m, tea.Batch(m.fetchDatabaseSetsCmd(), m.checkSelectedSetInDB())
+		return m, tea.Batch(m.fetchDatabaseSetsCmd(), m.fetchDatabaseSetCountsCmd(), m.checkSelectedSetInDB())
 	case deleteSetErrorMsg:
 		m.errorMsg = fmt.Sprintf("Failed to delete set %s: %v", msg.setID, msg.err)
 		return m, nil
@@ -609,6 +616,17 @@ func (m ImportModel) importSetCmd(setID string) tea.Cmd {
 			return importSetErrorMsg{setID, err}
 		}
 		return importSetSuccessMsg{setID}
+	}
+}
+
+func (m ImportModel) fetchDatabaseSetCountsCmd() tea.Cmd {
+	return func() tea.Msg {
+		ctx := context.Background()
+		counts, err := m.importer.GetImportedSetCounts(ctx)
+		if err != nil {
+			return fetchDatabaseSetCountsErrorMsg{err}
+		}
+		return fetchDatabaseSetCountsSuccessMsg{counts}
 	}
 }
 

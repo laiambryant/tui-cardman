@@ -54,6 +54,10 @@ func (i *YuGiOhGameImporter) GetImportedSetIDs(ctx context.Context) (map[string]
 	return result, nil
 }
 
+func (i *YuGiOhGameImporter) GetImportedSetCounts(ctx context.Context) (map[string]int, error) {
+	return i.setService.GetAllSetAPIIDsWithCounts(ctx)
+}
+
 func (i *YuGiOhGameImporter) CheckSetInDB(ctx context.Context, apiID string) (bool, bool, error) {
 	dbSetID, err := i.setService.GetSetIDByAPIID(ctx, apiID)
 	if err == sql.ErrNoRows {

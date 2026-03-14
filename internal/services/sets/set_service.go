@@ -16,6 +16,7 @@ type SetService interface {
 	GetSetIDByAPIID(ctx context.Context, apiID string) (int64, error)
 	UpsertSet(ctx context.Context, apiID, code, name string, printedTotal, total int) (int64, error)
 	GetAllSetAPIIDs(ctx context.Context) ([]string, error)
+	GetAllSetAPIIDsWithCounts(ctx context.Context) (map[string]int, error)
 	SetHasUserCollections(ctx context.Context, setID int64) (bool, error)
 }
 
@@ -41,6 +42,8 @@ const (
 	    WHERE id = ?`
 
 	selectAllSetAPIIDsQuery = `SELECT api_id FROM sets`
+
+	selectAllSetAPIIDsWithCountsQuery = `SELECT api_id, total FROM sets`
 
 	checkSetHasUserCollectionsQuery = `SELECT COUNT(*) > 0 FROM user_collections uc
 		JOIN cards c ON uc.card_id = c.id
@@ -140,6 +143,32 @@ func (s *SetServiceImpl) GetAllSetAPIIDs(ctx context.Context) ([]string, error) 
 	}
 
 	return apiIDs, nil
+}
+
+// GetAllSetAPIIDsWithCounts retrieves all set API IDs with their card counts from the database
+func (s *SetServiceImpl) GetAllSetAPIIDsWithCounts(ctx context.Context) (map[string]int, error) {
+	slog.Debug("query", "query", logging.SanitizeQuery(selectAllSetAPIIDsWithCountsQuery), "args", []any{})
+	rows, err := s.db.QueryContext(ctx, selectAllSetAPIIDsWithCountsQuery)
+	if err != nil {
+		slog.Error("failed to query set api ids with counts", "error", err)
+		return nil, fmt.Errorf("failed to query set api ids with counts: %w", err)
+	}
+	defer rows.Close()
+	result := make(map[string]int)
+	for rows.Next() {
+		var apiID string
+		var total int
+		if err := rows.Scan(&apiID, &total); err != nil {
+			slog.Error("failed to scan set api_id with count", "error", err)
+			return nil, fmt.Errorf("failed to scan set api_id with count: %w", err)
+		}
+		result[apiID] = total
+	}
+	if err := rows.Err(); err != nil {
+		slog.Error("error iterating set rows with counts", "error", err)
+		return nil, fmt.Errorf("error iterating set rows with counts: %w", err)
+	}
+	return result, nil
 }
 
 // SetHasUserCollections checks if any user has cards from this set in their collection

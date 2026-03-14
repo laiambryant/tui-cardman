@@ -433,6 +433,86 @@ func TestUpsertSet_UniqueAPIID(t *testing.T) {
 	assert.Equal(t, 1, count)
 }
 
+func TestGetAllSetAPIIDsWithCounts(t *testing.T) {
+	db := testutil.SetupTestDB(t)
+	defer testutil.CleanupTestDB(t, db)
+
+	testutil.ApplyTestMigrations(t, db, "../../db/migrations")
+
+	service := NewSetService(db)
+	ctx := context.Background()
+
+	_, err := service.UpsertSet(ctx, "base1", "BS", "Base Set", 102, 102)
+	require.NoError(t, err)
+	_, err = service.UpsertSet(ctx, "jungle", "JU", "Jungle", 64, 64)
+	require.NoError(t, err)
+	_, err = service.UpsertSet(ctx, "fossil", "FO", "Fossil", 62, 62)
+	require.NoError(t, err)
+
+	counts, err := service.GetAllSetAPIIDsWithCounts(ctx)
+
+	require.NoError(t, err)
+	assert.Len(t, counts, 3)
+	assert.Equal(t, 102, counts["base1"])
+	assert.Equal(t, 64, counts["jungle"])
+	assert.Equal(t, 62, counts["fossil"])
+}
+
+func TestGetAllSetAPIIDsWithCounts_Empty(t *testing.T) {
+	db := testutil.SetupTestDB(t)
+	defer testutil.CleanupTestDB(t, db)
+
+	testutil.ApplyTestMigrations(t, db, "../../db/migrations")
+
+	service := NewSetService(db)
+	ctx := context.Background()
+
+	counts, err := service.GetAllSetAPIIDsWithCounts(ctx)
+
+	require.NoError(t, err)
+	assert.Empty(t, counts)
+}
+
+func TestGetAllSetAPIIDsWithCounts_ZeroTotal(t *testing.T) {
+	db := testutil.SetupTestDB(t)
+	defer testutil.CleanupTestDB(t, db)
+
+	testutil.ApplyTestMigrations(t, db, "../../db/migrations")
+
+	service := NewSetService(db)
+	ctx := context.Background()
+
+	_, err := service.UpsertSet(ctx, "zero-set", "ZS", "Zero Set", 0, 0)
+	require.NoError(t, err)
+
+	counts, err := service.GetAllSetAPIIDsWithCounts(ctx)
+
+	require.NoError(t, err)
+	assert.Len(t, counts, 1)
+	assert.Equal(t, 0, counts["zero-set"])
+}
+
+func TestGetAllSetAPIIDsWithCounts_AfterUpdate(t *testing.T) {
+	db := testutil.SetupTestDB(t)
+	defer testutil.CleanupTestDB(t, db)
+
+	testutil.ApplyTestMigrations(t, db, "../../db/migrations")
+
+	service := NewSetService(db)
+	ctx := context.Background()
+
+	_, err := service.UpsertSet(ctx, "update-test", "UT", "Update Test", 0, 0)
+	require.NoError(t, err)
+
+	_, err = service.UpsertSet(ctx, "update-test", "UT", "Update Test", 150, 150)
+	require.NoError(t, err)
+
+	counts, err := service.GetAllSetAPIIDsWithCounts(ctx)
+
+	require.NoError(t, err)
+	assert.Equal(t, 150, counts["update-test"])
+}
+
 func TestGetAllSetAPIIDs_Ordering(t *testing.T) {
 	db := testutil.SetupTestDB(t)
 	defer testutil.CleanupTestDB(t, db)
