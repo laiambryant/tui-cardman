@@ -3,6 +3,7 @@ package cardgame
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -10,9 +11,12 @@ import (
 	"github.com/laiambryant/tui-cardman/internal/model"
 )
 
+var ErrGameNotFound = errors.New("game not found")
+
 // CardGameService defines the interface for card game-related operations.
 type CardGameService interface {
 	GetAllCardGames() ([]model.CardGame, error)
+	GetCardGameByName(name string) (*model.CardGame, error)
 }
 
 // CardGameServiceImpl implements the ICardGameService interface
@@ -30,6 +34,12 @@ const (
 		SELECT id, name, created_at
 		FROM card_games
 		ORDER BY name ASC
+	`
+	selectCardGameByNameQuery = `
+		SELECT id, name, created_at
+		FROM card_games
+		WHERE LOWER(name) = LOWER(?)
+		LIMIT 1
 	`
 )
 
@@ -58,4 +68,16 @@ func (s *CardGameServiceImpl) GetAllCardGames() ([]model.CardGame, error) {
 
 	slog.Debug("retrieved all card games", "count", len(games))
 	return games, nil
+}
+
+func (s *CardGameServiceImpl) GetCardGameByName(name string) (*model.CardGame, error) {
+	row := db.QueryRow(s.db, selectCardGameByNameQuery, name)
+	var game model.CardGame
+	if err := row.Scan(&game.ID, &game.Name, &game.CreatedAt); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrGameNotFound
+		}
+		return nil, fmt.Errorf("failed to scan card game: %w", err)
+	}
+	return &game, nil
 }
