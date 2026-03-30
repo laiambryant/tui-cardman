@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-03-30
+
+### Added
+
+- **Yu-Gi-Oh! card game** — full import pipeline and card renderer for Yu-Gi-Oh!
+- **One Piece card game** — import pipeline and card renderer for One Piece TCG
+- **Magic: The Gathering** — initial import support (in progress)
+- **Card detail view** — dedicated detail panel for viewing individual card information
+- **Table settings** — per-table configurable display settings in the TUI
+- **Additional CLI commands** — expanded Cobra subcommands covering nearly all application functionality
+- **Static GitHub Pages site** — project documentation page added under `docs/`
+- 6 new database migrations (015–020) adding per-game card tables for Pokemon, Yu-Gi-Oh!, Magic, and One Piece, plus seed data for One Piece and MTG card games
+
+### Changed
+
+- Replaced legacy SDK with updated TCGDex SDK (`fix: replace old sdk with new one`)
+- Import UI restructured into three focused panels for clearer workflow
+- List content view promoted to its own subview for improved navigation
+- Search functionality improved with better filtering and performance
+- Input handling cleaned up across registration and login views
+
+### Fixed
+
+- Modal dialog header and footer rendering
+- Modal confirmation background display
+- Card list table wrapper removed to fix layout overflow
+- Various input handling edge cases across the TUI
+
 ## [0.1.0] - 2026-03-01
 
 Initial alpha release of tui-cardman.
@@ -38,5 +66,6 @@ Initial alpha release of tui-cardman.
 - Price data requires manual import runs; no automatic scheduling built in
 - SSH host key must be provisioned manually before running `serve-ssh`
 
-[Unreleased]: https://github.com/laiambryant/tui-cardman/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/laiambryant/tui-cardman/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/laiambryant/tui-cardman/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/laiambryant/tui-cardman/releases/tag/v0.1.0

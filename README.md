@@ -7,7 +7,7 @@
 
 A terminal UI for managing your trading card collection. Track cards, build decks, maintain wishlists, and import card data — all from the command line.
 
-> **Status**: v0.1.0 alpha — core features are functional. Expect rough edges.
+> **Status**: v0.2.0 — core features are functional. Expect rough edges.
 
 ## Features
 
