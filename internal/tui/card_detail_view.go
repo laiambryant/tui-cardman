@@ -85,34 +85,34 @@ func (m *CardDetailModel) fetchDetailCmd(cardID int64) tea.Cmd {
 	}
 }
 
-func (m *CardDetailModel) Update(msg tea.Msg) tea.Cmd {
+func (m *CardDetailModel) Update(msg tea.Msg) (CardDetailModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case cardDetailLoadedMsg:
 		m.tcgPrices = msg.tcgPrices
 		m.cardMarketPrice = msg.cardMarketPrice
 		m.listsContaining = msg.lists
 		m.extraData = msg.extraData
-		return nil
+		return *m, nil
 	case tea.KeyMsg:
 		s := msg.String()
 		if s == "esc" || s == "q" {
 			m.Close()
-			return nil
+			return *m, nil
 		}
 		if s == "up" || s == "k" {
 			if m.scroll > 0 {
 				m.scroll--
 			}
-			return nil
+			return *m, nil
 		}
 		if s == "down" || s == "j" {
 			if m.scroll < m.maxScroll {
 				m.scroll++
 			}
-			return nil
+			return *m, nil
 		}
 	}
-	return nil
+	return *m, nil
 }
 
 func (m *CardDetailModel) activeRenderer() CardDetailRenderer {

@@ -32,7 +32,9 @@ func NewManager(isLocal bool, configPath string, service ButtonConfigService, us
 		}
 	} else {
 		config = Default()
-		strategy = NewRemoteStrategy(service, userID, config, configPath)
+		remoteStrategy := NewRemoteStrategy(service, userID, config)
+		remoteStrategy.MigrateFromLocal(configPath)
+		strategy = remoteStrategy
 		dbConfig, loadErr := strategy.Load()
 		if loadErr == nil && dbConfig != nil {
 			config = dbConfig

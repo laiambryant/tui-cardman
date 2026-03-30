@@ -65,8 +65,7 @@ type DeckBuilderModel struct {
 	deckContentsTable   table.Model
 	cardSubFocus        cardPanelSubFocus
 	focus               DeckBuilderFocus
-	tempQuantityChanges map[int64]int
-	dbQuantities        map[int64]int
+	quantities          QuantityTracker
 	validationErrors    []deck.DeckValidationError
 	modal               ModalModel
 	shouldGoBack        bool
@@ -121,8 +120,7 @@ func NewDeckBuilderModel(game *model.CardGame, user *auth.User, deckService deck
 		nameInput:           nameInput,
 		cardTable:           cardTable,
 		deckContentsTable:   deckContentsTable,
-		tempQuantityChanges: make(map[int64]int),
-		dbQuantities:        make(map[int64]int),
+		quantities:          newQuantityTracker(),
 		searchCache:         NewSearchCache(),
 		cardPagination:      NewPagination(50),
 	}
@@ -419,11 +417,10 @@ func (m *DeckBuilderModel) selectCurrentDeck() {
 		m.selectedDeck = &d
 		quantities, err := m.deckService.GetAllQuantitiesForDeck(d.ID)
 		if err == nil {
-			m.dbQuantities = quantities
+			m.quantities.load(quantities)
 		} else {
-			m.dbQuantities = make(map[int64]int)
+			m.quantities.reset()
 		}
-		m.tempQuantityChanges = make(map[int64]int)
 		m.updateValidation()
 		m.updateCardTable()
 	}
@@ -443,7 +440,7 @@ func (m *DeckBuilderModel) updateCardTable() {
 	page := m.filteredCards[start:end]
 	vcs := m.deckVCS(80)
 	m.cardTable.SetColumns(vcs.Columns)
-	m.cardTable.SetRows(buildCardRows(page, m.dbQuantities, m.tempQuantityChanges, vcs))
+	m.cardTable.SetRows(buildCardRows(page, m.quantities.db, m.quantities.temp, vcs))
 	m.deckContentsTable.SetColumns(vcs.Columns)
 	m.updateDeckContentsTable(vcs)
 }
@@ -451,7 +448,7 @@ func (m *DeckBuilderModel) updateCardTable() {
 func (m *DeckBuilderModel) updateDeckContentsTable(vcs VisibleColumnSet) {
 	var rows []table.Row
 	for _, card := range m.cards {
-		qty := m.dbQuantities[card.ID] + m.tempQuantityChanges[card.ID]
+		qty := m.quantities.total(card.ID)
 		if qty <= 0 {
 			continue
 		}
@@ -461,18 +458,11 @@ func (m *DeckBuilderModel) updateDeckContentsTable(vcs VisibleColumnSet) {
 }
 
 func (m *DeckBuilderModel) updateValidation() {
-	combined := make(map[int64]int)
-	for id, qty := range m.dbQuantities {
-		combined[id] = qty
-	}
-	for id, delta := range m.tempQuantityChanges {
-		combined[id] += delta
-	}
 	gameName := ""
 	if m.selectedGame != nil {
 		gameName = m.selectedGame.Name
 	}
-	m.validationErrors = m.deckService.ValidateDeck(m.cards, combined, gameName)
+	m.validationErrors = m.deckService.ValidateDeck(m.cards, m.quantities.snapshot(), gameName)
 }
 
 func (m DeckBuilderModel) getSelectedCard() (model.Card, bool) {
@@ -495,7 +485,7 @@ func (m DeckBuilderModel) handleIncrement() (DeckBuilderModel, tea.Cmd) {
 	if !ok {
 		return m, nil
 	}
-	m.tempQuantityChanges[card.ID]++
+	m.quantities.increment(card.ID)
 	m.updateValidation()
 	m.updateCardTable()
 	return m, nil
@@ -509,27 +499,21 @@ func (m DeckBuilderModel) handleDecrement() (DeckBuilderModel, tea.Cmd) {
 	if !ok {
 		return m, nil
 	}
-	total := m.dbQuantities[card.ID] + m.tempQuantityChanges[card.ID]
-	if total <= 0 {
+	if !m.quantities.decrement(card.ID) {
 		return m, nil
 	}
-	m.tempQuantityChanges[card.ID]--
 	m.updateValidation()
 	m.updateCardTable()
 	return m, nil
 }
 
 func (m DeckBuilderModel) handleSave() (DeckBuilderModel, tea.Cmd) {
-	if m.selectedDeck == nil || len(m.tempQuantityChanges) == 0 {
-		return m, nil
-	}
-	changeCount := countNonZeroDeltas(m.tempQuantityChanges)
-	if changeCount == 0 {
+	if m.selectedDeck == nil || m.quantities.pendingCount() == 0 {
 		return m, nil
 	}
 	m.modal = newModal(
 		"Save Deck",
-		fmt.Sprintf("Save %d card changes to '%s'?", changeCount, m.selectedDeck.Name),
+		fmt.Sprintf("Save %d card changes to '%s'?", m.quantities.pendingCount(), m.selectedDeck.Name),
 		func() tea.Cmd { return func() tea.Msg { return saveDeckMsg{} } },
 		func() tea.Cmd { return nil },
 		m.styleManager, m.width, m.height,
@@ -541,16 +525,13 @@ func (m DeckBuilderModel) performSave() (DeckBuilderModel, tea.Cmd) {
 	if m.selectedDeck == nil {
 		return m, nil
 	}
-	updates := buildQuantityUpdates(m.dbQuantities, m.tempQuantityChanges)
+	updates := m.quantities.buildUpdates()
 	ctx := context.Background()
 	err := m.deckService.UpsertDeckCardBatch(ctx, m.selectedDeck.ID, updates)
 	if err != nil {
 		return m, nil
 	}
-	for id, qty := range updates {
-		m.dbQuantities[id] = qty
-	}
-	m.tempQuantityChanges = make(map[int64]int)
+	m.quantities.commit(updates)
 	m.searchCache.Invalidate()
 	m.updateValidation()
 	m.updateCardTable()
@@ -602,8 +583,7 @@ func (m DeckBuilderModel) performDeleteDeck() (DeckBuilderModel, tea.Cmd) {
 	ctx := context.Background()
 	_ = m.deckService.DeleteDeck(ctx, m.selectedDeck.ID)
 	m.selectedDeck = nil
-	m.dbQuantities = make(map[int64]int)
-	m.tempQuantityChanges = make(map[int64]int)
+	m.quantities.reset()
 	m.refreshDecks()
 	if m.deckCursor >= len(m.decks) && m.deckCursor > 0 {
 		m.deckCursor--
@@ -685,13 +665,7 @@ func (m DeckBuilderModel) renderDeckPanel(width, height int) string {
 	}
 	if m.selectedDeck != nil {
 		b.WriteString("\n")
-		totalCards := 0
-		for _, qty := range m.dbQuantities {
-			totalCards += qty
-		}
-		for _, delta := range m.tempQuantityChanges {
-			totalCards += delta
-		}
+		totalCards := m.quantities.totalCards()
 		b.WriteString(m.styleManager.GetNoStyle().Render(fmt.Sprintf("Cards: %d/60", totalCards)) + "\n")
 		if len(m.validationErrors) == 0 && totalCards == 60 {
 			b.WriteString(m.styleManager.applyBGFG(lipgloss.NewStyle().Foreground(lipgloss.Color("34"))).Render(SuccessIcon+" Valid deck") + "\n")
@@ -784,18 +758,14 @@ func (m DeckBuilderModel) renderFooter() string {
 }
 
 func (m *DeckBuilderModel) buildDeckExportRows() []export.CardRow {
-	return buildCardExportRows(m.cards, m.dbQuantities, m.tempQuantityChanges)
+	return buildCardExportRows(m.cards, m.quantities.db, m.quantities.temp)
 }
 
-// applyImport merges the imported card quantities into tempQuantityChanges.
-// Quantities are staged so the user can review before saving with Ctrl+S.
 func (m DeckBuilderModel) applyImport(msg ImportApplyMsg) (DeckBuilderModel, tea.Cmd) {
 	if m.selectedDeck == nil {
 		return m, nil
 	}
-	for cardID, qty := range msg.Quantities {
-		m.tempQuantityChanges[cardID] += qty
-	}
+	m.quantities.applyImport(msg.Quantities)
 	m.updateValidation()
 	m.updateCardTable()
 	return m, nil

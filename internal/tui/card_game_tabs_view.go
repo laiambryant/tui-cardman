@@ -3,7 +3,6 @@ package tui
 import (
 	"context"
 	"fmt"
-	"maps"
 	"sort"
 	"strings"
 
@@ -51,8 +50,7 @@ type CardGameTabsModel struct {
 	styleManager         *StyleManager
 	width                int
 	height               int
-	tempQuantityChanges  map[int64]int
-	dbQuantities         map[int64]int
+	quantities           QuantityTracker
 	collectionService    usercollection.UserCollectionService
 	user                 *auth.User
 	modal                ModalModel
@@ -115,8 +113,7 @@ func NewCardGameTabsModel(selectedGame *model.CardGame, cfg *runtimecfg.Manager,
 		cardTable:            cardTable,
 		configManager:        cfg,
 		styleManager:         styleManager,
-		tempQuantityChanges:  make(map[int64]int),
-		dbQuantities:         make(map[int64]int),
+		quantities:           newQuantityTracker(),
 		userSearchTable:      userSearchTable,
 		userSearchInput:      userSearchInput,
 		searchCache:          NewSearchCache(),
@@ -281,11 +278,13 @@ func (m CardGameTabsModel) Update(msg tea.Msg) (CardGameTabsModel, tea.Cmd) {
 	}
 	if m.cardDetail != nil && m.cardDetail.visible {
 		if _, ok := msg.(cardDetailLoadedMsg); ok {
-			cmd := m.cardDetail.Update(msg)
+			updated, cmd := m.cardDetail.Update(msg)
+			*m.cardDetail = updated
 			return m, cmd
 		}
 		if keyMsg, ok := msg.(tea.KeyMsg); ok {
-			cmd := m.cardDetail.Update(keyMsg)
+			updated, cmd := m.cardDetail.Update(keyMsg)
+			*m.cardDetail = updated
 			return m, cmd
 		}
 		return m, nil
@@ -307,7 +306,8 @@ func (m CardGameTabsModel) Update(msg tea.Msg) (CardGameTabsModel, tea.Cmd) {
 		return m, nil
 	case cardDetailLoadedMsg:
 		if m.cardDetail != nil {
-			m.cardDetail.Update(msg)
+			updated, _ := m.cardDetail.Update(msg)
+			*m.cardDetail = updated
 		}
 		return m, nil
 	case saveCollectionMsg:
@@ -315,189 +315,184 @@ func (m CardGameTabsModel) Update(msg tea.Msg) (CardGameTabsModel, tea.Cmd) {
 	case tea.KeyMsg:
 		s := msg.String()
 		action := MatchActionOrDefault(m.configManager, s, "")
-
-		// Quit handling
 		if action == "quit" || s == "ctrl+c" {
 			return m, tea.Quit
 		}
-
-		// Back / close (use configured bindings)
 		if action == "back" || action == "quit_alt" {
 			return m, nil
 		}
-
-		// Tab navigation
-		if action == "nav_next_tab" || action == "nav_right" || s == "right" {
-			m.currentTab = (m.currentTab + 1) % tabCount
-			m = m.updateTableForTab()
-			if m.currentTab == TabCardSearch {
-				m.searchInput.Focus()
-			} else {
-				m.searchInput.Blur()
-			}
+		if m, ok := m.handleTabSwitch(action, s); ok {
 			return m, nil
 		}
+		switch m.currentTab {
+		case TabCollection:
+			return m.handleCollectionTabKeys(action, s, msg)
+		case TabCardSearch:
+			return m.handleCardSearchTabKeys(action, s, msg)
+		}
+	}
+	return m, nil
+}
 
-		if action == "nav_prev_tab" || action == "nav_left" || s == "left" {
-			if m.currentTab == 0 {
-				m.currentTab = tabCount - 1
-			} else {
-				m.currentTab--
-			}
-			m = m.updateTableForTab()
-			if m.currentTab == TabCardSearch {
-				m.searchInput.Focus()
-			} else {
-				m.searchInput.Blur()
-			}
-			return m, nil
+func (m CardGameTabsModel) handleTabSwitch(action, s string) (CardGameTabsModel, bool) {
+	switch {
+	case action == "nav_next_tab" || action == "nav_right" || s == "right":
+		m.currentTab = (m.currentTab + 1) % tabCount
+	case action == "nav_prev_tab" || action == "nav_left" || s == "left":
+		if m.currentTab == 0 {
+			m.currentTab = tabCount - 1
+		} else {
+			m.currentTab--
 		}
+	default:
+		return m, false
+	}
+	m = m.updateTableForTab()
+	if m.currentTab == TabCardSearch {
+		m.searchInput.Focus()
+	} else {
+		m.searchInput.Blur()
+	}
+	return m, true
+}
 
-		if s == "tab" && m.currentTab == TabCollection {
-			m.collectionTabFocus = (m.collectionTabFocus + 1) % 2
-			if m.collectionTabFocus == 0 {
-				m.setCompletionTable.Focus()
-			} else {
-				m.setCompletionTable.Blur()
-			}
-			return m, nil
+func (m CardGameTabsModel) handleCollectionTabKeys(action, s string, msg tea.KeyMsg) (CardGameTabsModel, tea.Cmd) {
+	if s == "tab" {
+		m.collectionTabFocus = (m.collectionTabFocus + 1) % 2
+		if m.collectionTabFocus == 0 {
+			m.setCompletionTable.Focus()
+		} else {
+			m.setCompletionTable.Blur()
 		}
-		if s == "tab" && m.currentTab == TabCardSearch {
-			m.searchTabFocus = (m.searchTabFocus + 1) % 2
-			if m.searchTabFocus == 0 {
-				m.cardTable.Focus()
-				m.userSearchTable.Blur()
-				m.searchInput.Focus()
-				m.userSearchInput.Blur()
-			} else {
-				m.cardTable.Blur()
-				m.userSearchTable.Focus()
-				m.searchInput.Blur()
-				m.userSearchInput.Focus()
-			}
-			return m, nil
+		return m, nil
+	}
+	if action == "nav_up" || s == "up" {
+		if m.collectionTabFocus == 0 {
+			m.setCompletionTable, _ = m.setCompletionTable.Update(msg)
+			m.updateSpotlightFromSetTable()
+		} else if m.spotlightScroll > 0 {
+			m.spotlightScroll--
 		}
-		// Navigation — up/down only for Collection tab (TabCardSearch uses arrow keys via textinput forwarding below)
-		if action == "nav_up" || s == "up" {
-			if m.currentTab == TabCollection {
-				if m.collectionTabFocus == 0 {
-					m.setCompletionTable, _ = m.setCompletionTable.Update(msg)
-					m.updateSpotlightFromSetTable()
-				} else if m.spotlightScroll > 0 {
-					m.spotlightScroll--
-				}
-				return m, nil
+		return m, nil
+	}
+	if action == "nav_down" || s == "down" {
+		if m.collectionTabFocus == 0 {
+			if m.setCompletionTable.Cursor() < len(m.setCompletionTable.Rows())-1 {
+				m.setCompletionTable, _ = m.setCompletionTable.Update(msg)
+				m.updateSpotlightFromSetTable()
 			}
+		} else {
+			m.spotlightScroll++
 		}
-		if action == "nav_down" || s == "down" {
-			if m.currentTab == TabCollection {
-				if m.collectionTabFocus == 0 {
-					if m.setCompletionTable.Cursor() < len(m.setCompletionTable.Rows())-1 {
-						m.setCompletionTable, _ = m.setCompletionTable.Update(msg)
-						m.updateSpotlightFromSetTable()
-					}
-				} else {
-					m.spotlightScroll++
-				}
-				return m, nil
-			}
-		}
+		return m, nil
+	}
+	return m, nil
+}
 
-		// CardSearch tab — handle all shortcuts here; search textinput forwarding follows
-		if m.currentTab == TabCardSearch {
-			// Arrow-based table navigation (always works, not intercepted by textinput)
-			if action == "nav_up" || s == "up" {
-				if m.searchTabFocus == 0 {
-					m.cardTable, _ = m.cardTable.Update(msg)
-				} else {
-					m.userSearchTable, _ = m.userSearchTable.Update(msg)
-				}
-				return m, nil
+func (m CardGameTabsModel) handleCardSearchTabKeys(action, s string, msg tea.KeyMsg) (CardGameTabsModel, tea.Cmd) {
+	if s == "tab" {
+		m.searchTabFocus = (m.searchTabFocus + 1) % 2
+		if m.searchTabFocus == 0 {
+			m.cardTable.Focus()
+			m.userSearchTable.Blur()
+			m.searchInput.Focus()
+			m.userSearchInput.Blur()
+		} else {
+			m.cardTable.Blur()
+			m.userSearchTable.Focus()
+			m.searchInput.Blur()
+			m.userSearchInput.Focus()
+		}
+		return m, nil
+	}
+	if action == "nav_up" || s == "up" {
+		if m.searchTabFocus == 0 {
+			m.cardTable, _ = m.cardTable.Update(msg)
+		} else {
+			m.userSearchTable, _ = m.userSearchTable.Update(msg)
+		}
+		return m, nil
+	}
+	if action == "nav_down" || s == "down" {
+		if m.searchTabFocus == 0 {
+			if m.cardTable.Cursor() < len(m.cardTable.Rows())-1 {
+				m.cardTable, _ = m.cardTable.Update(msg)
 			}
-			if action == "nav_down" || s == "down" {
-				if m.searchTabFocus == 0 {
-					if m.cardTable.Cursor() < len(m.cardTable.Rows())-1 {
-						m.cardTable, _ = m.cardTable.Update(msg)
-					}
-				} else {
-					if m.userSearchTable.Cursor() < len(m.userSearchTable.Rows())-1 {
-						m.userSearchTable, _ = m.userSearchTable.Update(msg)
-					}
-				}
-				return m, nil
+		} else {
+			if m.userSearchTable.Cursor() < len(m.userSearchTable.Rows())-1 {
+				m.userSearchTable, _ = m.userSearchTable.Update(msg)
 			}
-			// Modifier-key shortcuts (safe regardless of search focus)
-			if action == "export" {
-				m.exportState = NewExportState("collection", m.selectedGame.Name, false, "", m.buildCollectionExportRows)
-				return m, nil
-			}
-			if action == "page_next" {
-				if m.searchTabFocus == 0 {
-					m.cardPagination.NextPage()
-					m.updateCardTable()
-					m.cardTable.SetCursor(0)
-				} else {
-					m.collectionPagination.NextPage()
-					m.filteredCollection = m.filterUserCollection(m.userSearchInput.Value())
-					m.updateUserSearchTable(m.paginateCollections(m.filteredCollection))
-					m.userSearchTable.SetCursor(0)
-				}
-				return m, nil
-			}
-			if action == "page_prev" {
-				if m.searchTabFocus == 0 {
-					m.cardPagination.PrevPage()
-					m.updateCardTable()
-					m.cardTable.SetCursor(0)
-				} else {
-					m.collectionPagination.PrevPage()
-					m.filteredCollection = m.filterUserCollection(m.userSearchInput.Value())
-					m.updateUserSearchTable(m.paginateCollections(m.filteredCollection))
-					m.userSearchTable.SetCursor(0)
-				}
-				return m, nil
-			}
-			if m.searchTabFocus == 0 {
-				if action == "increment_quantity" {
-					return m.handleIncrementQuantity()
-				}
-				if action == "decrement_quantity" {
-					return m.handleDecrementQuantity()
-				}
-				if action == "save" {
-					return m.handleSaveCollection()
-				}
-				if action == "select" && m.cardDetail != nil {
-					card, ok := m.getSelectedCard()
-					if ok {
-						qty := m.dbQuantities[card.ID] + m.tempQuantityChanges[card.ID]
-						cmd := m.cardDetail.Open(card, qty)
-						return m, cmd
-					}
-				}
-			}
-			// Forward non-modifier keys to the focused search input
-			if !isModifierKey(s) {
-				if m.searchTabFocus == 0 {
-					var cmd tea.Cmd
-					m.searchInput, cmd = m.searchInput.Update(msg)
-					m.filteredCards = m.filterCards(m.searchInput.Value())
-					m.cardPagination.Reset()
-					m.updateCardTable()
-					m.cursor = 0
-					m.cardTable.SetCursor(0)
-					return m, cmd
-				}
-				var cmd tea.Cmd
-				m.userSearchInput, cmd = m.userSearchInput.Update(msg)
-				m.filteredCollection = m.filterUserCollection(m.userSearchInput.Value())
-				m.collectionPagination.Reset()
-				m.collectionPagination.TotalItems = len(m.filteredCollection)
-				m.updateUserSearchTable(m.paginateCollections(m.filteredCollection))
-				m.userSearchTable.SetCursor(0)
+		}
+		return m, nil
+	}
+	if action == "export" {
+		m.exportState = NewExportState("collection", m.selectedGame.Name, false, "", m.buildCollectionExportRows)
+		return m, nil
+	}
+	if action == "page_next" {
+		if m.searchTabFocus == 0 {
+			m.cardPagination.NextPage()
+			m.updateCardTable()
+			m.cardTable.SetCursor(0)
+		} else {
+			m.collectionPagination.NextPage()
+			m.filteredCollection = m.filterUserCollection(m.userSearchInput.Value())
+			m.updateUserSearchTable(m.paginateCollections(m.filteredCollection))
+			m.userSearchTable.SetCursor(0)
+		}
+		return m, nil
+	}
+	if action == "page_prev" {
+		if m.searchTabFocus == 0 {
+			m.cardPagination.PrevPage()
+			m.updateCardTable()
+			m.cardTable.SetCursor(0)
+		} else {
+			m.collectionPagination.PrevPage()
+			m.filteredCollection = m.filterUserCollection(m.userSearchInput.Value())
+			m.updateUserSearchTable(m.paginateCollections(m.filteredCollection))
+			m.userSearchTable.SetCursor(0)
+		}
+		return m, nil
+	}
+	if m.searchTabFocus == 0 {
+		if action == "increment_quantity" {
+			return m.handleIncrementQuantity()
+		}
+		if action == "decrement_quantity" {
+			return m.handleDecrementQuantity()
+		}
+		if action == "save" {
+			return m.handleSaveCollection()
+		}
+		if action == "select" && m.cardDetail != nil {
+			card, ok := m.getSelectedCard()
+			if ok {
+				qty := m.quantities.total(card.ID)
+				cmd := m.cardDetail.Open(card, qty)
 				return m, cmd
 			}
 		}
+	}
+	if !isModifierKey(s) {
+		if m.searchTabFocus == 0 {
+			var cmd tea.Cmd
+			m.searchInput, cmd = m.searchInput.Update(msg)
+			m.filteredCards = m.filterCards(m.searchInput.Value())
+			m.cardPagination.Reset()
+			m.updateCardTable()
+			m.cursor = 0
+			m.cardTable.SetCursor(0)
+			return m, cmd
+		}
+		var cmd tea.Cmd
+		m.userSearchInput, cmd = m.userSearchInput.Update(msg)
+		m.filteredCollection = m.filterUserCollection(m.userSearchInput.Value())
+		m.collectionPagination.Reset()
+		m.collectionPagination.TotalItems = len(m.filteredCollection)
+		m.updateUserSearchTable(m.paginateCollections(m.filteredCollection))
+		m.userSearchTable.SetCursor(0)
+		return m, cmd
 	}
 	return m, nil
 }
@@ -825,61 +820,36 @@ func (m *CardGameTabsModel) updateCardTable() {
 	page := source[start:end]
 	vcs := m.cardSearchVCS(80)
 	m.cardTable.SetColumns(vcs.Columns)
-	m.cardTable.SetRows(buildCardRows(page, m.dbQuantities, m.tempQuantityChanges, vcs))
+	m.cardTable.SetRows(buildCardRows(page, m.quantities.db, m.quantities.temp, vcs))
 }
 
-// handleIncrementQuantity increments the quantity of the selected card
 func (m CardGameTabsModel) handleIncrementQuantity() (CardGameTabsModel, tea.Cmd) {
 	card, ok := m.getSelectedCard()
 	if !ok {
 		return m, nil
 	}
-	if m.tempQuantityChanges == nil {
-		m.tempQuantityChanges = make(map[int64]int)
-	}
-	m.tempQuantityChanges[card.ID]++
+	m.quantities.increment(card.ID)
 	m.updateCardTable()
 	return m, nil
 }
 
-// handleDecrementQuantity decrements the quantity of the selected card
 func (m CardGameTabsModel) handleDecrementQuantity() (CardGameTabsModel, tea.Cmd) {
 	card, ok := m.getSelectedCard()
 	if !ok {
 		return m, nil
 	}
-	dbQty := m.dbQuantities[card.ID]
-	tempDelta := m.tempQuantityChanges[card.ID]
-	totalQty := dbQty + tempDelta
-	if totalQty <= 0 {
+	if !m.quantities.decrement(card.ID) {
 		return m, nil
 	}
-	if m.tempQuantityChanges == nil {
-		m.tempQuantityChanges = make(map[int64]int)
-	}
-	m.tempQuantityChanges[card.ID]--
 	m.updateCardTable()
 	return m, nil
 }
 
-// handleSaveCollection saves the temporary quantity changes to the database
 func (m CardGameTabsModel) handleSaveCollection() (CardGameTabsModel, tea.Cmd) {
-	if len(m.tempQuantityChanges) == 0 {
+	if m.quantities.pendingCount() == 0 || m.collectionService == nil || m.user == nil {
 		return m, nil
 	}
-	if m.collectionService == nil || m.user == nil {
-		return m, nil
-	}
-	changeCount := 0
-	for _, delta := range m.tempQuantityChanges {
-		if delta != 0 {
-			changeCount++
-		}
-	}
-	if changeCount == 0 {
-		return m, nil
-	}
-	message := fmt.Sprintf("Save %d card quantity changes to your collection?", changeCount)
+	message := fmt.Sprintf("Save %d card quantity changes to your collection?", m.quantities.pendingCount())
 	m.modal = newModal(
 		"Confirm Save",
 		message,
@@ -899,19 +869,13 @@ func (m CardGameTabsModel) handleSaveCollection() (CardGameTabsModel, tea.Cmd) {
 type saveCollectionMsg struct{}
 
 func (m CardGameTabsModel) performSaveCollection() (CardGameTabsModel, tea.Cmd) {
-	updates := make(map[int64]int)
-	for cardID, tempDelta := range m.tempQuantityChanges {
-		dbQty := m.dbQuantities[cardID]
-		newQty := dbQty + tempDelta
-		updates[cardID] = newQty
-	}
+	updates := m.quantities.buildUpdates()
 	ctx := context.Background()
 	err := m.collectionService.UpsertCollectionBatch(ctx, m.user.ID, updates)
 	if err != nil {
 		return m, nil
 	}
-	maps.Copy(m.dbQuantities, updates)
-	m.tempQuantityChanges = make(map[int64]int)
+	m.quantities.commit(updates)
 	m.searchCache.Invalidate()
 	m.collectionCache.Invalidate()
 	m.updateCardTable()

@@ -74,21 +74,25 @@ type RemoteStrategy struct {
 }
 
 // NewRemoteStrategy creates a new remote database strategy
-func NewRemoteStrategy(service ButtonConfigService, userID int64, defaultConfig *RuntimeConfig, localPath string) *RemoteStrategy {
-	strategy := &RemoteStrategy{
+func NewRemoteStrategy(service ButtonConfigService, userID int64, defaultConfig *RuntimeConfig) *RemoteStrategy {
+	return &RemoteStrategy{
 		service:       service,
 		userID:        userID,
 		defaultConfig: defaultConfig,
 	}
-	if service != nil && localPath != "" {
-		if _, err := os.Stat(localPath); err == nil {
-			ctx := context.Background()
-			if migrateErr := service.MigrateLocalToDB(ctx, userID, localPath); migrateErr != nil {
-				slog.Warn("failed to migrate local config to database", "user_id", userID, "path", localPath, "error", migrateErr)
-			}
-		}
+}
+
+// MigrateFromLocal migrates a local config file to the database if the file exists.
+func (s *RemoteStrategy) MigrateFromLocal(localPath string) {
+	if s.service == nil || localPath == "" {
+		return
 	}
-	return strategy
+	if _, err := os.Stat(localPath); err != nil {
+		return
+	}
+	if err := s.service.MigrateLocalToDB(context.Background(), s.userID, localPath); err != nil {
+		slog.Warn("failed to migrate local config to database", "user_id", s.userID, "path", localPath, "error", err)
+	}
 }
 
 func (s *RemoteStrategy) Load() (*RuntimeConfig, error) {
@@ -107,22 +111,10 @@ func (s *RemoteStrategy) Load() (*RuntimeConfig, error) {
 		slog.Error("failed to unmarshal database configuration", "user_id", s.userID, "error", err)
 		return s.defaultConfig, nil
 	}
-	populateKeybindings(dbConfig, s)
+	initializeKeybindings(&dbConfig, s.defaultConfig)
 	s.hasUnsavedChanges = false
 	slog.Info("loaded configuration from database", "user_id", s.userID)
 	return &dbConfig, nil
-}
-
-func populateKeybindings(dbConfig RuntimeConfig, s *RemoteStrategy) {
-	if dbConfig.Keybindings == nil {
-		dbConfig.Keybindings = s.defaultConfig.Keybindings
-	} else {
-		for action, key := range s.defaultConfig.Keybindings {
-			if _, exists := dbConfig.Keybindings[action]; !exists {
-				dbConfig.Keybindings[action] = key
-			}
-		}
-	}
 }
 
 func (s *RemoteStrategy) Save(config *RuntimeConfig) error {

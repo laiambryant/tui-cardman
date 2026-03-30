@@ -57,13 +57,6 @@ func (m *Model) handleRegister() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m Model) buildAuthViewHelpText() string {
-	hb := NewHelpBuilder(m.configManager)
-	return hb.Build(KeyItem{"settings", "F1", "Settings"}) + " • " + hb.Pair("nav_prev_tab", "Shift+Tab", "nav_next_tab", "Tab", "Navigate") + " • " + hb.Build(
-		KeyItem{"select", "Enter", "Submit"},
-		KeyItem{"quit", "Ctrl+C", "Quit"},
-	)
-}
 
 func (m Model) registerView() string {
 	header := titleStyle.Render("CardMan - Register")

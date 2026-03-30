@@ -425,24 +425,6 @@ func renderSplitCardPanel(sm *StyleManager, topContent string, topFocused bool, 
 	return lipgloss.JoinVertical(lipgloss.Left, topPanel, bottomPanel)
 }
 
-func countNonZeroDeltas(deltas map[int64]int) int {
-	count := 0
-	for _, delta := range deltas {
-		if delta != 0 {
-			count++
-		}
-	}
-	return count
-}
-
-func buildQuantityUpdates(dbQtys, tempDeltas map[int64]int) map[int64]int {
-	updates := make(map[int64]int)
-	for cardID, delta := range tempDeltas {
-		updates[cardID] = dbQtys[cardID] + delta
-	}
-	return updates
-}
-
 // buildCardExportRows produces a CSV-ready row slice from a card list and quantity maps.
 // Cards with a combined quantity of zero or below are omitted.
 func buildCardExportRows(cards []model.Card, dbQtys, tempDeltas map[int64]int) []export.CardRow {
@@ -467,4 +449,12 @@ func buildCardExportRows(cards []model.Card, dbQtys, tempDeltas map[int64]int) [
 		})
 	}
 	return rows
+}
+
+func (m Model) buildAuthViewHelpText() string {
+	hb := NewHelpBuilder(m.configManager)
+	return hb.Build(KeyItem{"settings", "F1", "Settings"}) + " • " + hb.Pair("nav_prev_tab", "Shift+Tab", "nav_next_tab", "Tab", "Navigate") + " • " + hb.Build(
+		KeyItem{"select", "Enter", "Submit"},
+		KeyItem{"quit", "Ctrl+C", "Quit"},
+	)
 }

@@ -905,7 +905,7 @@ func (m *Model) createCardGameTabsModel(selectedGame *model.CardGame) (CardGameT
 		if err != nil {
 			slog.Error("failed to load quantities for game", "user_id", m.user.ID, "game_id", selectedGame.ID, "error", err)
 		} else {
-			cardGameTabs.dbQuantities = quantities
+			cardGameTabs.quantities.load(quantities)
 		}
 		cardGameTabs.computeCollectionStats()
 		_ = m.collectionService.SnapshotCollectionValue(context.Background(), m.user.ID, selectedGame.ID)

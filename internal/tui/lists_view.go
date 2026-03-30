@@ -3,7 +3,6 @@ package tui
 import (
 	"context"
 	"fmt"
-	"maps"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/table"
@@ -86,8 +85,7 @@ type ListsModel struct {
 	listContentsTable   table.Model
 	cardSubFocus        listCardPanelSubFocus
 	focus               ListsFocus
-	tempQuantityChanges map[int64]int
-	dbQuantities        map[int64]int
+	quantities          QuantityTracker
 	modal               ModalModel
 	shouldGoBack        bool
 	editingListID       int64
@@ -142,8 +140,7 @@ func NewListsModel(game *model.CardGame, user *auth.User, listSvc listservice.Li
 		descInput:           descInput,
 		cardTable:           cardTable,
 		listContentsTable:   listContentsTable,
-		tempQuantityChanges: make(map[int64]int),
-		dbQuantities:        make(map[int64]int),
+		quantities:          newQuantityTracker(),
 		searchCache:         NewSearchCache(),
 		cardPagination:      NewPagination(50),
 	}
@@ -475,11 +472,10 @@ func (m ListsModel) selectCurrentList() (ListsModel, tea.Cmd) {
 	m.selectedList = selected
 	quantities, err := m.listService.GetAllQuantitiesForList(selected.ID)
 	if err != nil {
-		m.dbQuantities = make(map[int64]int)
+		m.quantities.reset()
 	} else {
-		m.dbQuantities = quantities
+		m.quantities.load(quantities)
 	}
-	m.tempQuantityChanges = make(map[int64]int)
 	m.updateListCardTable()
 	return m, nil
 }
@@ -598,7 +594,7 @@ func (m ListsModel) renderCardPanel(width, height int) string {
 	start, end := m.cardPagination.Slice()
 	page := source[start:end]
 	vcs := BuildVisibleColumnSet(CardSearchColumns, GetVisibleColumns(m.configManager), GetColumnOrder(m.configManager), tableWidth)
-	rows := buildCardRows(page, m.dbQuantities, m.tempQuantityChanges, vcs)
+	rows := buildCardRows(page, m.quantities.db, m.quantities.temp, vcs)
 	if len(rows) == 0 {
 		top.WriteString(m.styleManager.GetBlurredStyle().Render("No cards match your search.") + "\n")
 	} else {
@@ -690,10 +686,7 @@ func (m ListsModel) handleIncrementQuantity() (ListsModel, tea.Cmd) {
 	if !ok || m.selectedList == nil {
 		return m, nil
 	}
-	if m.tempQuantityChanges == nil {
-		m.tempQuantityChanges = make(map[int64]int)
-	}
-	m.tempQuantityChanges[card.ID]++
+	m.quantities.increment(card.ID)
 	m.updateListCardTable()
 	return m, nil
 }
@@ -703,29 +696,18 @@ func (m ListsModel) handleDecrementQuantity() (ListsModel, tea.Cmd) {
 	if !ok || m.selectedList == nil {
 		return m, nil
 	}
-	dbQty := m.dbQuantities[card.ID]
-	tempDelta := m.tempQuantityChanges[card.ID]
-	totalQty := dbQty + tempDelta
-	if totalQty <= 0 {
+	if !m.quantities.decrement(card.ID) {
 		return m, nil
 	}
-	if m.tempQuantityChanges == nil {
-		m.tempQuantityChanges = make(map[int64]int)
-	}
-	m.tempQuantityChanges[card.ID]--
 	m.updateListCardTable()
 	return m, nil
 }
 
 func (m ListsModel) handleSaveListCards() (ListsModel, tea.Cmd) {
-	if len(m.tempQuantityChanges) == 0 || m.selectedList == nil {
+	if m.quantities.pendingCount() == 0 || m.selectedList == nil {
 		return m, nil
 	}
-	changeCount := countNonZeroDeltas(m.tempQuantityChanges)
-	if changeCount == 0 {
-		return m, nil
-	}
-	message := fmt.Sprintf("Save %d card changes to list %q?", changeCount, m.selectedList.Name)
+	message := fmt.Sprintf("Save %d card changes to list %q?", m.quantities.pendingCount(), m.selectedList.Name)
 	m.modal = newModal(
 		"Confirm Save",
 		message,
@@ -740,14 +722,13 @@ func (m ListsModel) performSaveListCards() (ListsModel, tea.Cmd) {
 	if m.selectedList == nil {
 		return m, nil
 	}
-	updates := buildQuantityUpdates(m.dbQuantities, m.tempQuantityChanges)
+	updates := m.quantities.buildUpdates()
 	ctx := context.Background()
 	err := m.listService.UpsertListCardBatch(ctx, m.selectedList.ID, updates)
 	if err != nil {
 		return m, nil
 	}
-	maps.Copy(m.dbQuantities, updates)
-	m.tempQuantityChanges = make(map[int64]int)
+	m.quantities.commit(updates)
 	m.searchCache.Invalidate()
 	m.updateListCardTable()
 	return m, nil
@@ -761,8 +742,7 @@ func (m ListsModel) performDeleteList(listID int64) (ListsModel, tea.Cmd) {
 	}
 	if m.selectedList != nil && m.selectedList.ID == listID {
 		m.selectedList = nil
-		m.dbQuantities = make(map[int64]int)
-		m.tempQuantityChanges = make(map[int64]int)
+		m.quantities.reset()
 	}
 	return m.refreshLists()
 }
@@ -823,7 +803,7 @@ func (m *ListsModel) updateListCardTable() {
 	page := source[start:end]
 	vcs := BuildVisibleColumnSet(CardSearchColumns, GetVisibleColumns(m.configManager), GetColumnOrder(m.configManager), 80)
 	m.cardTable.SetColumns(vcs.Columns)
-	m.cardTable.SetRows(buildCardRows(page, m.dbQuantities, m.tempQuantityChanges, vcs))
+	m.cardTable.SetRows(buildCardRows(page, m.quantities.db, m.quantities.temp, vcs))
 	m.listContentsTable.SetColumns(vcs.Columns)
 	m.updateListContentsTable(vcs)
 }
@@ -831,7 +811,7 @@ func (m *ListsModel) updateListCardTable() {
 func (m *ListsModel) updateListContentsTable(vcs VisibleColumnSet) {
 	var rows []table.Row
 	for _, card := range m.cards {
-		qty := m.dbQuantities[card.ID] + m.tempQuantityChanges[card.ID]
+		qty := m.quantities.total(card.ID)
 		if qty <= 0 {
 			continue
 		}
@@ -854,18 +834,14 @@ func (m ListsModel) findColorIndex(color string) int {
 }
 
 func (m *ListsModel) buildListExportRows() []export.CardRow {
-	return buildCardExportRows(m.cards, m.dbQuantities, nil)
+	return buildCardExportRows(m.cards, m.quantities.db, nil)
 }
 
-// applyImport merges the imported card quantities into tempQuantityChanges.
-// Quantities are staged so the user can review before saving with Ctrl+S.
 func (m ListsModel) applyImport(msg ImportApplyMsg) (ListsModel, tea.Cmd) {
 	if m.selectedList == nil {
 		return m, nil
 	}
-	for cardID, qty := range msg.Quantities {
-		m.tempQuantityChanges[cardID] += qty
-	}
+	m.quantities.applyImport(msg.Quantities)
 	m.updateListCardTable()
 	return m, nil
 }
