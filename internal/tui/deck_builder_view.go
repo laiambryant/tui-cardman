@@ -44,36 +44,36 @@ const (
 var deckFormatOptions = []string{"standard", "expanded", "unlimited"}
 
 type DeckBuilderModel struct {
-	selectedGame        *model.CardGame
-	user                *auth.User
-	deckService         deck.DeckService
-	cardService         cardservice.CardService
-	styleManager        *StyleManager
-	configManager       *runtimecfg.Manager
-	width               int
-	height              int
-	decks               []model.Deck
-	deckCursor          int
-	selectedDeck        *model.Deck
-	mode                DeckBuilderMode
-	nameInput           textinput.Model
-	formatIndex         int
-	cards               []model.Card
-	filteredCards       []model.Card
-	searchInput         textinput.Model
-	cardTable           table.Model
-	deckContentsTable   table.Model
-	cardSubFocus        cardPanelSubFocus
-	focus               DeckBuilderFocus
-	quantities          QuantityTracker
-	validationErrors    []deck.DeckValidationError
-	modal               ModalModel
-	shouldGoBack        bool
-	formFocus           int
-	exportState         ExportState
-	importState         ImportState
-	searchCache         *SearchCache
-	cardPagination      Pagination
+	selectedGame      *model.CardGame
+	user              *auth.User
+	deckService       deck.DeckService
+	cardService       cardservice.CardService
+	styleManager      *StyleManager
+	configManager     *runtimecfg.Manager
+	width             int
+	height            int
+	decks             []model.Deck
+	deckCursor        int
+	selectedDeck      *model.Deck
+	mode              DeckBuilderMode
+	nameInput         textinput.Model
+	formatIndex       int
+	cards             []model.Card
+	filteredCards     []model.Card
+	searchInput       textinput.Model
+	cardTable         table.Model
+	deckContentsTable table.Model
+	cardSubFocus      cardPanelSubFocus
+	focus             DeckBuilderFocus
+	quantities        QuantityTracker
+	validationErrors  []deck.DeckValidationError
+	modal             ModalModel
+	shouldGoBack      bool
+	formFocus         int
+	exportState       ExportState
+	importState       ImportState
+	searchCache       *SearchCache
+	cardPagination    Pagination
 }
 
 type (
@@ -108,21 +108,21 @@ func NewDeckBuilderModel(game *model.CardGame, user *auth.User, deckService deck
 	}
 	deckContentsTable := NewStyledTable(deckContentsColumns, 5, false, sm)
 	return DeckBuilderModel{
-		selectedGame:        game,
-		user:                user,
-		deckService:         deckService,
-		cardService:         cardSvc,
-		styleManager:        sm,
-		configManager:       cfg,
-		cards:               cards,
-		filteredCards:       cards,
-		searchInput:         searchInput,
-		nameInput:           nameInput,
-		cardTable:           cardTable,
-		deckContentsTable:   deckContentsTable,
-		quantities:          newQuantityTracker(),
-		searchCache:         NewSearchCache(),
-		cardPagination:      NewPagination(50),
+		selectedGame:      game,
+		user:              user,
+		deckService:       deckService,
+		cardService:       cardSvc,
+		styleManager:      sm,
+		configManager:     cfg,
+		cards:             cards,
+		filteredCards:     cards,
+		searchInput:       searchInput,
+		nameInput:         nameInput,
+		cardTable:         cardTable,
+		deckContentsTable: deckContentsTable,
+		quantities:        newQuantityTracker(),
+		searchCache:       NewSearchCache(),
+		cardPagination:    NewPagination(50),
 	}
 }
 

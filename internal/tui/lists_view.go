@@ -62,37 +62,37 @@ type (
 )
 
 type ListsModel struct {
-	selectedGame        *model.CardGame
-	user                *auth.User
-	listService         listservice.ListService
-	cardService         cardservice.CardService
-	styleManager        *StyleManager
-	configManager       *runtimecfg.Manager
-	width               int
-	height              int
-	lists               []model.UserList
-	listCursor          int
-	selectedList        *model.UserList
-	mode                ListsMode
-	nameInput           textinput.Model
-	descInput           textinput.Model
-	colorIndex          int
-	formFocus           int
-	cards               []model.Card
-	filteredCards       []model.Card
-	searchInput         textinput.Model
-	cardTable           table.Model
-	listContentsTable   table.Model
-	cardSubFocus        listCardPanelSubFocus
-	focus               ListsFocus
-	quantities          QuantityTracker
-	modal               ModalModel
-	shouldGoBack        bool
-	editingListID       int64
-	exportState         ExportState
-	importState         ImportState
-	searchCache         *SearchCache
-	cardPagination      Pagination
+	selectedGame      *model.CardGame
+	user              *auth.User
+	listService       listservice.ListService
+	cardService       cardservice.CardService
+	styleManager      *StyleManager
+	configManager     *runtimecfg.Manager
+	width             int
+	height            int
+	lists             []model.UserList
+	listCursor        int
+	selectedList      *model.UserList
+	mode              ListsMode
+	nameInput         textinput.Model
+	descInput         textinput.Model
+	colorIndex        int
+	formFocus         int
+	cards             []model.Card
+	filteredCards     []model.Card
+	searchInput       textinput.Model
+	cardTable         table.Model
+	listContentsTable table.Model
+	cardSubFocus      listCardPanelSubFocus
+	focus             ListsFocus
+	quantities        QuantityTracker
+	modal             ModalModel
+	shouldGoBack      bool
+	editingListID     int64
+	exportState       ExportState
+	importState       ImportState
+	searchCache       *SearchCache
+	cardPagination    Pagination
 }
 
 func NewListsModel(game *model.CardGame, user *auth.User, listSvc listservice.ListService, cardSvc cardservice.CardService, cards []model.Card, cfg *runtimecfg.Manager, sm *StyleManager) ListsModel {
@@ -127,22 +127,22 @@ func NewListsModel(game *model.CardGame, user *auth.User, listSvc listservice.Li
 	}
 	listContentsTable := NewStyledTable(listContentsColumns, 5, false, sm)
 	return ListsModel{
-		selectedGame:        game,
-		user:                user,
-		listService:         listSvc,
-		cardService:         cardSvc,
-		styleManager:        sm,
-		configManager:       cfg,
-		cards:               cards,
-		filteredCards:       cards,
-		searchInput:         searchInput,
-		nameInput:           nameInput,
-		descInput:           descInput,
-		cardTable:           cardTable,
-		listContentsTable:   listContentsTable,
-		quantities:          newQuantityTracker(),
-		searchCache:         NewSearchCache(),
-		cardPagination:      NewPagination(50),
+		selectedGame:      game,
+		user:              user,
+		listService:       listSvc,
+		cardService:       cardSvc,
+		styleManager:      sm,
+		configManager:     cfg,
+		cards:             cards,
+		filteredCards:     cards,
+		searchInput:       searchInput,
+		nameInput:         nameInput,
+		descInput:         descInput,
+		cardTable:         cardTable,
+		listContentsTable: listContentsTable,
+		quantities:        newQuantityTracker(),
+		searchCache:       NewSearchCache(),
+		cardPagination:    NewPagination(50),
 	}
 }
 

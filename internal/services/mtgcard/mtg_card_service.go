@@ -1,3 +1,4 @@
+// Package mtgcard provides the service layer for Magic: The Gathering card database operations.
 package mtgcard
 
 import (

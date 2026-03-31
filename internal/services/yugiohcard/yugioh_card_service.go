@@ -1,3 +1,4 @@
+// Package yugiohcard provides the service layer for Yu-Gi-Oh! card database operations.
 package yugiohcard
 
 import (

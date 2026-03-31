@@ -26,7 +26,7 @@ type ImportService struct {
 	yugiohGameID     int64
 }
 
-// NewImportService creates a new YGO ImportService and initialises the game ID.
+// NewImportService creates a new YGO ImportService and initializes the game ID.
 func NewImportService(
 	db *sql.DB,
 	client *Client,
@@ -46,7 +46,7 @@ func NewImportService(
 		yugiohCardSvc:    yugiohCardSvc,
 	}
 	if err := svc.initYuGiOhGameID(context.Background()); err != nil {
-		logger.Error("failed to initialise Yu-Gi-Oh! game ID", "error", err)
+		logger.Error("failed to initialize Yu-Gi-Oh! game ID", "error", err)
 	}
 	return svc
 }
@@ -58,7 +58,7 @@ func (s *ImportService) initYuGiOhGameID(ctx context.Context) error {
 		return fmt.Errorf("failed to get Yu-Gi-Oh! game ID: %w", err)
 	}
 	s.yugiohGameID = gameID
-	s.logger.Debug("initialised Yu-Gi-Oh! game ID", "id", gameID)
+	s.logger.Debug("initialized Yu-Gi-Oh! game ID", "id", gameID)
 	return nil
 }
 

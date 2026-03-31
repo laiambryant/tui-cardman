@@ -6,9 +6,10 @@ import (
 	"os"
 	"strconv"
 
+	"github.com/spf13/cobra"
+
 	"github.com/laiambryant/tui-cardman/internal/config"
 	dbpkg "github.com/laiambryant/tui-cardman/internal/db"
-	"github.com/spf13/cobra"
 )
 
 var importCmd = &cobra.Command{

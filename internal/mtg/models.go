@@ -1,3 +1,4 @@
+// Package mtg provides types, client, and import logic for Magic: The Gathering cards.
 package mtg
 
 type MTGSet struct {
@@ -30,7 +31,7 @@ type MTGCard struct {
 	Toughness     string
 	Loyalty       string
 	Layout        string
-	MultiverseId  uint32
+	MultiverseID  uint32
 	Legalities    []MTGLegality
 }
 

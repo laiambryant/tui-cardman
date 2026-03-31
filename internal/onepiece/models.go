@@ -1,3 +1,4 @@
+// Package onepiece provides types, client, and import logic for One Piece Card Game cards.
 package onepiece
 
 type OPSet struct {

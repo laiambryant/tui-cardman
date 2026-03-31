@@ -6,8 +6,9 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/laiambryant/tui-cardman/internal/export"
 	"github.com/spf13/cobra"
+
+	"github.com/laiambryant/tui-cardman/internal/export"
 )
 
 var listsCmd = &cobra.Command{

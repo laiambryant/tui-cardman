@@ -44,7 +44,7 @@ func NewImportService(
 		mtgCardSvc:       mtgCardSvc,
 	}
 	if err := svc.initMTGGameID(context.Background()); err != nil {
-		logger.Error("failed to initialise MTG game ID", "error", err)
+		logger.Error("failed to initialize MTG game ID", "error", err)
 	}
 	return svc
 }
@@ -56,7 +56,7 @@ func (s *ImportService) initMTGGameID(ctx context.Context) error {
 		return fmt.Errorf("failed to get MTG game ID: %w", err)
 	}
 	s.mtgGameID = gameID
-	s.logger.Debug("initialised MTG game ID", "id", gameID)
+	s.logger.Debug("initialized MTG game ID", "id", gameID)
 	return nil
 }
 

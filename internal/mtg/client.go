@@ -95,7 +95,7 @@ func mapSDKCard(sc models.Card, setCode string) MTGCard {
 		Toughness:     derefString(sc.Toughness),
 		Loyalty:       derefString(sc.Loyalty),
 		Layout:        sc.Layout,
-		MultiverseId:  uint32(derefInt(sc.MultiverseID)),
+		MultiverseID:  uint32(derefInt(sc.MultiverseID)),
 		Legalities:    legalities,
 	}
 }

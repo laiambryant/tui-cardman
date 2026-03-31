@@ -1,3 +1,4 @@
+// Package pokemoncard provides the service layer for Pokemon card database operations.
 package pokemoncard
 
 import (

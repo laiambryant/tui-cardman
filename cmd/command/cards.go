@@ -6,8 +6,9 @@ import (
 	"os"
 	"strings"
 
-	cardmodel "github.com/laiambryant/tui-cardman/internal/model"
 	"github.com/spf13/cobra"
+
+	cardmodel "github.com/laiambryant/tui-cardman/internal/model"
 )
 
 var cardsCmd = &cobra.Command{

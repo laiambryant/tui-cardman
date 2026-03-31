@@ -115,14 +115,14 @@ type DeckCard struct {
 
 // PokemonCard represents Pokemon-specific card data
 type PokemonCard struct {
-	ID, CardID                                                    int64
-	HP, Retreat                                                   int
+	ID, CardID                                                      int64
+	HP, Retreat                                                     int
 	Category, Stage, EvolveFrom, Description, Level, RegulationMark string
-	LegalStandard, LegalExpanded                                  bool
-	Types                                                         []string
-	Attacks                                                       []PokemonCardAttack
-	Abilities                                                     []PokemonCardAbility
-	Weaknesses, Resistances                                       []PokemonCardWeakRes
+	LegalStandard, LegalExpanded                                    bool
+	Types                                                           []string
+	Attacks                                                         []PokemonCardAttack
+	Abilities                                                       []PokemonCardAbility
+	Weaknesses, Resistances                                         []PokemonCardWeakRes
 }
 
 type PokemonCardAttack struct {
@@ -142,10 +142,10 @@ type PokemonCardWeakRes struct {
 
 // YuGiOhCard represents Yu-Gi-Oh!-specific card data
 type YuGiOhCard struct {
-	ID, CardID  int64
-	CardType    string
-	FrameType   string
-	Description string
+	ID, CardID      int64
+	CardType        string
+	FrameType       string
+	Description     string
 	ATK, DEF, Level *int
 	Attribute, Race *string
 	Scale, LinkVal  *int

@@ -3,8 +3,9 @@ package tui
 import (
 	"testing"
 
-	"github.com/laiambryant/tui-cardman/internal/gameimporter"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/laiambryant/tui-cardman/internal/gameimporter"
 )
 
 func TestResolveSetCardCount_APITotalPresent(t *testing.T) {

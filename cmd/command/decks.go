@@ -6,9 +6,10 @@ import (
 	"os"
 	"strconv"
 
+	"github.com/spf13/cobra"
+
 	"github.com/laiambryant/tui-cardman/internal/export"
 	cardmodel "github.com/laiambryant/tui-cardman/internal/model"
-	"github.com/spf13/cobra"
 )
 
 var decksCmd = &cobra.Command{

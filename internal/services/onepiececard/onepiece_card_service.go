@@ -1,3 +1,4 @@
+// Package onepiececard provides the service layer for One Piece Card Game database operations.
 package onepiececard
 
 import (
