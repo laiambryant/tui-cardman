@@ -27,9 +27,12 @@ jobs:
           go-version: stable
 
       - name: Install zig
-        uses: mlugg/setup-zig@v2
-        with:
-          version: 0.13.0
+        run: |
+          wget -q https://ziglang.org/download/0.13.0/zig-linux-x86_64-0.13.0.tar.xz
+          tar -xf zig-linux-x86_64-0.13.0.tar.xz
+          mkdir -p $HOME/.local/zig
+          mv zig-linux-x86_64-0.13.0/* $HOME/.local/zig/
+          echo "$HOME/.local/zig" >> $GITHUB_PATH
 
       - name: Release
         uses: goreleaser/goreleaser-action@v6
@@ -39,3 +42,4 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GORELEASER_CURRENT_TAG: ${{ github.ref_name }}
+          ZIG_GLOBAL_CACHE_DIR: /tmp/zig-cache
