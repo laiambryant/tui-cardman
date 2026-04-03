@@ -28,16 +28,23 @@ jobs:
 
       - name: Install zig
         run: |
-          wget -q https://ziglang.org/download/0.13.0/zig-linux-x86_64-0.13.0.tar.xz
-          tar -xf zig-linux-x86_64-0.13.0.tar.xz
-          mkdir -p $HOME/.local/zig
-          mv zig-linux-x86_64-0.13.0/* $HOME/.local/zig/
+          ZIG_VERSION=0.13.0
+          ZIG_DIR="$RUNNER_TEMP/zig"
+          ZIG_ARCHIVE="$RUNNER_TEMP/zig-linux-x86_64-${ZIG_VERSION}.tar.xz"
+
+          wget -q "https://ziglang.org/download/${ZIG_VERSION}/zig-linux-x86_64-${ZIG_VERSION}.tar.xz" -O "$ZIG_ARCHIVE"
+          rm -rf "$ZIG_DIR"
+          mkdir -p "$ZIG_DIR"
+          tar -xf "$ZIG_ARCHIVE" -C "$ZIG_DIR" --strip-components=1
+
+          mkdir -p "$HOME/.local/zig"
+          cp -R "$ZIG_DIR"/. "$HOME/.local/zig/"
           echo "$HOME/.local/zig" >> $GITHUB_PATH
 
       - name: Release
         uses: goreleaser/goreleaser-action@v6
         with:
-          version: latest
+          version: "~> v2"
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
