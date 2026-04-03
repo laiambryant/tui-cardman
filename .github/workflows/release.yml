@@ -14,64 +14,8 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  build-linux:
-    name: Build Linux
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - uses: actions/setup-go@v5
-        with:
-          go-version: stable
-
-      - name: Install arm64 cross-compiler
-        run: sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu
-
-      - name: Build linux artifacts
-        uses: goreleaser/goreleaser-action@v6
-        with:
-          version: latest
-          args: release --clean --split
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GORELEASER_CURRENT_TAG: ${{ github.ref_name }}
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: linux-dist
-          path: dist/
-
-  build-darwin:
-    name: Build macOS
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - uses: actions/setup-go@v5
-        with:
-          go-version: stable
-
-      - name: Build darwin artifacts
-        uses: goreleaser/goreleaser-action@v6
-        with:
-          version: latest
-          args: release --clean --split
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GORELEASER_CURRENT_TAG: ${{ github.ref_name }}
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: darwin-dist
-          path: dist/
-
   release:
     name: Release
-    needs: [build-linux, build-darwin]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -82,20 +26,16 @@ jobs:
         with:
           go-version: stable
 
-      - uses: actions/download-artifact@v4
+      - name: Install zig
+        uses: mlugg/setup-zig@v2
         with:
-          name: linux-dist
-          path: dist/linux/
+          version: 0.13.0
 
-      - uses: actions/download-artifact@v4
-        with:
-          name: darwin-dist
-          path: dist/darwin/
-
-      - name: Publish release
+      - name: Release
         uses: goreleaser/goreleaser-action@v6
         with:
           version: latest
-          args: continue --merge
+          args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GORELEASER_CURRENT_TAG: ${{ github.ref_name }}

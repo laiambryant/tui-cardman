@@ -15,6 +15,7 @@ builds:
     binary: cardman
     env:
       - CGO_ENABLED=1
+      - CC=zig cc -target x86_64-linux-gnu
     goos:
       - linux
     goarch:
@@ -31,7 +32,7 @@ builds:
     binary: cardman
     env:
       - CGO_ENABLED=1
-      - CC=aarch64-linux-gnu-gcc
+      - CC=zig cc -target aarch64-linux-gnu
     goos:
       - linux
     goarch:
@@ -48,6 +49,7 @@ builds:
     binary: cardman
     env:
       - CGO_ENABLED=1
+      - CC=zig cc -target x86_64-macos
     goos:
       - darwin
     goarch:
@@ -64,6 +66,7 @@ builds:
     binary: cardman
     env:
       - CGO_ENABLED=1
+      - CC=zig cc -target aarch64-macos
     goos:
       - darwin
     goarch:
