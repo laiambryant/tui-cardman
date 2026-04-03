@@ -28,7 +28,8 @@ Grab the latest release from the [releases page](https://github.com/laiambryant/
 
 ```bash
 # Linux amd64 example
-curl -L https://github.com/laiambryant/tui-cardman/releases/latest/download/cardman_linux-amd64.tar.gz | tar xz
+VERSION=v0.2.0
+curl -L "https://github.com/laiambryant/tui-cardman/releases/download/${VERSION}/cardman_${VERSION}_linux-amd64.tar.gz" | tar xz
 sudo mv cardman /usr/local/bin/
 ```
 

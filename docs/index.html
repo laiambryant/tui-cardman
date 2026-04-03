@@ -605,8 +605,9 @@
       <span class="term-title">install</span>
     </div>
     <code>
-<span class="cmt"># download latest binary (linux amd64)</span>
-<span class="prompt">$</span> <span class="cmd">curl -L https://github.com/laiambryant/tui-cardman/releases/latest/download/cardman_linux-amd64.tar.gz | tar xz</span>
+<span class="cmt"># download latest tagged binary (linux amd64)</span>
+<span class="prompt">$</span> <span class="cmd">VERSION=v0.2.0</span>
+<span class="prompt">$</span> <span class="cmd">curl -L &quot;https://github.com/laiambryant/tui-cardman/releases/download/${VERSION}/cardman_${VERSION}_linux-amd64.tar.gz&quot; | tar xz</span>
 <span class="prompt">$</span> <span class="cmd">sudo mv cardman /usr/local/bin/</span>
 
 <span class="cmt"># initialise and launch</span>
