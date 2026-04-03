@@ -104,6 +104,9 @@ func (s *ImportService) ImportSet(ctx context.Context, set MTGSet) (int, error) 
 	if cardsImported == 0 {
 		s.logger.Warn("MTG set import completed with zero cards", "set_code", set.SetCode)
 	}
+	if _, upsertErr := s.setService.UpsertSet(ctx, set.SetCode, set.SetCode, set.Name, cardsImported, cardsImported); upsertErr != nil {
+		s.logger.Warn("failed to update set totals after import", "set_code", set.SetCode, "error", upsertErr)
+	}
 	s.logger.Info("completed MTG set import", "set_code", set.SetCode, "total_cards", cardsImported)
 	return cardsImported, nil
 }

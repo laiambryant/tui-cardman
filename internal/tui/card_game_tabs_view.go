@@ -78,25 +78,18 @@ func NewCardGameTabsModel(selectedGame *model.CardGame, cfg *runtimecfg.Manager,
 	searchInput := textinput.New()
 	searchInput.Placeholder = "Search cards..."
 	searchInput.Width = 30
-
-	// Apply theme colors to search input
 	styleManager.ApplyTextInputStyles(&searchInput)
-
-	// Initialize table with Collection Tab columns (default tab)
 	columns := []table.Column{
 		{Title: "Name", Width: 25},
 		{Title: "Expansion", Width: 15},
 		{Title: "Rarity", Width: 12},
 		{Title: "Amount", Width: 8},
 	}
-
 	cardTable := NewStyledTable(columns, 10, true, styleManager)
-
 	userSearchInput := textinput.New()
 	userSearchInput.Placeholder = "Search collection..."
 	userSearchInput.Width = 30
 	styleManager.ApplyTextInputStyles(&userSearchInput)
-
 	userSearchColumns := []table.Column{
 		{Title: "Name", Width: 25},
 		{Title: "Expansion", Width: 15},
@@ -104,7 +97,6 @@ func NewCardGameTabsModel(selectedGame *model.CardGame, cfg *runtimecfg.Manager,
 		{Title: "Amount", Width: 8},
 	}
 	userSearchTable := NewStyledTable(userSearchColumns, 10, false, styleManager)
-
 	return CardGameTabsModel{
 		selectedGame:         selectedGame,
 		currentTab:           TabCollection,
@@ -735,7 +727,6 @@ func (m CardGameTabsModel) renderCardSearchTab(availableHeight int) string {
 	}
 	leftWidth := contentWidth / 2
 	rightWidth := contentWidth - leftWidth
-	// panelPadX=1, borderOverhead=2: inner table area = panelWidth - 4
 	leftTableWidth := max(leftWidth-4, 20)
 	rightTableWidth := max(rightWidth-4, 20)
 	tableHeight := CalcTableHeight(availableHeight, 2, 3)
