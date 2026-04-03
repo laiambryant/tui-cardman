@@ -3,327 +3,563 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CARDMAN — Terminal UI Card Collection Manager</title>
+  <title>CARDMAN — Terminal Card Manager</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=VT323&family=IBM+Plex+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
   <style>
-    /* ── Reset ──────────────────────────────────────────────── */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-    /* ── Palette ────────────────────────────────────────────── */
     :root {
-      --bg:        #2b2f3e;
-      --bg-alt:    #252838;
-      --bg-panel:  #222535;
-      --pink:      #e040fb;
-      --pink-dim:  #9b35b5;
-      --muted:     #5a5f7a;
-      --text:      #c8c8d4;
-      --text-dim:  #7a7f98;
-      --border:    #3a3f58;
+      --bg:         #090909;
+      --bg2:        #0d0d0d;
+      --panel:      #0f0f0f;
+      --green:      #DF57BC;
+      --green-dim:  #8B3576;
+      --green-glow: rgba(223,87,188,0.12);
+      --orange:     #ff5f38;
+      --orange-dim: #7a2b16;
+      --cyan:       #00d4ff;
+      --text:       #c0c0c0;
+      --dim:        #484848;
+      --dimmer:     #1e1e1e;
+      --border:     #1a1a1a;
     }
 
-    /* ── Base ───────────────────────────────────────────────── */
     html { scroll-behavior: smooth; }
 
     body {
       background: var(--bg);
       color: var(--text);
-      font-family: 'JetBrains Mono', 'Fira Mono', 'Courier New', monospace;
+      font-family: 'IBM Plex Mono', 'Courier New', monospace;
       font-size: 14px;
       line-height: 1.7;
       min-height: 100vh;
+      overflow-x: hidden;
     }
 
-    /* ── Nav ────────────────────────────────────────────────── */
+    /* CRT scanline overlay */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 3px,
+        rgba(0,0,0,0.07) 3px,
+        rgba(0,0,0,0.07) 4px
+      );
+      pointer-events: none;
+      z-index: 9998;
+    }
+
+    /* Subtle background grid */
+    body::after {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(223,87,188,0.018) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(223,87,188,0.018) 1px, transparent 1px);
+      background-size: 44px 44px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .page { position: relative; z-index: 1; }
+
+    ::selection { background: rgba(223,87,188,0.18); }
+
+    /* ── Nav ── */
     nav {
       position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
+      top: 0; left: 0; right: 0;
       z-index: 100;
-      background: var(--bg-alt);
+      background: rgba(9,9,9,0.96);
       border-bottom: 1px solid var(--border);
       display: flex;
       align-items: center;
       justify-content: space-between;
       padding: 0 2rem;
-      height: 48px;
+      height: 44px;
+      backdrop-filter: blur(12px);
     }
 
     .nav-brand {
-      color: var(--pink);
-      font-size: 13px;
-      letter-spacing: 0.25em;
-      text-transform: uppercase;
+      font-family: 'VT323', monospace;
+      font-size: 26px;
+      color: var(--green);
       text-decoration: none;
+      letter-spacing: 0.12em;
+      text-shadow: 0 0 8px var(--green);
     }
 
     .nav-links {
       display: flex;
-      gap: 2rem;
+      gap: 2.5rem;
       list-style: none;
     }
 
     .nav-links a {
-      color: var(--text-dim);
+      color: var(--dim);
       text-decoration: none;
-      font-size: 12px;
-      letter-spacing: 0.1em;
+      font-size: 11px;
+      letter-spacing: 0.14em;
       text-transform: uppercase;
+      font-weight: 500;
       transition: color 0.15s;
     }
 
-    .nav-links a:hover { color: var(--pink); }
+    .nav-links a:hover { color: var(--green); }
 
-    /* ── Layout ─────────────────────────────────────────────── */
-    .page { padding-top: 48px; }
-
-    section {
-      max-width: 860px;
-      margin: 0 auto;
-      padding: 5rem 2rem;
-    }
-
-    section + section {
-      border-top: 1px solid var(--border);
-    }
-
-    /* ── Hero ───────────────────────────────────────────────── */
+    /* ── Hero ── */
     #hero {
+      min-height: 100vh;
       display: flex;
       flex-direction: column;
       align-items: center;
+      justify-content: center;
       text-align: center;
       padding: 6rem 2rem 5rem;
+      position: relative;
+      overflow: hidden;
     }
 
-    /* Dotted spade art (removed from page) */
-    .spade-art { display: none; }
+    .hero-spade {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -58%);
+      font-size: 13px;
+      line-height: 1.5;
+      color: rgba(223,87,188,0.025);
+      pointer-events: none;
+      white-space: pre;
+      letter-spacing: 0.35em;
+      user-select: none;
+      font-family: 'IBM Plex Mono', monospace;
+    }
+
+    .hero-eyebrow {
+      font-size: 10px;
+      letter-spacing: 0.5em;
+      color: var(--green-dim);
+      text-transform: uppercase;
+      font-weight: 600;
+      margin-bottom: 1.6rem;
+      animation: fadeUp 0.55s ease both;
+    }
 
     .hero-title {
-      font-size: 22px;
-      letter-spacing: 0.5em;
-      color: var(--pink);
-      text-transform: uppercase;
-      margin-bottom: 0.6rem;
+      font-family: 'VT323', monospace;
+      font-size: clamp(5.5rem, 16vw, 11rem);
+      color: var(--green);
+      letter-spacing: 0.1em;
+      line-height: 1;
+      margin-bottom: 0.25em;
+      text-shadow:
+        0 0 12px var(--green),
+        0 0 35px var(--green),
+        0 0 70px rgba(223,87,188,0.35);
+      animation: fadeUp 0.55s ease 0.08s both, glow-pulse 5s ease-in-out 0.8s infinite;
     }
 
     .hero-sub {
-      font-size: 13px;
-      color: var(--text-dim);
-      letter-spacing: 0.2em;
-      margin-bottom: 3rem;
+      font-size: 12px;
+      color: var(--dim);
+      letter-spacing: 0.25em;
+      text-transform: uppercase;
+      margin-bottom: 3.2rem;
+      animation: fadeUp 0.55s ease 0.18s both;
     }
 
-    /* ── Terminal block ─────────────────────────────────────── */
-    .term {
-      background: var(--bg-panel);
-      border: 1px solid var(--border);
-      border-radius: 4px;
-      padding: 1.2rem 1.6rem;
-      text-align: left;
+    #hero .term {
+      max-width: 600px;
       width: 100%;
-      overflow-x: auto;
+      animation: fadeUp 0.55s ease 0.3s both;
+    }
+
+    .hero-cta {
+      display: flex;
+      gap: 1rem;
+      justify-content: center;
+      margin-top: 2.4rem;
+      animation: fadeUp 0.55s ease 0.44s both;
+    }
+
+    .btn {
+      display: inline-block;
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      text-decoration: none;
+      padding: 10px 28px;
+      border: 1px solid var(--green);
+      color: var(--green);
+      background: transparent;
+      cursor: pointer;
+      transition: background 0.15s, box-shadow 0.15s;
+      position: relative;
+    }
+
+    .btn::after {
+      content: '';
+      position: absolute;
+      top: 3px; left: 3px; right: -3px; bottom: -3px;
+      border: 1px solid var(--green-dim);
+      opacity: 0;
+      transition: opacity 0.15s;
+    }
+
+    .btn:hover {
+      background: var(--green-glow);
+      box-shadow: 0 0 24px rgba(223,87,188,0.18);
+    }
+
+    .btn:hover::after { opacity: 1; }
+
+    .btn-ghost {
+      border-color: var(--dimmer);
+      color: var(--dim);
+    }
+
+    .btn-ghost::after { border-color: transparent; }
+
+    .btn-ghost:hover {
+      background: rgba(255,255,255,0.02);
+      box-shadow: none;
+      border-color: var(--dim);
+      color: var(--text);
+    }
+
+    .scroll-hint {
+      position: absolute;
+      bottom: 2.2rem;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 10px;
+      color: var(--dimmer);
+      letter-spacing: 0.4em;
+      text-transform: uppercase;
+      animation: bob 2.2s ease-in-out infinite;
+    }
+
+    /* ── Section wrappers ── */
+    .section-wrap {
+      position: relative;
+      border-top: 1px solid var(--border);
+    }
+
+    .section-wrap::before {
+      content: attr(data-num);
+      position: absolute;
+      top: -0.05em;
+      right: 1.5rem;
+      font-family: 'VT323', monospace;
+      font-size: clamp(6rem, 13vw, 10rem);
+      color: rgba(223,87,188,0.028);
+      pointer-events: none;
+      line-height: 1;
+      user-select: none;
+    }
+
+    section {
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 5rem 2rem;
+      position: relative;
+    }
+
+    .sec-label {
+      font-size: 10px;
+      letter-spacing: 0.45em;
+      color: var(--green-dim);
+      text-transform: uppercase;
+      font-weight: 600;
+      margin-bottom: 0.4rem;
+    }
+
+    .sec-title {
+      font-family: 'VT323', monospace;
+      font-size: clamp(2.8rem, 5vw, 4rem);
+      color: var(--text);
+      letter-spacing: 0.06em;
+      line-height: 1;
+      margin-bottom: 0.6rem;
+    }
+
+    .sec-title span { color: var(--green); }
+
+    .sec-accent {
+      width: 36px;
+      height: 2px;
+      background: var(--green);
+      box-shadow: 0 0 8px var(--green);
+      margin-bottom: 2rem;
+    }
+
+    p {
+      color: #777;
+      font-size: 13px;
+      margin-bottom: 1rem;
+      line-height: 1.9;
+    }
+
+    p:last-child { margin-bottom: 0; }
+
+    /* ── Terminal ── */
+    .term {
+      background: #070707;
+      border: 1px solid var(--border);
     }
 
     .term-bar {
       display: flex;
       align-items: center;
       gap: 6px;
-      margin-bottom: 1rem;
-      padding-bottom: 0.7rem;
+      padding: 8px 14px;
+      background: var(--dimmer);
       border-bottom: 1px solid var(--border);
     }
 
     .dot {
-      width: 10px;
-      height: 10px;
+      width: 9px;
+      height: 9px;
       border-radius: 50%;
-      background: var(--border);
     }
 
+    .dot-r { background: #2e1212; }
+    .dot-y { background: #2a260e; }
+    .dot-g { background: var(--green-dim); box-shadow: 0 0 5px var(--green-dim); }
+
     .term-title {
-      font-size: 11px;
-      color: var(--muted);
+      font-size: 10px;
+      color: var(--dim);
       margin-left: 6px;
-      letter-spacing: 0.08em;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      font-weight: 400;
     }
 
     .term code {
       display: block;
-      font-family: inherit;
-      font-size: 13px;
+      font-family: 'IBM Plex Mono', 'Courier New', monospace;
+      font-size: 12px;
       line-height: 2;
       white-space: pre;
-      background: var(--bg-panel); /* terminal background */
-      color: inherit;
-      -webkit-text-fill-color: inherit;
+      padding: 1rem 1.4rem;
+      color: #777;
     }
 
-    /* selection color (subtle, non-yellow) */
-    ::selection { background: rgba(224,64,251,0.08); }
-    code::selection, pre::selection { background: rgba(224,64,251,0.08); }
-
-    .term .prompt { color: var(--pink); }
+    .term .prompt { color: var(--green); font-weight: 600; }
     .term .cmd    { color: var(--text); }
-    .term .cmt    { color: var(--muted); }
-    .term .ok     { color: #50fa7b; }
+    .term .cmt    { color: var(--dim); }
+    .term .ok     { color: var(--green); }
+    .term .key    { color: var(--cyan); }
 
-    /* ── Section headings ───────────────────────────────────── */
-    .sec-label {
-      font-size: 11px;
-      letter-spacing: 0.3em;
-      color: var(--pink-dim);
-      text-transform: uppercase;
-      margin-bottom: 0.4rem;
+    .blink-cursor {
+      color: var(--green);
+      animation: blink 1.1s step-end infinite;
     }
 
-    .sec-title {
-      font-size: 18px;
-      color: var(--pink);
-      letter-spacing: 0.15em;
-      text-transform: uppercase;
-      margin-bottom: 0.5rem;
-    }
-
-    .sec-divider {
-      color: var(--muted);
-      font-size: 12px;
-      letter-spacing: 0.05em;
-      margin-bottom: 2.2rem;
-    }
-
-    /* ── Two-col grid ───────────────────────────────────────── */
+    /* ── Grid panels ── */
     .grid-2 {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 1.5rem;
-      margin-top: 2rem;
-    }
-
-    @media (max-width: 600px) {
-      .grid-2 { grid-template-columns: 1fr; }
-      .nav-links { gap: 1rem; }
-      .spade-art { font-size: 9px; }
-    }
-
-    /* ── Panel card ─────────────────────────────────────────── */
-    .panel {
-      background: var(--bg-panel);
+      gap: 1px;
+      background: var(--border);
       border: 1px solid var(--border);
-      border-radius: 4px;
-      padding: 1.6rem;
+      margin-top: 2.5rem;
     }
+
+    .panel {
+      background: var(--panel);
+      padding: 2rem;
+      transition: background 0.2s;
+    }
+
+    .panel:hover { background: #141414; }
 
     .panel-title {
-      font-size: 13px;
-      color: var(--pink);
-      letter-spacing: 0.15em;
+      font-size: 10px;
+      letter-spacing: 0.32em;
+      color: var(--green);
       text-transform: uppercase;
-      margin-bottom: 1rem;
-      padding-bottom: 0.6rem;
+      font-weight: 600;
+      margin-bottom: 1.2rem;
+      padding-bottom: 0.8rem;
       border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
     }
 
-    /* ── Feature list ───────────────────────────────────────── */
-    .feat-list {
-      list-style: none;
-      margin-top: 1.2rem;
+    .panel-title::before {
+      content: '▶';
+      color: var(--green-dim);
+      font-size: 8px;
     }
+
+    /* ── Feature list ── */
+    .feat-list { list-style: none; }
 
     .feat-list li {
       display: flex;
-      gap: 0.8rem;
-      padding: 0.4rem 0;
-      font-size: 13px;
-      color: var(--text);
+      gap: 0.9rem;
+      align-items: flex-start;
+      padding: 0.5rem 0;
+      font-size: 12px;
+      color: #666;
       border-bottom: 1px solid var(--border);
+      transition: color 0.15s;
     }
 
     .feat-list li:last-child { border-bottom: none; }
+    .feat-list li:hover { color: var(--text); }
 
-    .feat-list .icon { color: var(--pink); flex-shrink: 0; }
+    .feat-list .icon        { color: var(--green-dim); flex-shrink: 0; margin-top: 2px; }
+    .feat-list .icon-orange { color: var(--orange);    flex-shrink: 0; margin-top: 2px; }
+    .feat-list .icon-cyan   { color: var(--cyan);      flex-shrink: 0; margin-top: 2px; }
 
-    /* ── Inline code ────────────────────────────────────────── */
-    code.inline {
-      background: var(--bg-panel);
+    /* ── Mode grid (how it works) ── */
+    .mode-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1px;
+      background: var(--border);
       border: 1px solid var(--border);
-      border-radius: 2px;
+      margin-top: 2.5rem;
+    }
+
+    .mode-panel {
+      background: var(--panel);
+      padding: 2rem;
+      transition: background 0.2s;
+    }
+
+    .mode-panel:hover { background: #141414; }
+
+    /* ── Config block ── */
+    .config-block {
+      margin-top: 2.5rem;
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--cyan);
+    }
+
+    .config-block .term { border: none; }
+
+    /* ── Badge ── */
+    .badge {
+      display: inline-block;
+      font-size: 9px;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: var(--orange);
+      border: 1px solid var(--orange-dim);
+      padding: 2px 9px;
+      margin-bottom: 1rem;
+    }
+
+    .badge-cyan {
+      color: var(--cyan);
+      border-color: rgba(0,212,255,0.25);
+    }
+
+    /* ── Inline code ── */
+    code.inline {
+      background: var(--dimmer);
+      border: 1px solid var(--border);
       padding: 0 5px;
-      font-size: 12px;
-      color: var(--pink);
+      font-size: 11px;
+      color: var(--cyan);
       font-family: inherit;
     }
 
-    /* ── Mode badge ─────────────────────────────────────────── */
-    .badge {
-      display: inline-block;
-      font-size: 10px;
-      letter-spacing: 0.15em;
-      text-transform: uppercase;
-      color: var(--pink);
-      border: 1px solid var(--pink-dim);
-      border-radius: 2px;
-      padding: 1px 7px;
-      margin-bottom: 0.7rem;
+    /* ── Rule box ── */
+    .rule-box {
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--orange);
+      padding: 1.1rem 1.4rem;
+      margin-top: 1.8rem;
+      font-size: 12px;
+      color: #666;
+      line-height: 2.1;
     }
 
-    /* ── Body text ──────────────────────────────────────────── */
-    p {
-      color: var(--text-dim);
-      font-size: 13px;
-      margin-bottom: 1rem;
-      line-height: 1.8;
-    }
+    .rule-box strong { color: var(--orange); }
 
-    p:last-child { margin-bottom: 0; }
-
-    /* ── Footer ─────────────────────────────────────────────── */
+    /* ── Footer ── */
     footer {
       border-top: 1px solid var(--border);
+      padding: 3rem 2rem;
       text-align: center;
-      padding: 2rem;
-      font-size: 12px;
-      color: var(--muted);
-      letter-spacing: 0.08em;
+      font-size: 11px;
+      color: var(--dim);
+      letter-spacing: 0.1em;
     }
 
-    footer a {
-      color: var(--pink-dim);
-      text-decoration: none;
+    .footer-logo {
+      font-family: 'VT323', monospace;
+      font-size: 2.4rem;
+      color: var(--green);
+      text-shadow: 0 0 10px var(--green);
+      display: block;
+      margin-bottom: 1rem;
+      letter-spacing: 0.18em;
     }
 
-    footer a:hover { color: var(--pink); }
+    footer p { color: var(--dim); font-size: 11px; margin-bottom: 0.5rem; }
+    footer a { color: var(--green-dim); text-decoration: none; transition: color 0.15s; }
+    footer a:hover { color: var(--green); }
 
-    /* ── Validation rule box ────────────────────────────────── */
-    .rule-box {
-      background: var(--bg-panel);
-      border-left: 2px solid var(--pink);
-      padding: 0.8rem 1.2rem;
-      margin-top: 1rem;
-      font-size: 12px;
-      color: var(--text-dim);
+    /* ── Animations ── */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(18px); }
+      to   { opacity: 1; transform: translateY(0); }
     }
 
-    .rule-box strong { color: var(--pink); }
+    @keyframes glow-pulse {
+      0%, 100% {
+        text-shadow:
+          0 0 12px var(--green),
+          0 0 35px var(--green),
+          0 0 70px rgba(223,87,188,0.35);
+      }
+      50% {
+        text-shadow:
+          0 0 18px var(--green),
+          0 0 50px var(--green),
+          0 0 100px rgba(223,87,188,0.25),
+          0 0 140px rgba(223,87,188,0.1);
+      }
+    }
 
-    /* ── Wide term (hero) ───────────────────────────────────── */
-    #hero .term { max-width: 560px; }
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0; }
+    }
 
-    /* ── Separator line ─────────────────────────────────────── */
-    .ascii-sep {
-      color: var(--border);
-      font-size: 12px;
-      letter-spacing: 0.05em;
-      margin: 2rem 0;
-      overflow: hidden;
+    @keyframes bob {
+      0%, 100% { transform: translateX(-50%) translateY(0); }
+      50%       { transform: translateX(-50%) translateY(7px); }
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 660px) {
+      .grid-2, .mode-grid { grid-template-columns: 1fr; }
+      .nav-links { gap: 1.2rem; }
+      .nav-links a { font-size: 10px; }
+      .hero-eyebrow { letter-spacing: 0.3em; }
     }
   </style>
 </head>
 <body>
 
-<!-- ── Navigation ─────────────────────────────────────────── -->
+<!-- ── Nav ────────────────────────────────────────────── -->
 <nav>
-  <a class="nav-brand" href="#hero">cardman</a>
+  <a class="nav-brand" href="#hero">CARDMAN</a>
   <ul class="nav-links">
     <li><a href="#how-it-works">how it works</a></li>
     <li><a href="#collection">collection</a></li>
@@ -334,11 +570,10 @@
 
 <div class="page">
 
-<!-- ── Hero ───────────────────────────────────────────────── -->
+<!-- ── Hero ─────────────────────────────────────────────── -->
 <section id="hero">
 
-  <!-- Dotted spade reproduced in Unicode block characters -->
-  <pre class="spade-art" aria-hidden="true">
+  <pre class="hero-spade" aria-hidden="true">
         · · · · · · · · · · ·
       · · · · · · · · · · · · ·
     · · · · ·     ·     · · · · ·
@@ -358,12 +593,15 @@
         · · · · · · · · · ·
   </pre>
 
-  <h1 class="hero-title">C A R D M A N</h1>
-  <p class="hero-sub">~ Terminal UI Card Collection Manager ~</p>
+  <div class="hero-eyebrow">open source · self-hosted · terminal-native</div>
+  <h1 class="hero-title">CARDMAN</h1>
+  <p class="hero-sub">Terminal UI Card Collection Manager</p>
 
   <div class="term">
     <div class="term-bar">
-      <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+      <span class="dot dot-r"></span>
+      <span class="dot dot-y"></span>
+      <span class="dot dot-g"></span>
       <span class="term-title">install</span>
     </div>
     <code>
@@ -374,44 +612,49 @@
 <span class="cmt"># initialise and launch</span>
 <span class="prompt">$</span> <span class="cmd">cardman migrate &amp;&amp; cardman import-full</span>
 <span class="prompt">$</span> <span class="cmd">cardman serve</span>
-<span class="ok">✓ cardman is running</span>
+<span class="ok">✓ cardman is running</span><span class="blink-cursor"> █</span>
     </code>
   </div>
 
+  <div class="hero-cta">
+    <a class="btn" href="https://github.com/laiambryant/tui-cardman/releases" target="_blank" rel="noopener">Download</a>
+    <a class="btn btn-ghost" href="https://github.com/laiambryant/tui-cardman" target="_blank" rel="noopener">GitHub →</a>
+  </div>
+
+  <div class="scroll-hint">▼ scroll</div>
 </section>
 
-<!-- ── How It Works ────────────────────────────────────────── -->
+<!-- ── How It Works ──────────────────────────────────────── -->
+<div class="section-wrap" data-num="01">
 <section id="how-it-works">
   <div class="sec-label">// 01</div>
-  <div class="sec-title">How It Works</div>
-  <div class="sec-divider">────────────────────────────────────────────────</div>
+  <div class="sec-title">How It <span>Works</span></div>
+  <div class="sec-accent"></div>
 
   <p>
-    Cardman is a fully self-hosted card collection manager that runs entirely in your terminal.
-    There are no accounts, no cloud, no browser required — just a single binary and a SQLite file.
+    Fully self-hosted card collection manager that runs entirely in your terminal.
+    No accounts, no cloud, no browser required — just a single binary and a SQLite file.
     Pick the mode that fits your setup.
   </p>
 
-  <div class="grid-2">
-
-    <!-- Local mode -->
-    <div class="panel">
-      <div class="panel-title">▶ Local Mode</div>
+  <div class="mode-grid">
+    <div class="mode-panel">
+      <div class="panel-title">Local Mode</div>
       <span class="badge">single user</span>
       <p>
         Run cardman directly on your machine. Your collection lives in a local
         <code class="inline">cardman.db</code> SQLite file. No network, no dependencies.
       </p>
-      <div class="term" style="margin-top:1rem;">
+      <div class="term" style="margin-top:1.2rem;">
         <div class="term-bar">
-          <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+          <span class="dot dot-r"></span>
+          <span class="dot dot-y"></span>
+          <span class="dot dot-g"></span>
           <span class="term-title">local mode</span>
         </div>
-        <code>
-<span class="prompt">$</span> <span class="cmd">cardman serve</span>
-        </code>
+        <code><span class="prompt">$</span> <span class="cmd">cardman serve</span></code>
       </div>
-      <ul class="feat-list" style="margin-top:1.2rem;">
+      <ul class="feat-list" style="margin-top:1.6rem;">
         <li><span class="icon">○</span> Single-user setup, zero config</li>
         <li><span class="icon">○</span> Keybindings stored locally</li>
         <li><span class="icon">○</span> Works completely offline</li>
@@ -419,17 +662,18 @@
       </ul>
     </div>
 
-    <!-- SSH mode -->
-    <div class="panel">
-      <div class="panel-title">▶ SSH Server Mode</div>
-      <span class="badge">multi-user</span>
+    <div class="mode-panel">
+      <div class="panel-title">SSH Server Mode</div>
+      <span class="badge badge-cyan">multi user</span>
       <p>
         Deploy cardman as a shared SSH server. Each user authenticates with their
         own username and gets an isolated collection — all on the same host.
       </p>
-      <div class="term" style="margin-top:1rem;">
+      <div class="term" style="margin-top:1.2rem;">
         <div class="term-bar">
-          <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+          <span class="dot dot-r"></span>
+          <span class="dot dot-y"></span>
+          <span class="dot dot-g"></span>
           <span class="term-title">ssh mode</span>
         </div>
         <code>
@@ -440,51 +684,53 @@
 <span class="prompt">$</span> <span class="cmd">ssh -p 2222 username@your-server</span>
         </code>
       </div>
-      <ul class="feat-list" style="margin-top:1.2rem;">
+      <ul class="feat-list" style="margin-top:1.6rem;">
         <li><span class="icon">○</span> Multiple independent users</li>
         <li><span class="icon">○</span> Per-user keybinding config in DB</li>
         <li><span class="icon">○</span> Docker-ready for easy deployment</li>
         <li><span class="icon">○</span> Ed25519 host key authentication</li>
       </ul>
     </div>
-
   </div>
 
-  <!-- Config table -->
-  <div class="ascii-sep">────────────────────────────────────────────────</div>
-
-  <div class="term">
+  <div class="config-block">
     <div class="term-bar">
-      <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+      <span class="dot dot-r"></span>
+      <span class="dot dot-y"></span>
+      <span class="dot dot-g"></span>
       <span class="term-title">.env configuration</span>
     </div>
-    <code>
-<span class="cmt">DATABASE_DSN</span>   <span class="cmd">=  cardman.db          </span><span class="cmt"># path to sqlite file</span>
-<span class="cmt">LOG_LEVEL    </span>   <span class="cmd">=  INFO                </span><span class="cmt"># DEBUG | INFO | WARN | ERROR</span>
-<span class="cmt">SSH_MODE     </span>   <span class="cmd">=  false               </span><span class="cmt"># true to enable ssh server</span>
-<span class="cmt">PORT         </span>   <span class="cmd">=  2222                </span><span class="cmt"># ssh listen port</span>
-<span class="cmt">SSH_HOST_KEY </span>   <span class="cmd">=  ./host_key          </span><span class="cmt"># ed25519 key path</span>
-<span class="cmt">API_KEY      </span>   <span class="cmd">=                       </span><span class="cmt"># tcgdex api key (optional)</span>
-    </code>
+    <div class="term">
+      <code>
+<span class="key">DATABASE_DSN</span>   <span class="cmd">=  cardman.db     </span>   <span class="cmt"># path to sqlite file</span>
+<span class="key">LOG_LEVEL    </span>   <span class="cmd">=  INFO           </span>   <span class="cmt"># DEBUG | INFO | WARN | ERROR</span>
+<span class="key">SSH_MODE     </span>   <span class="cmd">=  false          </span>   <span class="cmt"># true to enable ssh server</span>
+<span class="key">PORT         </span>   <span class="cmd">=  2222           </span>   <span class="cmt"># ssh listen port</span>
+<span class="key">SSH_HOST_KEY </span>   <span class="cmd">=  ./host_key     </span>   <span class="cmt"># ed25519 key path</span>
+<span class="key">API_KEY      </span>   <span class="cmd">=                 </span>   <span class="cmt"># tcgdex api key (optional)</span>
+      </code>
+    </div>
   </div>
 
 </section>
+</div>
 
-<!-- ── Collection ──────────────────────────────────────────── -->
+<!-- ── Collection ─────────────────────────────────────────── -->
+<div class="section-wrap" data-num="02">
 <section id="collection">
   <div class="sec-label">// 02</div>
-  <div class="sec-title">Collection</div>
-  <div class="sec-divider">────────────────────────────────────────────────</div>
+  <div class="sec-title">Collec<span>tion</span></div>
+  <div class="sec-accent"></div>
 
   <p>
     Your collection is the foundation of cardman. Track every card you own,
     see how complete each set is, monitor its total market value over time,
-    and export it in formats your other tools understand.
+    and export in formats your other tools understand.
   </p>
 
-  <div class="grid-2" style="margin-top:2rem;">
-
-    <div>
+  <div class="grid-2">
+    <div class="panel">
+      <div class="panel-title">Features</div>
       <ul class="feat-list">
         <li><span class="icon">★</span> Track owned cards with per-card quantities</li>
         <li><span class="icon">★</span> Browse by set with completion percentage</li>
@@ -496,49 +742,48 @@
       </ul>
     </div>
 
-    <div>
-      <div class="panel">
-        <div class="panel-title">▶ Export Formats</div>
-        <ul class="feat-list">
-          <li><span class="icon">↓</span> <strong style="color:var(--text)">CSV</strong> &nbsp;—&nbsp; spreadsheet-compatible</li>
-          <li><span class="icon">↓</span> <strong style="color:var(--text)">Text</strong> &nbsp;—&nbsp; human-readable table</li>
-          <li><span class="icon">↓</span> <strong style="color:var(--text)">PTCGO</strong> &nbsp;—&nbsp; Pokemon TCG Online import</li>
-        </ul>
-        <div class="ascii-sep" style="margin:1rem 0;">──────────────</div>
-        <div class="term">
-          <div class="term-bar">
-            <span class="dot"></span><span class="dot"></span><span class="dot"></span>
-            <span class="term-title">import commands</span>
-          </div>
-          <code>
+    <div class="panel">
+      <div class="panel-title">Export &amp; Import</div>
+      <ul class="feat-list">
+        <li><span class="icon icon-cyan">↓</span> <strong style="color:var(--text)">CSV</strong> &nbsp;—&nbsp; spreadsheet-compatible</li>
+        <li><span class="icon icon-cyan">↓</span> <strong style="color:var(--text)">Text</strong> &nbsp;—&nbsp; human-readable table</li>
+        <li><span class="icon icon-cyan">↓</span> <strong style="color:var(--text)">PTCGO</strong> &nbsp;—&nbsp; Pokemon TCG Online import</li>
+      </ul>
+      <div class="term" style="margin-top:1.6rem;">
+        <div class="term-bar">
+          <span class="dot dot-r"></span>
+          <span class="dot dot-y"></span>
+          <span class="dot dot-g"></span>
+          <span class="term-title">import commands</span>
+        </div>
+        <code>
 <span class="prompt">$</span> <span class="cmd">cardman import-full</span>
 <span class="prompt">$</span> <span class="cmd">cardman import-updates</span>
 <span class="prompt">$</span> <span class="cmd">cardman import-sets base1</span>
-          </code>
-        </div>
+        </code>
       </div>
     </div>
-
   </div>
 
 </section>
+</div>
 
-<!-- ── Lists ───────────────────────────────────────────────── -->
+<!-- ── Lists ──────────────────────────────────────────────── -->
+<div class="section-wrap" data-num="03">
 <section id="lists">
   <div class="sec-label">// 03</div>
-  <div class="sec-title">Lists</div>
-  <div class="sec-divider">────────────────────────────────────────────────</div>
+  <div class="sec-title">Li<span>sts</span></div>
+  <div class="sec-accent"></div>
 
   <p>
-    Lists are flexible card groupings you define yourself. Use them as wishlists,
+    Flexible card groupings you define yourself. Use them as wishlists,
     trade binders, want lists, or any custom grouping. Each list is named,
     optionally described, and tagged with a color label so you can tell them apart at a glance.
   </p>
 
-  <div class="grid-2" style="margin-top:2rem;">
-
+  <div class="grid-2">
     <div class="panel">
-      <div class="panel-title">≡ What You Can Do</div>
+      <div class="panel-title">What You Can Do</div>
       <ul class="feat-list">
         <li><span class="icon">○</span> Create unlimited named lists</li>
         <li><span class="icon">○</span> Assign a color label to each list</li>
@@ -550,34 +795,35 @@
     </div>
 
     <div class="panel">
-      <div class="panel-title">≡ Example Use Cases</div>
+      <div class="panel-title">Example Use Cases</div>
       <ul class="feat-list">
-        <li><span class="icon">◆</span> Wishlist &mdash; cards you want to acquire</li>
-        <li><span class="icon">◆</span> Trade binder &mdash; cards available to trade</li>
-        <li><span class="icon">◆</span> Set target &mdash; cards missing from a set</li>
-        <li><span class="icon">◆</span> Duplicates &mdash; extras to sell or trade away</li>
-        <li><span class="icon">◆</span> Gift list &mdash; cards you're buying for others</li>
+        <li><span class="icon icon-orange">◆</span> Wishlist &mdash; cards you want to acquire</li>
+        <li><span class="icon icon-orange">◆</span> Trade binder &mdash; cards available to trade</li>
+        <li><span class="icon icon-orange">◆</span> Set target &mdash; cards missing from a set</li>
+        <li><span class="icon icon-orange">◆</span> Duplicates &mdash; extras to sell or trade away</li>
+        <li><span class="icon icon-orange">◆</span> Gift list &mdash; cards you're buying for others</li>
       </ul>
     </div>
-
   </div>
 
 </section>
+</div>
 
-<!-- ── Decks ───────────────────────────────────────────────── -->
+<!-- ── Decks ──────────────────────────────────────────────── -->
+<div class="section-wrap" data-num="04">
 <section id="decks">
   <div class="sec-label">// 04</div>
-  <div class="sec-title">Decks</div>
-  <div class="sec-divider">────────────────────────────────────────────────</div>
+  <div class="sec-title">De<span>cks</span></div>
+  <div class="sec-accent"></div>
 
   <p>
-    The deck builder lets you construct and validate 60-card Pokemon TCG decks without leaving your terminal.
+    Construct and validate 60-card Pokemon TCG decks without leaving your terminal.
     Add cards, adjust quantities, and get immediate validation feedback before you sleeve up.
   </p>
 
-  <div class="grid-2" style="margin-top:2rem;">
-
-    <div>
+  <div class="grid-2">
+    <div class="panel">
+      <div class="panel-title">Deck Features</div>
       <ul class="feat-list">
         <li><span class="icon">★</span> Create multiple named decks per format</li>
         <li><span class="icon">★</span> Add any card from your imported database</li>
@@ -585,8 +831,6 @@
         <li><span class="icon">★</span> Real-time deck validation on save</li>
         <li><span class="icon">★</span> Rename or delete decks at any time</li>
       </ul>
-
-      <div class="ascii-sep" style="margin:1.5rem 0;">────────────────────────</div>
 
       <div class="rule-box">
         <strong>Validation rules enforced:</strong><br /><br />
@@ -597,10 +841,12 @@
     </div>
 
     <div class="panel">
-      <div class="panel-title">▶ Deck Workflow</div>
+      <div class="panel-title">Deck Workflow</div>
       <div class="term">
         <div class="term-bar">
-          <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+          <span class="dot dot-r"></span>
+          <span class="dot dot-y"></span>
+          <span class="dot dot-g"></span>
           <span class="term-title">deck builder</span>
         </div>
         <code>
@@ -617,27 +863,28 @@
 <span class="cmt"># validate on save</span>
 <span class="ok">  ✓ 60 cards</span>
 <span class="ok">  ✓ no copy limit violations</span>
-<span class="ok">  ✓ deck is legal</span>
+<span class="ok">  ✓ deck is legal</span><span class="blink-cursor"> █</span>
         </code>
       </div>
     </div>
-
   </div>
 
 </section>
+</div>
 
 <!-- ── Footer ─────────────────────────────────────────────── -->
 <footer>
+  <span class="footer-logo">CARDMAN</span>
   <p>
-    cardman &nbsp;·&nbsp; MIT License &nbsp;·&nbsp;
+    MIT License &nbsp;·&nbsp;
     <a href="https://github.com/laiambryant/tui-cardman" target="_blank" rel="noopener">github.com/laiambryant/tui-cardman</a>
   </p>
-  <p style="margin-top:0.4rem; font-size:11px; color:var(--muted);">
+  <p style="margin-top:0.4rem; color:var(--dimmer);">
     built with &nbsp;<a href="https://github.com/charmbracelet/bubbletea" target="_blank" rel="noopener">bubbletea</a>
     &nbsp;·&nbsp; sqlite &nbsp;·&nbsp; go
   </p>
 </footer>
 
-</div><!-- /.page -->
+</div>
 </body>
 </html>
