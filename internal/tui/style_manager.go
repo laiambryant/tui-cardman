@@ -29,16 +29,24 @@ type colorScheme struct {
 	Disabled                lipgloss.Color
 }
 
+const (
+	colorMagenta     lipgloss.Color = "#DF57BC"
+	colorBananaCream lipgloss.Color = "#E3E3E3"
+	colorRed         lipgloss.Color = "9"
+	colorPurple      lipgloss.Color = "170"
+	colorMintCream   lipgloss.Color = "#F0F7EE"
+)
+
 var defaultScheme = colorScheme{
-	Focused:                 lipgloss.Color("205"),
-	Blurred:                 lipgloss.Color("240"),
-	Error:                   lipgloss.Color("9"),
-	Title:                   lipgloss.Color("170"),
+	Focused:                 colorMagenta,
+	Blurred:                 colorBananaCream,
+	Error:                   colorRed,
+	Title:                   colorPurple,
 	Background:              lipgloss.Color(""),
 	Foreground:              lipgloss.Color(""),
 	TableSelectedForeground: lipgloss.Color(""),
 	TableSelectedBackground: lipgloss.Color(""),
-	Disabled:                lipgloss.Color("240"),
+	Disabled:                colorMintCream,
 }
 
 func init() {
