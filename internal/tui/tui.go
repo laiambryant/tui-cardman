@@ -257,7 +257,7 @@ func isBackKey(action, s string) bool {
 }
 
 func isQuitKey(action, s string) bool {
-	return action == "quit" || action == "quit_alt" || s == "ctrl+c"
+	return action == "quit" || s == "ctrl+c"
 }
 
 func (m *Model) updateInputFocus(cmds []tea.Cmd) tea.Cmd {
@@ -869,13 +869,13 @@ func (m *Model) createCardGameTabsModel(selectedGame *model.CardGame) (CardGameT
 	cardGameTabs.collectionService = m.collectionService
 	cardGameTabs.user = m.user
 	pokemonCardSvc := pokemoncard.NewPokemonCardService(m.db)
-	pokemonRenderer := NewPokemonCardRenderer(pokemonCardSvc, selectedGame.ID)
+	pokemonRenderer := NewPokemonCardRenderer(pokemonCardSvc, m.gameIDByName("Pokemon"))
 	yugiohCardSvc := yugiohcard.NewYuGiOhCardService(m.db)
-	yugiohRenderer := NewYuGiOhCardRenderer(yugiohCardSvc, selectedGame.ID)
+	yugiohRenderer := NewYuGiOhCardRenderer(yugiohCardSvc, m.gameIDByName("Yu-Gi-Oh!"))
 	mtgCardSvc := mtgcard.NewMTGCardService(m.db)
-	mtgRenderer := NewMTGCardRenderer(mtgCardSvc, selectedGame.ID)
+	mtgRenderer := NewMTGCardRenderer(mtgCardSvc, m.gameIDByName("Magic: The Gathering"))
 	opCardSvc := onepiececard.NewOnePieceCardService(m.db)
-	opRenderer := NewOnePieceCardRenderer(opCardSvc, selectedGame.ID)
+	opRenderer := NewOnePieceCardRenderer(opCardSvc, m.gameIDByName("One Piece"))
 	cardGameTabs.cardDetail = &CardDetailModel{
 		styleManager: m.styleManager,
 		tcgService:   m.tcgPriceService,
@@ -923,6 +923,15 @@ func (m *Model) createCardGameTabsModel(selectedGame *model.CardGame) (CardGameT
 		}
 	}
 	return cardGameTabs, nil
+}
+
+func (m *Model) gameIDByName(name string) int64 {
+	for _, g := range m.cardGames {
+		if g.Name == name {
+			return g.ID
+		}
+	}
+	return 0
 }
 
 func (m *Model) createListsModel(selectedGame *model.CardGame) (*ListsModel, error) {
