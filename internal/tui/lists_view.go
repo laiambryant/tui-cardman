@@ -369,7 +369,7 @@ func (m ListsModel) handleCardPanelKeys(msg tea.KeyMsg, s, action string) (Lists
 		return m, nil
 	}
 	if action == "import" && m.selectedList != nil {
-		m.importState = NewImportState(m.cardService, m.styleManager)
+		m.importState = NewImportState(m.cardService, m.selectedGame.ID, m.styleManager)
 		return m, nil
 	}
 	// Forward non-modifier printable keys to the search textinput when it is focused

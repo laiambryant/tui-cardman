@@ -22,7 +22,7 @@ func (m *Model) initLoginInputs() {
 }
 
 func (m *Model) initSSHConfigManager(userID int64) {
-	if !m.isSSHMode || m.configManager != nil {
+	if !m.isSSHMode {
 		return
 	}
 	buttonConfigService := buttonconfig.NewButtonConfigService(m.db)

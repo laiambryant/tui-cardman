@@ -2,7 +2,7 @@
 package config
 
 import (
-	"fmt"
+	"errors"
 	"log/slog"
 	"strings"
 
@@ -12,7 +12,7 @@ import (
 
 type LogLevel string
 
-var Cfg struct {
+type Config struct {
 	LogLevel   LogLevel `env:"LOG_LEVEL" default:"INFO"`
 	DBDSN      string   `env:"DB_DSN" default:"file:cardman.db?_fk=1"`
 	SSHPort    int      `env:"SSH_PORT" default:"2222"`
@@ -20,24 +20,46 @@ var Cfg struct {
 	APIKey     string   `env:"API_KEY" default:""`
 }
 
-func LoadConfig() {
+var Cfg Config
+
+func LoadConfig() error {
+	cfg, err := Load()
+	if err != nil {
+		return err
+	}
+	Cfg = cfg
+	return nil
+}
+
+func Load() (Config, error) {
 	_ = godotenv.Load()
-	if err := env.Load(&Cfg, &env.Options{}); err != nil {
-		panic(err)
+	var cfg Config
+	if err := env.Load(&cfg, &env.Options{}); err != nil {
+		return Config{}, err
 	}
-	displayCfg := Cfg
-	if displayCfg.APIKey != "" {
-		displayCfg.APIKey = "***********"
+	if err := cfg.Validate(); err != nil {
+		return Config{}, err
 	}
-	fmt.Printf("Current configuration: %+v\n", displayCfg)
+	return cfg, nil
+}
+
+func (c Config) Validate() error {
+	if c.SSHPort < 1 || c.SSHPort > 65535 {
+		return errors.New("SSH_PORT must be between 1 and 65535")
+	}
+	return nil
+}
+
+func (c Config) GetAPIKey() string {
+	return c.APIKey
 }
 
 func GetAPIKey() string {
-	return Cfg.APIKey
+	return Cfg.GetAPIKey()
 }
 
-func GetLogLevel() slog.Level {
-	switch strings.ToUpper(string(Cfg.LogLevel)) {
+func (c Config) GetLogLevel() slog.Level {
+	switch strings.ToUpper(string(c.LogLevel)) {
 	case "DEBUG":
 		return slog.LevelDebug
 	case "INFO":
@@ -49,4 +71,8 @@ func GetLogLevel() slog.Level {
 	default:
 		return slog.LevelInfo
 	}
+}
+
+func GetLogLevel() slog.Level {
+	return Cfg.GetLogLevel()
 }

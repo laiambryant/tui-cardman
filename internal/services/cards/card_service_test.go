@@ -35,12 +35,12 @@ func setupCardTestData(t *testing.T, db *sql.DB) (gameID1, gameID2, setID1, setI
 	require.NoError(t, err)
 
 	// Create sets
-	result, err := db.Exec(`INSERT INTO sets (api_id, name) VALUES (?, ?)`, "base1", "Base Set")
+	result, err := db.Exec(`INSERT INTO sets (api_id, code, name) VALUES (?, ?, ?)`, "base1", "base1", "Base Set")
 	require.NoError(t, err)
 	setID1, err = result.LastInsertId()
 	require.NoError(t, err)
 
-	result, err = db.Exec(`INSERT INTO sets (api_id, name) VALUES (?, ?)`, "jungle", "Jungle")
+	result, err = db.Exec(`INSERT INTO sets (api_id, code, name) VALUES (?, ?, ?)`, "jungle", "jungle", "Jungle")
 	require.NoError(t, err)
 	setID2, err = result.LastInsertId()
 	require.NoError(t, err)
@@ -643,6 +643,44 @@ func TestGetCardsByGameID_ComplexJoin(t *testing.T) {
 	assert.Equal(t, gameID1, card.CardGame.ID)
 	assert.Equal(t, "Pokemon", card.CardGame.Name)
 	assert.NotZero(t, card.CardGame.CreatedAt)
+}
+
+func TestGetCardByGameAndSetCodeAndNumber(t *testing.T) {
+	db := testutil.SetupTestDB(t)
+	defer testutil.CleanupTestDB(t, db)
+
+	testutil.ApplyTestMigrations(t, db, "../../db/migrations")
+
+	service := NewCardService(db)
+
+	gameID1, gameID2, setID1, _ := setupCardTestData(t, db)
+
+	result, err := db.Exec(`INSERT INTO sets (api_id, name, code) VALUES (?, ?, ?)`, "base1-mtg", "Base Set MTG", "base1")
+	require.NoError(t, err)
+	setID2, err := result.LastInsertId()
+	require.NoError(t, err)
+
+	_, err = db.Exec(`INSERT INTO cards (card_game_id, set_id, api_id, name, rarity, number, artist, is_placeholder)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		gameID1, setID1, "pokemon-base1-4", "Charizard", "Rare Holo", "4", "Mitsuhiro Arita", false)
+	require.NoError(t, err)
+
+	_, err = db.Exec(`INSERT INTO cards (card_game_id, set_id, api_id, name, rarity, number, artist, is_placeholder)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		gameID2, setID2, "mtg-base1-4", "Lightning Bolt", "Common", "4", "Christopher Moeller", false)
+	require.NoError(t, err)
+
+	pokemonCard, err := service.GetCardByGameAndSetCodeAndNumber(gameID1, "base1", "4")
+	require.NoError(t, err)
+	require.NotNil(t, pokemonCard)
+	assert.Equal(t, "Charizard", pokemonCard.Name)
+	assert.Equal(t, gameID1, pokemonCard.CardGameID)
+
+	mtgCard, err := service.GetCardByGameAndSetCodeAndNumber(gameID2, "base1", "4")
+	require.NoError(t, err)
+	require.NotNil(t, mtgCard)
+	assert.Equal(t, "Lightning Bolt", mtgCard.Name)
+	assert.Equal(t, gameID2, mtgCard.CardGameID)
 }
 
 func TestGetAllCards_MultipleGamesOrdering(t *testing.T) {

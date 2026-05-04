@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- SSH login now replaces the temporary local runtime configuration with the user's database-backed configuration
+- CLI card lookups are now scoped to the selected game to avoid cross-game card resolution collisions
+- Startup configuration now uses `DB_DSN` and `SSH_PORT` consistently across commands and docs
+- `serve-ssh` now rejects an empty `SSH_HOST_KEY` and documents auto-generation correctly
+
 ## [0.2.0] - 2026-03-30
 
 ### Added
@@ -64,7 +71,7 @@ Initial alpha release of tui-cardman.
 - TUI has no unit tests (hard to test terminal rendering; tested manually)
 - Magic: The Gathering and Yu-Gi-Oh! card games are seeded in the database but not yet fully supported in the import pipeline
 - Price data requires manual import runs; no automatic scheduling built in
-- SSH host key must be provisioned manually before running `serve-ssh`
+- SSH host key must be configured with `SSH_HOST_KEY`; if the path does not exist, `serve-ssh` generates a host key automatically
 
 [Unreleased]: https://github.com/laiambryant/tui-cardman/compare/v0.2.0...HEAD
 [0.2.0]: https://github.com/laiambryant/tui-cardman/compare/v0.1.0...v0.2.0

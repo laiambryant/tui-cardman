@@ -1,7 +1,6 @@
 package command
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"strconv"
@@ -26,7 +25,7 @@ var decksListCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer deps.db.Close()
+		defer deps.Close()
 		game, err := resolveGame(deps.gameSvc, args[0])
 		if err != nil {
 			return err
@@ -49,17 +48,18 @@ var decksCreateCmd = &cobra.Command{
 	Short: "Create a new deck",
 	Args:  cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		ctx := cmd.Context()
 		format, _ := cmd.Flags().GetString("format")
 		deps, err := buildCLIDeps()
 		if err != nil {
 			return err
 		}
-		defer deps.db.Close()
+		defer deps.Close()
 		game, err := resolveGame(deps.gameSvc, args[0])
 		if err != nil {
 			return err
 		}
-		d, err := deps.deckSvc.CreateDeck(context.Background(), deps.userID, game.ID, args[1], format)
+		d, err := deps.deckSvc.CreateDeck(ctx, deps.userID, game.ID, args[1], format)
 		if err != nil {
 			return err
 		}
@@ -73,6 +73,7 @@ var decksDeleteCmd = &cobra.Command{
 	Short: "Delete a deck",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		ctx := cmd.Context()
 		deckID, err := strconv.ParseInt(args[0], 10, 64)
 		if err != nil {
 			return fmt.Errorf("invalid deck ID: %s", args[0])
@@ -81,8 +82,8 @@ var decksDeleteCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer deps.db.Close()
-		if err := deps.deckSvc.DeleteDeck(context.Background(), deckID); err != nil {
+		defer deps.Close()
+		if err := deps.deckSvc.DeleteDeck(ctx, deckID); err != nil {
 			return err
 		}
 		fmt.Printf("Deleted deck %d\n", deckID)
@@ -103,7 +104,7 @@ var decksShowCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer deps.db.Close()
+		defer deps.Close()
 		d, err := deps.deckSvc.GetDeckByID(deckID)
 		if err != nil {
 			return err
@@ -144,6 +145,7 @@ var decksAddCardCmd = &cobra.Command{
 	Short: "Add a card to a deck",
 	Args:  cobra.ExactArgs(4),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		ctx := cmd.Context()
 		deckID, err := strconv.ParseInt(args[0], 10, 64)
 		if err != nil {
 			return fmt.Errorf("invalid deck ID: %s", args[0])
@@ -156,12 +158,19 @@ var decksAddCardCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer deps.db.Close()
-		c, err := deps.cardSvc.GetCardBySetCodeAndNumber(args[1], args[2])
+		defer deps.Close()
+		d, err := deps.deckSvc.GetDeckByID(deckID)
+		if err != nil {
+			return err
+		}
+		c, err := deps.cardSvc.GetCardByGameAndSetCodeAndNumber(d.CardGameID, args[1], args[2])
 		if err != nil {
 			return fmt.Errorf("card not found: %w", err)
 		}
-		if err := deps.deckSvc.UpsertDeckCardBatch(context.Background(), deckID, map[int64]int{c.ID: qty}); err != nil {
+		if c == nil {
+			return fmt.Errorf("card not found for deck game: %s %s", args[1], args[2])
+		}
+		if err := deps.deckSvc.UpsertDeckCardBatch(ctx, deckID, map[int64]int{c.ID: qty}); err != nil {
 			return err
 		}
 		fmt.Printf("Added %d × %s to deck\n", qty, c.Name)
@@ -174,6 +183,7 @@ var decksRemoveCardCmd = &cobra.Command{
 	Short: "Remove a card from a deck",
 	Args:  cobra.ExactArgs(3),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		ctx := cmd.Context()
 		deckID, err := strconv.ParseInt(args[0], 10, 64)
 		if err != nil {
 			return fmt.Errorf("invalid deck ID: %s", args[0])
@@ -182,12 +192,19 @@ var decksRemoveCardCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer deps.db.Close()
-		c, err := deps.cardSvc.GetCardBySetCodeAndNumber(args[1], args[2])
+		defer deps.Close()
+		d, err := deps.deckSvc.GetDeckByID(deckID)
+		if err != nil {
+			return err
+		}
+		c, err := deps.cardSvc.GetCardByGameAndSetCodeAndNumber(d.CardGameID, args[1], args[2])
 		if err != nil {
 			return fmt.Errorf("card not found: %w", err)
 		}
-		if err := deps.deckSvc.UpsertDeckCardBatch(context.Background(), deckID, map[int64]int{c.ID: 0}); err != nil {
+		if c == nil {
+			return fmt.Errorf("card not found for deck game: %s %s", args[1], args[2])
+		}
+		if err := deps.deckSvc.UpsertDeckCardBatch(ctx, deckID, map[int64]int{c.ID: 0}); err != nil {
 			return err
 		}
 		fmt.Printf("Removed %s from deck\n", c.Name)
@@ -208,7 +225,7 @@ var decksValidateCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer deps.db.Close()
+		defer deps.Close()
 		d, err := deps.deckSvc.GetDeckByID(deckID)
 		if err != nil {
 			return err
@@ -259,7 +276,7 @@ var decksExportCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer deps.db.Close()
+		defer deps.Close()
 		d, err := deps.deckSvc.GetDeckByID(deckID)
 		if err != nil {
 			return err

@@ -1,12 +1,9 @@
 package command
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/spf13/cobra"
-
-	"github.com/laiambryant/tui-cardman/internal/config"
 )
 
 const (
@@ -31,14 +28,13 @@ var importUpdatesCmd = &cobra.Command{
 	Short: shortMessageImportUpdates,
 	Long:  longMessageImportUpdates,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		config.LoadConfig()
-		ctx := context.Background()
+		ctx := cmd.Context()
 
 		deps, err := buildImportService()
 		if err != nil {
 			return err
 		}
-		defer deps.database.Close()
+		defer deps.Close()
 
 		deps.logger.Info("Starting incremental Pokemon TCG import (new sets only)")
 		if err := deps.importService.ImportNewSets(ctx); err != nil {

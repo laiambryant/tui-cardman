@@ -2,11 +2,8 @@ package command
 
 import (
 	"database/sql"
-	"fmt"
 	"log/slog"
 
-	"github.com/laiambryant/tui-cardman/internal/config"
-	"github.com/laiambryant/tui-cardman/internal/db"
 	"github.com/laiambryant/tui-cardman/internal/pokemontcg"
 	card "github.com/laiambryant/tui-cardman/internal/services/cards"
 	"github.com/laiambryant/tui-cardman/internal/services/importruns"
@@ -18,6 +15,7 @@ import (
 // importDeps holds the database connection and fully-wired import service.
 // Callers are responsible for calling database.Close() when done.
 type importDeps struct {
+	runtime       *commandRuntime
 	database      *sql.DB
 	importService *pokemontcg.ImportService
 	logger        *slog.Logger
@@ -26,12 +24,13 @@ type importDeps struct {
 // buildImportService opens the database and wires up the shared import service
 // used by import-full, import-sets, and import-updates.
 func buildImportService() (*importDeps, error) {
-	database, err := db.OpenDB(config.Cfg.DBDSN)
+	runtime, err := newCommandRuntime(true, true)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to database: %w", err)
+		return nil, err
 	}
+	database := runtime.db
 
-	apiKey := config.GetAPIKey()
+	apiKey := runtime.config.GetAPIKey()
 	client := pokemontcg.NewClient(apiKey)
 	logger := slog.Default()
 
@@ -50,8 +49,16 @@ func buildImportService() (*importDeps, error) {
 	)
 
 	return &importDeps{
+		runtime:       runtime,
 		database:      database,
 		importService: importService,
 		logger:        logger,
 	}, nil
+}
+
+func (d *importDeps) Close() {
+	if d == nil || d.runtime == nil {
+		return
+	}
+	d.runtime.Close()
 }

@@ -4,7 +4,7 @@ Thank you for your interest in contributing to tui-cardman.
 
 ## Prerequisites
 
-- Go 1.24 or later
+- Go 1.25 or later
 - GCC or Clang (required for CGO / SQLite)
 - `make` (optional but convenient)
 

@@ -46,10 +46,11 @@ type ImportState struct {
 	quantities map[int64]int
 	errMsg     string
 	cardSvc    cardservice.CardService
+	gameID     int64
 }
 
 // NewImportState creates a ready-to-use ImportState.
-func NewImportState(cardSvc cardservice.CardService, sm *StyleManager) ImportState {
+func NewImportState(cardSvc cardservice.CardService, gameID int64, sm *StyleManager) ImportState {
 	ti := textinput.New()
 	ti.Placeholder = "path/to/deck.csv"
 	ti.Width = 50
@@ -61,6 +62,7 @@ func NewImportState(cardSvc cardservice.CardService, sm *StyleManager) ImportSta
 		phase:     importPhaseInput,
 		pathInput: ti,
 		cardSvc:   cardSvc,
+		gameID:    gameID,
 	}
 }
 
@@ -97,13 +99,14 @@ func (s *ImportState) handleInputPhaseKey(key string) tea.Cmd {
 		}
 		s.phase = importPhaseWorking
 		cardSvc := s.cardSvc
+		gameID := s.gameID
 		return func() tea.Msg {
 			rows, err := export.FromCSV(path)
 			if err != nil {
 				return importReadyMsg{err: err}
 			}
 			lookup := func(setCode, number string) (int64, error) {
-				card, err := cardSvc.GetCardBySetCodeAndNumber(setCode, number)
+				card, err := cardSvc.GetCardByGameAndSetCodeAndNumber(gameID, setCode, number)
 				if err != nil {
 					return 0, err
 				}

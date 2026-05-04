@@ -13,7 +13,7 @@ func TestLoadConfig_Defaults(t *testing.T) {
 	// Clear environment variables to test defaults
 	clearEnvVars(t)
 
-	LoadConfig()
+	require.NoError(t, LoadConfig())
 
 	assert.Equal(t, LogLevel("INFO"), Cfg.LogLevel)
 	assert.Equal(t, "file:cardman.db?_fk=1", Cfg.DBDSN)
@@ -32,7 +32,7 @@ func TestLoadConfig_FromEnvironment(t *testing.T) {
 	t.Setenv("SSH_HOST_KEY", "/tmp/test_key")
 	t.Setenv("API_KEY", "test-api-key-12345")
 
-	LoadConfig()
+	require.NoError(t, LoadConfig())
 
 	assert.Equal(t, LogLevel("DEBUG"), Cfg.LogLevel)
 	assert.Equal(t, "file:test.db?_fk=1", Cfg.DBDSN)
@@ -67,7 +67,7 @@ API_KEY=dotenv-api-key
 	err = os.Chdir(tmpDir)
 	require.NoError(t, err)
 
-	LoadConfig()
+	require.NoError(t, LoadConfig())
 
 	assert.Equal(t, LogLevel("WARN"), Cfg.LogLevel)
 	assert.Equal(t, "file:dotenv_test.db?_fk=1", Cfg.DBDSN)
@@ -103,38 +103,31 @@ SSH_PORT=5555
 	t.Setenv("LOG_LEVEL", "DEBUG")
 	t.Setenv("SSH_PORT", "6666")
 
-	LoadConfig()
+	require.NoError(t, LoadConfig())
 
 	// Environment variables should take precedence
 	assert.Equal(t, LogLevel("DEBUG"), Cfg.LogLevel)
 	assert.Equal(t, 6666, Cfg.SSHPort)
 }
 
-func TestLoadConfig_InvalidPortDefaultsToZero(t *testing.T) {
+func TestLoadConfig_InvalidPortReturnsError(t *testing.T) {
 	clearEnvVars(t)
 
-	// Set invalid SSH_PORT (this will cause env.Load to fail and panic)
+	// Set invalid SSH_PORT (env.Load will fail to parse it)
 	t.Setenv("SSH_PORT", "not-a-number")
 
-	// LoadConfig should panic on invalid integer
-	assert.Panics(t, func() {
-		LoadConfig()
-	})
+	err := LoadConfig()
+	assert.Error(t, err)
 }
 
-func TestLoadConfig_APIKeyMaskedInOutput(t *testing.T) {
+func TestLoadConfig_APIKeyLoadsWithoutPrinting(t *testing.T) {
 	clearEnvVars(t)
 
 	t.Setenv("API_KEY", "super-secret-key-12345")
 
-	// Capture stdout to verify API key is masked
-	// Note: LoadConfig prints to stdout, so we can't easily capture it in tests
-	// but we can verify the logic by checking that Cfg.APIKey is set correctly
-	LoadConfig()
+	require.NoError(t, LoadConfig())
 
 	assert.Equal(t, "super-secret-key-12345", Cfg.APIKey)
-	// The actual masking happens in fmt.Printf which we can't easily test
-	// but we've verified the logic works by reviewing the code
 }
 
 func TestGetAPIKey(t *testing.T) {
@@ -142,7 +135,7 @@ func TestGetAPIKey(t *testing.T) {
 
 	t.Setenv("API_KEY", "test-api-key")
 
-	LoadConfig()
+	require.NoError(t, LoadConfig())
 
 	apiKey := GetAPIKey()
 	assert.Equal(t, "test-api-key", apiKey)
@@ -151,7 +144,7 @@ func TestGetAPIKey(t *testing.T) {
 func TestGetAPIKey_Empty(t *testing.T) {
 	clearEnvVars(t)
 
-	LoadConfig()
+	require.NoError(t, LoadConfig())
 
 	apiKey := GetAPIKey()
 	assert.Equal(t, "", apiKey)
@@ -216,7 +209,7 @@ func TestGetLogLevel(t *testing.T) {
 
 			t.Setenv("LOG_LEVEL", tt.logLevelInput)
 
-			LoadConfig()
+			require.NoError(t, LoadConfig())
 
 			level := GetLogLevel()
 			assert.Equal(t, tt.expectedLevel, level)
@@ -227,7 +220,7 @@ func TestGetLogLevel(t *testing.T) {
 func TestGetLogLevel_Default(t *testing.T) {
 	clearEnvVars(t)
 
-	LoadConfig()
+	require.NoError(t, LoadConfig())
 
 	level := GetLogLevel()
 	assert.Equal(t, slog.LevelInfo, level)
@@ -249,7 +242,7 @@ func TestConfig_StructFields(t *testing.T) {
 	t.Setenv("SSH_HOST_KEY", "/test/key")
 	t.Setenv("API_KEY", "test")
 
-	LoadConfig()
+	require.NoError(t, LoadConfig())
 
 	// Verify all fields are accessible and have correct types
 	_ = Cfg.LogLevel
@@ -302,7 +295,7 @@ func TestConfig_DefaultValues(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			clearEnvVars(t)
 
-			LoadConfig()
+			require.NoError(t, LoadConfig())
 
 			actual := tt.checkFunc()
 			assert.Equal(t, tt.defaultValue, actual)
@@ -314,37 +307,37 @@ func TestConfig_SSHPortRange(t *testing.T) {
 	tests := []struct {
 		name        string
 		port        string
-		shouldPanic bool
+		shouldError bool
 	}{
 		{
 			name:        "Valid port 2222",
 			port:        "2222",
-			shouldPanic: false,
+			shouldError: false,
 		},
 		{
 			name:        "Valid port 8080",
 			port:        "8080",
-			shouldPanic: false,
+			shouldError: false,
 		},
 		{
 			name:        "Valid port 22",
 			port:        "22",
-			shouldPanic: false,
+			shouldError: false,
 		},
 		{
 			name:        "Negative port",
 			port:        "-1",
-			shouldPanic: false, // env.Load will parse it as a valid int
+			shouldError: true,
 		},
 		{
 			name:        "Zero port",
 			port:        "0",
-			shouldPanic: false,
+			shouldError: true,
 		},
 		{
 			name:        "Very large port",
 			port:        "99999",
-			shouldPanic: false,
+			shouldError: true,
 		},
 	}
 
@@ -354,17 +347,27 @@ func TestConfig_SSHPortRange(t *testing.T) {
 
 			t.Setenv("SSH_PORT", tt.port)
 
-			if tt.shouldPanic {
-				assert.Panics(t, func() {
-					LoadConfig()
-				})
+			err := LoadConfig()
+			if tt.shouldError {
+				assert.Error(t, err)
 			} else {
-				assert.NotPanics(t, func() {
-					LoadConfig()
-				})
+				assert.NoError(t, err)
 			}
 		})
 	}
+}
+
+func TestLoad_LeavesGlobalConfigUntouched(t *testing.T) {
+	clearEnvVars(t)
+	Cfg = Config{DBDSN: "original"}
+
+	t.Setenv("DB_DSN", "file:test.db?_fk=1")
+
+	loaded, err := Load()
+	require.NoError(t, err)
+
+	assert.Equal(t, "file:test.db?_fk=1", loaded.DBDSN)
+	assert.Equal(t, "original", Cfg.DBDSN)
 }
 
 // Helper function to clear relevant environment variables

@@ -10,7 +10,6 @@ import (
 	"text/tabwriter"
 
 	"github.com/laiambryant/tui-cardman/internal/config"
-	dbpkg "github.com/laiambryant/tui-cardman/internal/db"
 	"github.com/laiambryant/tui-cardman/internal/export"
 	"github.com/laiambryant/tui-cardman/internal/gameimporter"
 	cardmodel "github.com/laiambryant/tui-cardman/internal/model"
@@ -34,6 +33,7 @@ import (
 )
 
 type cliDeps struct {
+	runtime *commandRuntime
 	db      *sql.DB
 	userID  int64
 	cardSvc card.CardService
@@ -51,25 +51,22 @@ var gameAliases = map[string]string{
 }
 
 func buildCLIDeps() (*cliDeps, error) {
-	config.LoadConfig()
-	database, err := dbpkg.OpenDB(config.Cfg.DBDSN)
+	runtime, err := newCommandRuntime(true, true)
 	if err != nil {
-		return nil, fmt.Errorf("open db: %w", err)
+		return nil, err
 	}
-	if err := dbpkg.ApplyMigrations(database, "internal/db/migrations"); err != nil {
-		database.Close()
-		return nil, fmt.Errorf("apply migrations: %w", err)
-	}
+	database := runtime.db
 	userSvc := user.NewUserService(database)
 	u, err := userSvc.GetFirstUser()
 	if err != nil {
-		database.Close()
+		runtime.Close()
 		if errors.Is(err, user.ErrNoUsersFound) {
 			return nil, fmt.Errorf("no local user found — run 'cardman serve' first")
 		}
 		return nil, fmt.Errorf("get user: %w", err)
 	}
 	return &cliDeps{
+		runtime: runtime,
 		db:      database,
 		userID:  u.ID,
 		cardSvc: card.NewCardService(database),
@@ -80,6 +77,19 @@ func buildCLIDeps() (*cliDeps, error) {
 	}, nil
 }
 
+func (d *cliDeps) Close() {
+	if d == nil {
+		return
+	}
+	if d.runtime != nil {
+		d.runtime.Close()
+		return
+	}
+	if d.db != nil {
+		_ = d.db.Close()
+	}
+}
+
 func normalizeGameName(name string) string {
 	if canonical, ok := gameAliases[strings.ToLower(name)]; ok {
 		return canonical
@@ -87,8 +97,24 @@ func normalizeGameName(name string) string {
 	return name
 }
 
+func canonicalGameName(name string) string {
+	normalized := strings.TrimSpace(strings.ToLower(name))
+	switch normalized {
+	case "pokemon", "pokémon tcg", "pokemontcg":
+		return "Pokemon"
+	case "mtg", "magic", "magic: the gathering":
+		return "Magic: The Gathering"
+	case "yugioh", "yu-gi-oh", "yu-gi-oh!":
+		return "Yu-Gi-Oh!"
+	case "onepiece", "one piece":
+		return "One Piece"
+	default:
+		return normalizeGameName(name)
+	}
+}
+
 func resolveGame(gameSvc cardgame.CardGameService, gameName string) (*cardmodel.CardGame, error) {
-	canonical := normalizeGameName(gameName)
+	canonical := canonicalGameName(gameName)
 	game, err := gameSvc.GetCardGameByName(canonical)
 	if err != nil {
 		return nil, fmt.Errorf("game %q not found (try: pokemon, mtg, yugioh, onepiece): %w", gameName, err)
@@ -109,15 +135,15 @@ func resolveGameByID(gameSvc cardgame.CardGameService, gameID int64) (*cardmodel
 	return nil, fmt.Errorf("game with ID %d not found", gameID)
 }
 
-func buildImporterForGame(database *sql.DB, gameName string) (gameimporter.GameImporter, error) {
-	normalized := normalizeGameName(gameName)
+func buildImporterForGame(database *sql.DB, gameName string, cfg config.Config) (gameimporter.GameImporter, error) {
+	normalized := canonicalGameName(gameName)
 	logger := slog.Default()
 	importRunSvc := importruns.NewImportRunService(database)
 	setSvc := sets.NewSetService(database)
 	cardSvc := card.NewCardService(database)
 	switch normalized {
-	case "Pokémon TCG":
-		client := pokemontcg.NewClient(config.GetAPIKey())
+	case "Pokemon":
+		client := pokemontcg.NewClient(cfg.GetAPIKey())
 		tcgSvc := prices.NewTCGPlayerPriceService(database)
 		cmSvc := prices.NewCardMarketPriceService(database)
 		pokSvc := pokemoncard.NewPokemonCardService(database)

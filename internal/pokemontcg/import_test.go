@@ -82,6 +82,12 @@ func (m *mockCardService) GetAllCards() ([]model.Card, error)                  {
 func (m *mockCardService) GetCardIDByAPIID(ctx context.Context, apiID string) (int64, error) {
 	return 0, nil
 }
+func (m *mockCardService) GetCardBySetCodeAndNumber(setCode, number string) (*model.Card, error) {
+	return nil, nil
+}
+func (m *mockCardService) GetCardByGameAndSetCodeAndNumber(gameID int64, setCode, number string) (*model.Card, error) {
+	return nil, nil
+}
 
 type mockTCGPlayerPriceService struct {
 	insertPriceFunc  func(ctx context.Context, tx *sql.Tx, cardID int64, priceType string, low, mid, high, market, directLow float64, url, updatedAt string) error

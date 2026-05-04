@@ -345,7 +345,7 @@ func (m DeckBuilderModel) handleCardPanelKeys(msg tea.KeyMsg) (DeckBuilderModel,
 		return m, nil
 	}
 	if action == "import" && m.selectedDeck != nil {
-		m.importState = NewImportState(m.cardService, m.styleManager)
+		m.importState = NewImportState(m.cardService, m.selectedGame.ID, m.styleManager)
 		return m, nil
 	}
 	// Forward non-modifier printable keys to the search textinput when it is focused

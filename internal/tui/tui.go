@@ -116,11 +116,6 @@ type Model struct {
 }
 
 func NewModel(db *sql.DB, isSSHMode bool) (*Model, error) {
-	configPath := runtimecfg.GetConfigPath()
-	configManager, err := runtimecfg.NewManager(true, configPath, nil, 0)
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize config manager: %w", err)
-	}
 	styleManager := NewStyleManager()
 	userService, cardGameService, cardService, collectionService, listSvc, deckSvc, tcgPriceSvc, cmPriceSvc, authSvc := initServices(db)
 	cardGames, err := cardGameService.GetAllCardGames()
@@ -140,7 +135,6 @@ func NewModel(db *sql.DB, isSSHMode bool) (*Model, error) {
 		cmPriceService:    cmPriceSvc,
 		db:                db,
 		isSSHMode:         isSSHMode,
-		configManager:     configManager,
 		styleManager:      styleManager,
 		inputs:            make([]textinput.Model, 2),
 		cardGames:         cardGames,
@@ -151,6 +145,7 @@ func NewModel(db *sql.DB, isSSHMode bool) (*Model, error) {
 		m.postSplashScreen = ScreenLogin
 		m.initLoginInputs()
 	} else {
+		m.initLocalConfigManager()
 		hasUsers, err := userService.HasUsers()
 		if err != nil {
 			return nil, fmt.Errorf("failed to check for existing users: %w", err)
