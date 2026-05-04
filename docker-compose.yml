@@ -9,14 +9,14 @@ services:
       - DB_DSN=file:/app/data/cardman.db?_fk=1
       - LOG_LEVEL=INFO
       # Uncomment for SSH server mode:
-      # - SSH_PORT=2222
-      # - SSH_HOST_KEY=/app/data/host_key
+      - SSH_PORT=2222
+      - SSH_HOST_KEY=/app/data/host_key
       # - API_KEY=your_pokemontcg_api_key
     volumes:
       - cardman_data:/app/data
-    # Uncomment to expose SSH server port:
-    # ports:
-    #   - "2222:2222"
+      # Uncomment to expose SSH server port:
+    ports:
+      - "2222:2222"
     stdin_open: true
     tty: true
     restart: unless-stopped
