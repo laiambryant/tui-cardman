@@ -83,30 +83,10 @@ type (
 )
 
 func NewDeckBuilderModel(game *model.CardGame, user *auth.User, deckService deck.DeckService, cardSvc cardservice.CardService, cards []model.Card, cfg *runtimecfg.Manager, sm *StyleManager) DeckBuilderModel {
-	searchInput := textinput.New()
-	searchInput.Placeholder = "Search cards..."
-	searchInput.Width = 30
-	sm.ApplyTextInputStyles(&searchInput)
-	nameInput := textinput.New()
-	nameInput.Placeholder = "Deck name..."
-	nameInput.Width = 30
-	sm.ApplyTextInputStyles(&nameInput)
-	columns := []table.Column{
-		{Title: "Name", Width: 20},
-		{Title: "Set", Width: 12},
-		{Title: "Rarity", Width: 10},
-		{Title: "#", Width: 6},
-		{Title: "Qty", Width: 5},
-	}
-	cardTable := NewStyledTable(columns, 10, true, sm)
-	deckContentsColumns := []table.Column{
-		{Title: "Name", Width: 20},
-		{Title: "Set", Width: 12},
-		{Title: "Rarity", Width: 10},
-		{Title: "#", Width: 6},
-		{Title: "Qty", Width: 5},
-	}
-	deckContentsTable := NewStyledTable(deckContentsColumns, 5, false, sm)
+	searchInput := newSearchInput(sm, "Search cards...")
+	nameInput := newFormInput(sm, "Deck name...", 30, 0)
+	cardTable := NewStyledTable(defaultSearchTableColumns(), 10, true, sm)
+	deckContentsTable := NewStyledTable(defaultSearchTableColumns(), 5, false, sm)
 	return DeckBuilderModel{
 		selectedGame:      game,
 		user:              user,
@@ -188,46 +168,10 @@ func (m DeckBuilderModel) Update(msg tea.Msg) (DeckBuilderModel, tea.Cmd) {
 			return m.handleFormKeys(msg)
 		}
 		if isBackKey(action, s) {
-			if m.focus == DeckFocusCardPanel {
-				if m.cardSubFocus == cardSubFocusDeck {
-					m.cardSubFocus = cardSubFocusSearch
-					m.cardTable.Focus()
-					m.deckContentsTable.Blur()
-					m.searchInput.Focus()
-				} else {
-					m.focus = DeckFocusDeckPanel
-					m.cardTable.Blur()
-					m.deckContentsTable.Blur()
-					m.searchInput.Blur()
-				}
-				return m, nil
-			}
-			m.shouldGoBack = true
-			return m, nil
+			return m.handleDeckBack()
 		}
 		if s == "tab" {
-			if m.focus == DeckFocusDeckPanel {
-				m.focus = DeckFocusCardPanel
-				m.cardSubFocus = cardSubFocusSearch
-				m.cardTable.Focus()
-				m.deckContentsTable.Blur()
-				m.searchInput.Focus()
-			} else {
-				// cycle sub-focus within the right panel; on second tab go back to deck panel
-				if m.cardSubFocus == cardSubFocusSearch {
-					m.cardSubFocus = cardSubFocusDeck
-					m.cardTable.Blur()
-					m.deckContentsTable.Focus()
-					m.searchInput.Blur()
-				} else {
-					m.focus = DeckFocusDeckPanel
-					m.cardSubFocus = cardSubFocusSearch
-					m.cardTable.Blur()
-					m.deckContentsTable.Blur()
-					m.searchInput.Blur()
-				}
-			}
-			return m, nil
+			return m.cycleDeckFocus(), nil
 		}
 		if m.focus == DeckFocusDeckPanel {
 			return m.handleDeckPanelKeys(msg)
@@ -235,6 +179,54 @@ func (m DeckBuilderModel) Update(msg tea.Msg) (DeckBuilderModel, tea.Cmd) {
 		return m.handleCardPanelKeys(msg)
 	}
 	return m, nil
+}
+
+func (m DeckBuilderModel) focusDeckSearch() DeckBuilderModel {
+	m.focus = DeckFocusCardPanel
+	m.cardSubFocus = cardSubFocusSearch
+	m.cardTable.Focus()
+	m.deckContentsTable.Blur()
+	m.searchInput.Focus()
+	return m
+}
+
+func (m DeckBuilderModel) focusDeckContents() DeckBuilderModel {
+	m.cardSubFocus = cardSubFocusDeck
+	m.cardTable.Blur()
+	m.deckContentsTable.Focus()
+	m.searchInput.Blur()
+	return m
+}
+
+func (m DeckBuilderModel) returnToDeckPanel() DeckBuilderModel {
+	m.focus = DeckFocusDeckPanel
+	m.cardSubFocus = cardSubFocusSearch
+	m.cardTable.Blur()
+	m.deckContentsTable.Blur()
+	m.searchInput.Blur()
+	return m
+}
+
+func (m DeckBuilderModel) handleDeckBack() (DeckBuilderModel, tea.Cmd) {
+	if m.focus == DeckFocusCardPanel {
+		if m.cardSubFocus == cardSubFocusDeck {
+			return m.focusDeckSearch(), nil
+		}
+		return m.returnToDeckPanel(), nil
+	}
+	m.shouldGoBack = true
+	return m, nil
+}
+
+// cycleDeckFocus advances focus deck panel → search → deck contents → deck panel.
+func (m DeckBuilderModel) cycleDeckFocus() DeckBuilderModel {
+	if m.focus == DeckFocusDeckPanel {
+		return m.focusDeckSearch()
+	}
+	if m.cardSubFocus == cardSubFocusSearch {
+		return m.focusDeckContents()
+	}
+	return m.returnToDeckPanel()
 }
 
 func (m DeckBuilderModel) handleDeckPanelKeys(msg tea.KeyMsg) (DeckBuilderModel, tea.Cmd) {
@@ -294,42 +286,54 @@ func (m DeckBuilderModel) handleDeckPanelKeys(msg tea.KeyMsg) (DeckBuilderModel,
 	return m, nil
 }
 
+func (m DeckBuilderModel) moveDeckCardCursor(msg tea.KeyMsg, down bool) DeckBuilderModel {
+	if m.cardSubFocus == cardSubFocusDeck {
+		if !down || m.deckContentsTable.Cursor() < len(m.deckContentsTable.Rows())-1 {
+			m.deckContentsTable, _ = m.deckContentsTable.Update(msg)
+		}
+		return m
+	}
+	if !down || m.cardTable.Cursor() < len(m.cardTable.Rows())-1 {
+		m.cardTable, _ = m.cardTable.Update(msg)
+	}
+	return m
+}
+
+func (m DeckBuilderModel) changeDeckCardPage(next bool) DeckBuilderModel {
+	if next {
+		m.cardPagination.NextPage()
+	} else {
+		m.cardPagination.PrevPage()
+	}
+	m.updateCardTable()
+	m.cardTable.SetCursor(0)
+	return m
+}
+
+func (m DeckBuilderModel) forwardKeyToDeckSearch(msg tea.KeyMsg) (DeckBuilderModel, tea.Cmd) {
+	var cmd tea.Cmd
+	m.searchInput, cmd = m.searchInput.Update(msg)
+	m.filterCards()
+	m.cardPagination.Reset()
+	m.updateCardTable()
+	m.cardTable.SetCursor(0)
+	return m, cmd
+}
+
 func (m DeckBuilderModel) handleCardPanelKeys(msg tea.KeyMsg) (DeckBuilderModel, tea.Cmd) {
 	s := msg.String()
 	action := MatchActionOrDefault(m.configManager, s, "")
-	// Arrow navigation — always safe
 	if action == "nav_up" || s == "up" {
-		if m.cardSubFocus == cardSubFocusDeck {
-			m.deckContentsTable, _ = m.deckContentsTable.Update(msg)
-		} else {
-			m.cardTable, _ = m.cardTable.Update(msg)
-		}
-		return m, nil
+		return m.moveDeckCardCursor(msg, false), nil
 	}
 	if action == "nav_down" || s == "down" {
-		if m.cardSubFocus == cardSubFocusDeck {
-			if m.deckContentsTable.Cursor() < len(m.deckContentsTable.Rows())-1 {
-				m.deckContentsTable, _ = m.deckContentsTable.Update(msg)
-			}
-		} else {
-			if m.cardTable.Cursor() < len(m.cardTable.Rows())-1 {
-				m.cardTable, _ = m.cardTable.Update(msg)
-			}
-		}
-		return m, nil
+		return m.moveDeckCardCursor(msg, true), nil
 	}
-	// Modifier-key shortcuts — safe regardless of search focus
 	if action == "page_next" {
-		m.cardPagination.NextPage()
-		m.updateCardTable()
-		m.cardTable.SetCursor(0)
-		return m, nil
+		return m.changeDeckCardPage(true), nil
 	}
 	if action == "page_prev" {
-		m.cardPagination.PrevPage()
-		m.updateCardTable()
-		m.cardTable.SetCursor(0)
-		return m, nil
+		return m.changeDeckCardPage(false), nil
 	}
 	if action == "increment_quantity" {
 		return m.handleIncrement()
@@ -348,15 +352,8 @@ func (m DeckBuilderModel) handleCardPanelKeys(msg tea.KeyMsg) (DeckBuilderModel,
 		m.importState = NewImportState(m.cardService, m.styleManager)
 		return m, nil
 	}
-	// Forward non-modifier printable keys to the search textinput when it is focused
 	if m.cardSubFocus == cardSubFocusSearch && !isModifierKey(s) {
-		var cmd tea.Cmd
-		m.searchInput, cmd = m.searchInput.Update(msg)
-		m.filterCards()
-		m.cardPagination.Reset()
-		m.updateCardTable()
-		m.cardTable.SetCursor(0)
-		return m, cmd
+		return m.forwardKeyToDeckSearch(msg)
 	}
 	return m, nil
 }
@@ -446,15 +443,7 @@ func (m *DeckBuilderModel) updateCardTable() {
 }
 
 func (m *DeckBuilderModel) updateDeckContentsTable(vcs VisibleColumnSet) {
-	var rows []table.Row
-	for _, card := range m.cards {
-		qty := m.quantities.total(card.ID)
-		if qty <= 0 {
-			continue
-		}
-		rows = append(rows, vcs.BuildRow(CardToDataMap(card, 0, qty)))
-	}
-	m.deckContentsTable.SetRows(rows)
+	m.deckContentsTable.SetRows(buildPendingQuantityRows(m.cards, &m.quantities, vcs))
 }
 
 func (m *DeckBuilderModel) updateValidation() {
@@ -466,15 +455,7 @@ func (m *DeckBuilderModel) updateValidation() {
 }
 
 func (m DeckBuilderModel) getSelectedCard() (model.Card, bool) {
-	idx := m.cardTable.Cursor()
-	if idx < 0 {
-		return model.Card{}, false
-	}
-	actualIndex := m.cardPagination.CurrentPage*m.cardPagination.PageSize + idx
-	if actualIndex >= len(m.filteredCards) {
-		return model.Card{}, false
-	}
-	return m.filteredCards[actualIndex], true
+	return cardAtTableCursor(m.cardTable.Cursor(), m.cardPagination, m.filteredCards)
 }
 
 func (m DeckBuilderModel) handleIncrement() (DeckBuilderModel, tea.Cmd) {
@@ -630,29 +611,55 @@ func (m DeckBuilderModel) renderBody(availableHeight int) string {
 	return lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, rightPanel)
 }
 
+func (m DeckBuilderModel) renderDeckFormatPicker() string {
+	var b strings.Builder
+	for i, f := range deckFormatOptions {
+		if i != m.formatIndex {
+			b.WriteString(m.styleManager.GetBlurredStyle().Render(" " + f + " "))
+		} else if m.formFocus == 1 {
+			b.WriteString(m.styleManager.GetFocusedStyle().Render("< " + f + " >"))
+		} else {
+			b.WriteString(m.styleManager.GetTitleStyle().Render("[" + f + "]"))
+		}
+	}
+	return b.String()
+}
+
+func (m DeckBuilderModel) renderDeckForm() string {
+	label := "New Deck"
+	if m.mode == DeckModeEdit {
+		label = "Edit Deck"
+	}
+	var b strings.Builder
+	b.WriteString(m.styleManager.GetFocusedStyle().Render(label) + "\n")
+	b.WriteString(RenderConditionalLabel(m.formFocus == 0, "Name: ") + m.nameInput.View() + "\n")
+	b.WriteString(RenderConditionalLabel(m.formFocus == 1, "Format: ") + m.renderDeckFormatPicker() + "\n")
+	return b.String()
+}
+
+func (m DeckBuilderModel) renderDeckValidation() string {
+	if m.selectedDeck == nil {
+		return ""
+	}
+	totalCards := m.quantities.totalCards()
+	var b strings.Builder
+	b.WriteString("\n")
+	b.WriteString(m.styleManager.GetNoStyle().Render(fmt.Sprintf("Cards: %d/60", totalCards)) + "\n")
+	if len(m.validationErrors) == 0 && totalCards == 60 {
+		b.WriteString(m.styleManager.GetSuccessStyle().Render(SuccessIcon+" Valid deck") + "\n")
+		return b.String()
+	}
+	for _, ve := range m.validationErrors {
+		b.WriteString(m.styleManager.GetErrorStyle().Render(FailureIcon+" "+ve.Message) + "\n")
+	}
+	return b.String()
+}
+
 func (m DeckBuilderModel) renderDeckPanel(width, height int) string {
 	var b strings.Builder
-	b.WriteString(m.styleManager.GetTitleStyle().Render("My Decks") + "\n")
+	b.WriteString(renderPanelHeading(m.styleManager, "My Decks", m.focus == DeckFocusDeckPanel))
 	if m.mode == DeckModeCreate || m.mode == DeckModeEdit {
-		label := "New Deck"
-		if m.mode == DeckModeEdit {
-			label = "Edit Deck"
-		}
-		b.WriteString(m.styleManager.GetFocusedStyle().Render(label) + "\n")
-		b.WriteString("Name: " + m.nameInput.View() + "\n")
-		b.WriteString("Format: ")
-		for i, f := range deckFormatOptions {
-			if i == m.formatIndex {
-				if m.formFocus == 1 {
-					b.WriteString(m.styleManager.GetFocusedStyle().Render("< " + f + " >"))
-				} else {
-					b.WriteString(m.styleManager.GetTitleStyle().Render("[" + f + "]"))
-				}
-			} else {
-				b.WriteString(m.styleManager.GetBlurredStyle().Render(" " + f + " "))
-			}
-		}
-		b.WriteString("\n")
+		b.WriteString(m.renderDeckForm())
 		return RenderPanel(m.styleManager, b.String(), width, height, m.focus == DeckFocusDeckPanel, 1, 0)
 	}
 	if len(m.decks) == 0 {
@@ -663,62 +670,50 @@ func (m DeckBuilderModel) renderDeckPanel(width, height int) string {
 		line := fmt.Sprintf("%s (%s)", d.Name, d.Format)
 		b.WriteString(RenderListItem(line, m.deckCursor == i && m.focus == DeckFocusDeckPanel))
 	}
-	if m.selectedDeck != nil {
-		b.WriteString("\n")
-		totalCards := m.quantities.totalCards()
-		b.WriteString(m.styleManager.GetNoStyle().Render(fmt.Sprintf("Cards: %d/60", totalCards)) + "\n")
-		if len(m.validationErrors) == 0 && totalCards == 60 {
-			b.WriteString(m.styleManager.applyBGFG(lipgloss.NewStyle().Foreground(lipgloss.Color("34"))).Render(SuccessIcon+" Valid deck") + "\n")
-		} else {
-			for _, ve := range m.validationErrors {
-				b.WriteString(m.styleManager.GetErrorStyle().Render(FailureIcon+" "+ve.Message) + "\n")
-			}
-		}
-	}
+	b.WriteString(m.renderDeckValidation())
 	return RenderPanel(m.styleManager, b.String(), width, height, m.focus == DeckFocusDeckPanel, 1, 0)
 }
 
+func (m DeckBuilderModel) renderDeckSearchSection(vcs VisibleColumnSet, topHeight int) string {
+	var top strings.Builder
+	top.WriteString(renderPanelHeading(m.styleManager, "Add Cards: "+m.selectedDeck.Name, m.cardSubFocus == cardSubFocusSearch))
+	top.WriteString(renderSearchLine(m.styleManager, m.searchInput.View(), m.cardPagination.StatusText()))
+	if len(m.cardTable.Rows()) == 0 {
+		top.WriteString(m.styleManager.GetBlurredStyle().Render("No cards match your search.") + "\n")
+		return top.String()
+	}
+	m.cardTable.SetColumns(vcs.Columns)
+	m.cardTable.SetHeight(CalcTableHeight(topHeight, 2, 3))
+	top.WriteString(m.cardTable.View())
+	return top.String()
+}
+
+func (m DeckBuilderModel) renderDeckContentsSection(vcs VisibleColumnSet, bottomHeight int) string {
+	var bottom strings.Builder
+	bottom.WriteString(renderPanelHeading(m.styleManager, "Deck Contents", m.cardSubFocus == cardSubFocusDeck))
+	if len(m.deckContentsTable.Rows()) == 0 {
+		bottom.WriteString(m.styleManager.GetBlurredStyle().Render("No cards in deck yet.") + "\n")
+		return bottom.String()
+	}
+	m.deckContentsTable.SetColumns(vcs.Columns)
+	m.deckContentsTable.SetHeight(CalcTableHeight(bottomHeight, 1, 3))
+	bottom.WriteString(m.deckContentsTable.View())
+	return bottom.String()
+}
+
 func (m DeckBuilderModel) renderCardPanel(width, height int) string {
-	tableWidth := max(width-4, 20)
 	if m.selectedDeck == nil {
 		return m.styleManager.GetBlurredStyle().Render("Select a deck to add cards.") + "\n"
 	}
+	tableWidth := max(width-4, 20)
 	topHeight := max(height*6/10, 5)
 	bottomHeight := max(height-topHeight, 5)
-	searchFocused := m.cardSubFocus == cardSubFocusSearch
-	titleStyle := m.styleManager.GetTitleStyle()
-	var top strings.Builder
-	if searchFocused {
-		top.WriteString(titleStyle.Render("Add Cards: "+m.selectedDeck.Name) + "\n")
-	} else {
-		top.WriteString(m.styleManager.GetBlurredStyle().Render("Add Cards: "+m.selectedDeck.Name) + "\n")
-	}
-	top.WriteString(m.styleManager.GetBlurredStyle().Render("Search: ") + m.searchInput.View() + " " + m.styleManager.GetBlurredStyle().Render(m.cardPagination.StatusText()) + "\n")
 	vcs := m.deckVCS(tableWidth)
-	if len(m.cardTable.Rows()) == 0 {
-		top.WriteString(m.styleManager.GetBlurredStyle().Render("No cards match your search.") + "\n")
-	} else {
-		searchTableHeight := CalcTableHeight(topHeight, 2, 3)
-		m.cardTable.SetColumns(vcs.Columns)
-		m.cardTable.SetHeight(searchTableHeight)
-		top.WriteString(m.cardTable.View())
-	}
+	top := m.renderDeckSearchSection(vcs, topHeight)
+	bottom := m.renderDeckContentsSection(vcs, bottomHeight)
+	searchFocused := m.cardSubFocus == cardSubFocusSearch
 	deckFocused := m.cardSubFocus == cardSubFocusDeck
-	var bottom strings.Builder
-	if deckFocused {
-		bottom.WriteString(titleStyle.Render("Deck Contents") + "\n")
-	} else {
-		bottom.WriteString(m.styleManager.GetBlurredStyle().Render("Deck Contents") + "\n")
-	}
-	if len(m.deckContentsTable.Rows()) == 0 {
-		bottom.WriteString(m.styleManager.GetBlurredStyle().Render("No cards in deck yet.") + "\n")
-	} else {
-		deckTableHeight := CalcTableHeight(bottomHeight, 1, 3)
-		m.deckContentsTable.SetColumns(vcs.Columns)
-		m.deckContentsTable.SetHeight(deckTableHeight)
-		bottom.WriteString(m.deckContentsTable.View())
-	}
-	return renderSplitCardPanel(m.styleManager, top.String(), searchFocused, bottom.String(), deckFocused, width, topHeight, bottomHeight)
+	return renderSplitCardPanel(m.styleManager, top, searchFocused, bottom, deckFocused, width, topHeight, bottomHeight)
 }
 
 func (m DeckBuilderModel) renderFooter() string {
@@ -731,9 +726,9 @@ func (m DeckBuilderModel) renderFooter() string {
 	hb := NewHelpBuilder(m.configManager)
 	var footer string
 	if m.mode != DeckModeNormal {
-		footer = m.styleManager.GetHelpStyle().Render("Tab: Switch field | Enter: Confirm | Esc: Cancel")
+		footer = m.styleManager.GetHelpStyle().Render(joinHelp("Tab: Switch field", "Enter: Confirm", "Esc: Cancel"))
 	} else if m.focus == DeckFocusCardPanel {
-		footer = m.styleManager.GetHelpStyle().Render(strings.Join([]string{
+		footer = m.styleManager.GetHelpStyle().Render(joinHelp(
 			"Tab: Switch panel",
 			hb.Build(
 				KeyItem{"increment_quantity", "+", "Add"},
@@ -743,13 +738,13 @@ func (m DeckBuilderModel) renderFooter() string {
 			hb.Build(KeyItem{"export", "x", "Export"}, KeyItem{"import", "i", "Import"}),
 			hb.Pair("page_next", "Ctrl+N", "page_prev", "Ctrl+P", "Page"),
 			hb.Build(KeyItem{"back", "Q", "Back"}),
-		}, " | "))
+		))
 	} else {
-		footer = m.styleManager.GetHelpStyle().Render(strings.Join([]string{
+		footer = m.styleManager.GetHelpStyle().Render(joinHelp(
 			"Tab: Switch panel",
 			hb.Build(KeyItem{"create_new", "n", "New"}, KeyItem{"edit", "e", "Edit"}, KeyItem{"delete", "d", "Delete"}),
 			hb.Build(KeyItem{"back", "Q", "Back"}),
-		}, " | "))
+		))
 	}
 	if m.exportState.statusMsg != "" {
 		footer = m.styleManager.GetHelpStyle().Render(m.exportState.statusMsg) + "  " + footer

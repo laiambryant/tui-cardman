@@ -5,10 +5,10 @@ import (
 	"errors"
 	"fmt"
 
-	optcgapi "github.com/laiambryant/optcgapi-go-sdk"
-	optcgclient "github.com/laiambryant/optcgapi-go-sdk/client"
-	"github.com/laiambryant/optcgapi-go-sdk/models"
-	"github.com/laiambryant/optcgapi-go-sdk/query"
+	optcgapi "github.com/laiambryant/optcgapi-sdk-go"
+	optcgclient "github.com/laiambryant/optcgapi-sdk-go/client"
+	"github.com/laiambryant/optcgapi-sdk-go/models"
+	"github.com/laiambryant/optcgapi-sdk-go/query"
 )
 
 type Client struct {

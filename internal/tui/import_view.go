@@ -27,9 +27,9 @@ const (
 type importFocus int
 
 const (
-	importFocusSets    importFocus = iota
-	importFocusActions importFocus = iota
-	importFocusQueue   importFocus = iota
+	importFocusSets importFocus = iota
+	importFocusActions
+	importFocusQueue
 )
 
 type ActionItem struct {
@@ -73,16 +73,11 @@ type ImportModel struct {
 }
 
 func NewImportModel(importer gameimporter.GameImporter, selectedGame *model.CardGame, cfg *runtimecfg.Manager, styleManager *StyleManager, cardGames []model.CardGame) (ImportModel, error) {
-	searchInput := textinput.New()
-	searchInput.Placeholder = "Search sets..."
-	searchInput.Width = 30
-	styleManager.ApplyTextInputStyles(&searchInput)
+	searchInput := newSearchInput(styleManager, "Search sets...")
 	searchInput.Focus()
-
 	s := spinner.New()
 	s.Spinner = ImportSpinner
 	s.Style = focusedStyle
-
 	return ImportModel{
 		selectedCardGame: selectedGame,
 		searchInput:      searchInput,
@@ -330,18 +325,21 @@ func (m ImportModel) handleSetListNavigation(msg tea.KeyMsg) (ImportModel, tea.C
 		m.statusMsg = "Cleared completed items from queue"
 		return m, nil
 	}
-	// Forward non-modifier printable keys to search textinput
 	if !isModifierKey(s) {
-		var cmd tea.Cmd
-		m.searchInput, cmd = m.searchInput.Update(msg)
-		if m.searchInput.Value() != "" {
-			m = m.filterSets()
-		} else {
-			m.filteredSets = m.availableSets
-		}
-		return m, cmd
+		return m.forwardKeyToSetSearch(msg)
 	}
 	return m, nil
+}
+
+// forwardKeyToSetSearch sends a printable key to the set search input and refreshes the filtered list.
+func (m ImportModel) forwardKeyToSetSearch(msg tea.KeyMsg) (ImportModel, tea.Cmd) {
+	var cmd tea.Cmd
+	m.searchInput, cmd = m.searchInput.Update(msg)
+	if m.searchInput.Value() != "" {
+		return m.filterSets(), cmd
+	}
+	m.filteredSets = m.availableSets
+	return m, cmd
 }
 
 func (m ImportModel) startQueueProcessing() (ImportModel, tea.Cmd) {

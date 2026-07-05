@@ -48,52 +48,20 @@ func renderStyledLine(style lipgloss.Style, format string, args ...interface{}) 
 	return style.Render(fmt.Sprintf(format, args...)) + "\n"
 }
 
+// splitImportPanelWidths divides the content width between the sets list and the
+// actions column, reserving border and padding overhead for each panel plus spacing.
 func splitImportPanelWidths(contentWidth int) (int, int) {
-	// Each panel has: border (2 chars) + padding (4 chars) = 6 overhead
-	// We need spacing between panels: 1 char
-	const panelOverhead = 6 // border + padding per panel
-	const spacing = 1
-
+	const panelBorderAndPadding = 6
+	const panelSpacing = 1
 	if contentWidth < 20 {
 		return max(contentWidth/2, 10), max(contentWidth/2, 10)
 	}
-
-	// Total overhead: 2 panels worth of overhead + spacing
-	totalOverhead := (panelOverhead * 2) + spacing
-	available := contentWidth - totalOverhead
-
+	available := contentWidth - panelBorderAndPadding*2 - panelSpacing
 	if available < 10 {
 		return 15, 15
 	}
-
 	left := available * 3 / 5
-	right := available - left
-
-	return left, right
-}
-
-func (m ImportModel) renderImportPanel(width, height int, isFocused bool) string {
-	var b strings.Builder
-
-	b.WriteString(m.styleManager.GetTitleStyle().Render("Import") + "\n")
-
-	if m.isLoading {
-		b.WriteString(m.styleManager.GetFocusedStyle().Render(m.loadingMsg))
-	} else if len(m.filteredSets) == 0 {
-		b.WriteString(m.styleManager.GetBlurredStyle().Render("No sets loaded") + "\n")
-	} else {
-		// Single-column layout: sets list then actions
-		itemsPerPage := 8
-		b.WriteString(m.renderSetsListContent(itemsPerPage))
-		b.WriteString("\n")
-		b.WriteString(m.styleManager.GetTitleStyle().Render("Actions") + "\n")
-		b.WriteString(m.renderActionsList())
-	}
-
-	if m.statusMsg != "" {
-		b.WriteString("\n" + m.styleManager.GetFocusedStyle().Render(m.statusMsg))
-	}
-	return RenderPanel(m.styleManager, b.String(), width, height, isFocused, 2, 1)
+	return left, available - left
 }
 
 func (m ImportModel) renderImportView() string {
@@ -173,12 +141,11 @@ func (m ImportModel) renderSearchInput() string {
 
 func (m ImportModel) renderSetsListPanel(width int) string {
 	var b strings.Builder
-	b.WriteString(m.styleManager.GetTitleStyle().Render("Sets") + "\n")
+	b.WriteString(renderPanelHeading(m.styleManager, "Sets", m.focus == importFocusSets))
 	if len(m.filteredSets) == 0 {
 		b.WriteString(m.renderEmptySetsList())
 	} else {
-		itemsPerPage := 15 // Reasonable default
-		b.WriteString(m.renderSetsListContent(itemsPerPage))
+		b.WriteString(m.renderSetsListContent(15))
 	}
 	return RenderPanel(m.styleManager, b.String(), width, 0, m.focus == importFocusSets, 2, 1)
 }
@@ -226,11 +193,7 @@ func (m ImportModel) renderSetListItem(index int) string {
 func (m ImportModel) renderActionsPanel(width int) string {
 	var b strings.Builder
 	isFocused := m.focus == importFocusActions
-	if isFocused {
-		b.WriteString(m.styleManager.GetTitleStyle().Render("Actions") + "\n")
-	} else {
-		b.WriteString(m.styleManager.GetBlurredStyle().Render("Actions") + "\n")
-	}
+	b.WriteString(renderPanelHeading(m.styleManager, "Actions", isFocused))
 	if len(m.filteredSets) > 0 && m.cursor < len(m.filteredSets) {
 		b.WriteString(m.renderSelectedSetInfo())
 	}
@@ -241,11 +204,7 @@ func (m ImportModel) renderActionsPanel(width int) string {
 func (m ImportModel) renderQueuePanel(width int) string {
 	var b strings.Builder
 	isFocused := m.focus == importFocusQueue
-	if isFocused {
-		b.WriteString(m.styleManager.GetTitleStyle().Render("Queue") + "\n")
-	} else {
-		b.WriteString(m.styleManager.GetBlurredStyle().Render("Queue") + "\n")
-	}
+	b.WriteString(renderPanelHeading(m.styleManager, "Queue", isFocused))
 	if len(m.importQueue) == 0 {
 		b.WriteString(m.styleManager.GetBlurredStyle().Render("No items queued") + "\n")
 	} else {
@@ -254,28 +213,42 @@ func (m ImportModel) renderQueuePanel(width int) string {
 	return RenderPanel(m.styleManager, b.String(), width, 0, isFocused, 2, 1)
 }
 
+func (m ImportModel) styledQueueIcon(status string) string {
+	switch status {
+	case queueStatusCompleted:
+		return m.styleManager.GetSuccessStyle().Render(SuccessIcon)
+	case queueStatusImporting:
+		return m.styleManager.GetFocusedStyle().Render(ImportIcon)
+	case queueStatusError:
+		return m.styleManager.GetErrorStyle().Render(FailureIcon)
+	default:
+		return m.styleManager.GetBlurredStyle().Render(PendingIcon)
+	}
+}
+
+func (m ImportModel) renderQueueItem(index int, item importQueueItem) string {
+	nameStyle := m.styleManager.GetBlurredStyle()
+	isCursor := index == m.queueCursor && m.focus == importFocusQueue
+	if item.status == queueStatusImporting || isCursor {
+		nameStyle = m.styleManager.GetTitleStyle()
+	}
+	line := "  " + m.styledQueueIcon(item.status) + " " + nameStyle.Render(item.setName)
+	if item.status == queueStatusError && item.err != nil {
+		line += " " + m.styleManager.GetErrorStyle().Render("(failed)")
+	}
+	return line + "\n"
+}
+
 func (m ImportModel) renderQueueList() string {
 	var b strings.Builder
 	maxItems := 8
-	shown := 0
 	for i, item := range m.importQueue {
-		if shown >= maxItems {
-			remaining := len(m.importQueue) - shown
-			b.WriteString(m.styleManager.GetBlurredStyle().Render(fmt.Sprintf("  ... and %d more", remaining)) + "\n")
+		if i >= maxItems {
+			remaining := len(m.importQueue) - i
+			b.WriteString(m.styleManager.GetBlurredStyle().Render(fmt.Sprintf("  %s and %d more", Ellipsis, remaining)) + "\n")
 			break
 		}
-		icon := queueItemIcon(item.status)
-		line := fmt.Sprintf("  %s %s", icon, item.setName)
-		if item.status == queueStatusError && item.err != nil {
-			line += " " + m.styleManager.GetErrorStyle().Render("(failed)")
-		}
-		isCursor := i == m.queueCursor && m.focus == importFocusQueue
-		if item.status == queueStatusImporting || isCursor {
-			b.WriteString(m.styleManager.GetTitleStyle().Render(line) + "\n")
-		} else {
-			b.WriteString(m.styleManager.GetBlurredStyle().Render(line) + "\n")
-		}
-		shown++
+		b.WriteString(m.renderQueueItem(i, item))
 	}
 	return b.String()
 }
@@ -328,28 +301,13 @@ func (m ImportModel) renderDisabledAction(action ActionItem) string {
 }
 
 func (m ImportModel) renderStatusBar(contentWidth int) string {
-	totalSets := len(m.availableSets)
-	importedSets := len(m.databaseSetIDs)
-	filteredCount := len(m.filteredSets)
-
-	leftSection := fmt.Sprintf("Total: %d  Imported: %d", totalSets, importedSets)
-	rightSection := fmt.Sprintf("Showing: %d", filteredCount)
-
-	// Calculate widths for left and right sections
-	leftWidth := contentWidth * 2 / 3
-	rightWidth := contentWidth - leftWidth
-
-	if leftWidth < 0 {
-		leftWidth = 0
-	}
-	if rightWidth < 0 {
-		rightWidth = 0
-	}
-
+	leftSection := fmt.Sprintf("Total: %d  Imported: %d", len(m.availableSets), len(m.databaseSetIDs))
+	rightSection := fmt.Sprintf("Showing: %d", len(m.filteredSets))
+	leftWidth := max(contentWidth*2/3, 0)
+	rightWidth := max(contentWidth-leftWidth, 0)
 	blurred := m.styleManager.GetBlurredStyle()
 	leftStyle := blurred.Width(leftWidth).Align(lipgloss.Left)
 	rightStyle := blurred.Width(rightWidth).Align(lipgloss.Right)
-
 	return lipgloss.JoinHorizontal(
 		lipgloss.Top,
 		leftStyle.Render(leftSection),
@@ -359,11 +317,11 @@ func (m ImportModel) renderStatusBar(contentWidth int) string {
 
 func (m ImportModel) renderHelp() string {
 	hb := NewHelpBuilder(m.configManager)
-	common := strings.Join([]string{
+	common := joinHelp(
 		"Tab: Switch Panel",
 		hb.Pair("nav_up", "↑", "nav_down", "↓", "Navigate"),
 		hb.Build(KeyItem{"back", "Q", "Back"}),
-	}, " | ")
+	)
 	var contextual string
 	switch m.focus {
 	case importFocusSets:
@@ -435,7 +393,6 @@ func (m ImportModel) renderProgressBar() string {
 	total := m.importProgress.totalSets
 	percentage := calculateProgressPercentage(completed, total)
 	bar := createProgressBar(completed, total, 40)
-	// Render progress bar with styled background
 	progressLine := m.styleManager.GetNoStyle().Render(fmt.Sprintf("[%s] %d%%", bar, percentage))
 	b.WriteString(progressLine + "\n\n")
 	b.WriteString(renderStyledLine(m.styleManager.GetBlurredStyle(), "Sets: %d / %d completed", completed, total))

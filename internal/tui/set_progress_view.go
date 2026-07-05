@@ -9,30 +9,52 @@ import (
 	"github.com/laiambryant/tui-cardman/internal/model"
 )
 
-var rarityColors = map[string]lipgloss.Color{
-	"Common":            lipgloss.Color("252"),
-	"Uncommon":          lipgloss.Color("34"),
-	"Rare":              lipgloss.Color("33"),
-	"Rare Holo":         lipgloss.Color("33"),
-	"Rare Holo EX":      lipgloss.Color("33"),
-	"Rare Holo GX":      lipgloss.Color("33"),
-	"Rare Holo V":       lipgloss.Color("33"),
-	"Rare VMAX":         lipgloss.Color("220"),
-	"Rare VSTAR":        lipgloss.Color("220"),
-	"Rare Ultra":        lipgloss.Color("220"),
-	"Rare Secret":       lipgloss.Color("220"),
-	"Rare Rainbow":      lipgloss.Color("213"),
-	"Rare Shiny":        lipgloss.Color("220"),
-	"Amazing Rare":      lipgloss.Color("213"),
-	"LEGEND":            lipgloss.Color("220"),
-	"Promo":             lipgloss.Color("252"),
-	"Illustration Rare": lipgloss.Color("213"),
-	"Special Art Rare":  lipgloss.Color("213"),
-	"Hyper Rare":        lipgloss.Color("220"),
-	"Double Rare":       lipgloss.Color("220"),
-	"Ultra Rare":        lipgloss.Color("220"),
-	"Shiny Rare":        lipgloss.Color("220"),
-	"ACE SPEC Rare":     lipgloss.Color("220"),
+var (
+	rarityCommonColor  = lipgloss.AdaptiveColor{Light: "#5C5F77", Dark: "#BAC2DE"}
+	rarityGreenColor   = lipgloss.AdaptiveColor{Light: "#40A02B", Dark: "#A6E3A1"}
+	rarityBlueColor    = lipgloss.AdaptiveColor{Light: "#1E66F5", Dark: "#89B4FA"}
+	rarityGoldColor    = lipgloss.AdaptiveColor{Light: "#DF8E1D", Dark: "#F9E2AF"}
+	raritySpecialColor = lipgloss.AdaptiveColor{Light: "#EA76CB", Dark: "#F5C2E7"}
+)
+
+var rarityColors = map[string]lipgloss.TerminalColor{
+	"Common":            rarityCommonColor,
+	"Uncommon":          rarityGreenColor,
+	"Rare":              rarityBlueColor,
+	"Rare Holo":         rarityBlueColor,
+	"Rare Holo EX":      rarityBlueColor,
+	"Rare Holo GX":      rarityBlueColor,
+	"Rare Holo V":       rarityBlueColor,
+	"Rare VMAX":         rarityGoldColor,
+	"Rare VSTAR":        rarityGoldColor,
+	"Rare Ultra":        rarityGoldColor,
+	"Rare Secret":       rarityGoldColor,
+	"Rare Rainbow":      raritySpecialColor,
+	"Rare Shiny":        rarityGoldColor,
+	"Amazing Rare":      raritySpecialColor,
+	"LEGEND":            rarityGoldColor,
+	"Promo":             rarityCommonColor,
+	"Illustration Rare": raritySpecialColor,
+	"Special Art Rare":  raritySpecialColor,
+	"Hyper Rare":        rarityGoldColor,
+	"Double Rare":       rarityGoldColor,
+	"Ultra Rare":        rarityGoldColor,
+	"Shiny Rare":        rarityGoldColor,
+	"ACE SPEC Rare":     rarityGoldColor,
+}
+
+func rarityColor(rarity string) lipgloss.TerminalColor {
+	if color, ok := rarityColors[rarity]; ok {
+		return color
+	}
+	return rarityCommonColor
+}
+
+func renderProgressCell(card model.Card, owned bool, sm *StyleManager) string {
+	if owned {
+		return sm.applyBGFG(lipgloss.NewStyle().Foreground(rarityColor(card.Rarity))).Render("█ ")
+	}
+	return sm.applyBGFG(lipgloss.NewStyle().Foreground(sm.scheme.Disabled)).Render("░ ")
 }
 
 func renderSetProgressGrid(cards []model.Card, ownedCardIDs map[int64]bool, width, height int, sm *StyleManager) string {
@@ -43,25 +65,11 @@ func renderSetProgressGrid(cards []model.Card, ownedCardIDs map[int64]bool, widt
 		return cards[i].Number < cards[j].Number
 	})
 	cellWidth := 2
-	cols := (width - 4) / cellWidth
-	if cols < 1 {
-		cols = 1
-	}
+	cols := max((width-4)/cellWidth, 1)
 	var b strings.Builder
 	col := 0
 	for _, card := range cards {
-		owned := ownedCardIDs[card.ID]
-		color, ok := rarityColors[card.Rarity]
-		if !ok {
-			color = lipgloss.Color("252")
-		}
-		style := sm.applyBGFG(lipgloss.NewStyle().Foreground(color))
-		if owned {
-			b.WriteString(style.Render("█ "))
-		} else {
-			dimStyle := sm.applyBGFG(lipgloss.NewStyle().Foreground(lipgloss.Color("239")))
-			b.WriteString(dimStyle.Render("░ "))
-		}
+		b.WriteString(renderProgressCell(card, ownedCardIDs[card.ID], sm))
 		col++
 		if col >= cols {
 			b.WriteString("\n")

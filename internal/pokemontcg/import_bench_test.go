@@ -8,7 +8,7 @@ import (
 	"os"
 	"testing"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 
 	card "github.com/laiambryant/tui-cardman/internal/services/cards"
 	"github.com/laiambryant/tui-cardman/internal/services/importruns"
@@ -18,7 +18,7 @@ import (
 
 // setupBenchmarkDB creates an in-memory SQLite database with required schema
 func setupBenchmarkDB(b *testing.B) *sql.DB {
-	db, err := sql.Open("sqlite3", ":memory:")
+	db, err := sql.Open("sqlite", ":memory:")
 	if err != nil {
 		b.Fatalf("failed to open database: %v", err)
 	}

@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	tcgdexModels "github.com/laiambryant/tcgdex/models"
+	tcgdexModels "github.com/laiambryant/tcgdex-sdk-go/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/time/rate"

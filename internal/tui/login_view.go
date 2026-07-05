@@ -71,12 +71,21 @@ func (m Model) loginView() string {
 	return renderFramedView(header, body, footer, m.width, m.height, m.styleManager)
 }
 
+func (m Model) renderLabeledInputs(labels []string) string {
+	var b strings.Builder
+	for i, label := range labels {
+		b.WriteString(RenderConditionalLabel(m.focusIndex == i, label) + "\n")
+		b.WriteString(m.inputs[i].View())
+		if i < len(labels)-1 {
+			b.WriteString("\n")
+		}
+	}
+	return b.String()
+}
+
 func (m Model) renderLoginBody() string {
 	var b strings.Builder
-	b.WriteString(RenderConditionalLabel(true, "Email:") + "\n")
-	b.WriteString(m.inputs[0].View() + "\n")
-	b.WriteString(RenderConditionalLabel(false, "Password:") + "\n")
-	b.WriteString(m.inputs[1].View())
+	b.WriteString(m.renderLabeledInputs([]string{"Email:", "Password:"}))
 	if m.errorMsg != "" {
 		b.WriteString("\n" + errorStyle.Render("Error: "+m.errorMsg))
 	}

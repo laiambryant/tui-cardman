@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	ygoprodeck "github.com/laiambryant/sdkygopro"
-	sdkmodels "github.com/laiambryant/sdkygopro/models"
-	"github.com/laiambryant/sdkygopro/query"
+	ygoprodeck "github.com/laiambryant/ygoprodeck-sdk-go"
+	sdkmodels "github.com/laiambryant/ygoprodeck-sdk-go/models"
+	"github.com/laiambryant/ygoprodeck-sdk-go/query"
 )
 
 const pageSize = 100

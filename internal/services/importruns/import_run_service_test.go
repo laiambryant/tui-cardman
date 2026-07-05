@@ -11,7 +11,7 @@ import (
 
 	"github.com/laiambryant/tui-cardman/internal/testutil"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 )
 
 // setupTestDB creates an in-memory SQLite database for testing

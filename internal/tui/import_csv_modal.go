@@ -69,18 +69,22 @@ func (s *ImportState) HandleKey(key string) tea.Cmd {
 	if !s.active {
 		return nil
 	}
-
 	switch s.phase {
 	case importPhaseInput:
 		return s.handleInputPhaseKey(key)
 	case importPhaseWorking:
-		// only allow quit during loading
-		if key == "esc" || key == "ctrl+c" {
-			s.active = false
-			return func() tea.Msg { return importCancelMsg{} }
-		}
+		return s.handleWorkingPhaseQuitKey(key)
 	case importPhaseResult:
 		return s.handleResultPhaseKey(key)
+	}
+	return nil
+}
+
+// handleWorkingPhaseQuitKey only allows canceling while the async import is loading.
+func (s *ImportState) handleWorkingPhaseQuitKey(key string) tea.Cmd {
+	if key == "esc" || key == "ctrl+c" {
+		s.active = false
+		return func() tea.Msg { return importCancelMsg{} }
 	}
 	return nil
 }
@@ -174,46 +178,53 @@ func (s ImportState) Render(sm *StyleManager) string {
 	if !s.active {
 		return ""
 	}
-
-	var b strings.Builder
-
 	switch s.phase {
 	case importPhaseInput:
-		b.WriteString(sm.GetTitleStyle().Render("Import CSV") + "\n")
-		b.WriteString(sm.GetBlurredStyle().Render("File path: ") + s.pathInput.View() + "\n")
-		b.WriteString(sm.GetBlurredStyle().Render("Enter: Load • Esc: Cancel"))
-
+		return s.renderInputPhase(sm)
 	case importPhaseWorking:
-		b.WriteString(sm.GetBlurredStyle().Render(ImportIcon + " Reading CSV and matching cards..."))
-
+		return sm.GetBlurredStyle().Render(ImportIcon + " Reading CSV and matching cards...")
 	case importPhaseResult:
-		if s.errMsg != "" {
-			b.WriteString(sm.GetErrorStyle().Render(s.errMsg) + "\n")
-			b.WriteString(sm.GetBlurredStyle().Render("Esc: Close"))
-		} else {
-			b.WriteString(sm.GetTitleStyle().Render("Import Summary") + "\n")
-			b.WriteString(sm.GetNoStyle().Render(s.result.Summary()) + "\n")
-			if len(s.result.SkippedRows) > 0 {
-				b.WriteString(sm.GetBlurredStyle().Render("Skipped:") + "\n")
-				limit := len(s.result.SkippedRows)
-				if limit > 5 {
-					limit = 5
-				}
-				for _, row := range s.result.SkippedRows[:limit] {
-					b.WriteString(sm.GetBlurredStyle().Render("  • "+row.Name+" ("+row.SetCode+" "+row.Number+")") + "\n")
-				}
-				if len(s.result.SkippedRows) > 5 {
-					remaining := len(s.result.SkippedRows) - 5
-					b.WriteString(sm.GetBlurredStyle().Render("  ... and "+strconv.Itoa(remaining)+" more") + "\n")
-				}
-			}
-			if s.result.Imported > 0 {
-				b.WriteString(sm.GetBlurredStyle().Render("Enter/Y: Apply • Esc/N: Cancel"))
-			} else {
-				b.WriteString(sm.GetBlurredStyle().Render("No matching cards found. Esc: Close"))
-			}
-		}
+		return s.renderResultPhase(sm)
 	}
+	return ""
+}
 
+func (s ImportState) renderInputPhase(sm *StyleManager) string {
+	var b strings.Builder
+	b.WriteString(sm.GetTitleStyle().Render("Import CSV") + "\n")
+	b.WriteString(sm.GetBlurredStyle().Render("File path: ") + s.pathInput.View() + "\n")
+	b.WriteString(sm.GetBlurredStyle().Render(joinHelp("Enter: Load", "Esc: Cancel")))
+	return b.String()
+}
+
+func (s ImportState) renderSkippedRows(sm *StyleManager) string {
+	if len(s.result.SkippedRows) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString(sm.GetBlurredStyle().Render("Skipped:") + "\n")
+	limit := min(len(s.result.SkippedRows), 5)
+	for _, row := range s.result.SkippedRows[:limit] {
+		b.WriteString(sm.GetBlurredStyle().Render("  • "+row.Name+" ("+row.SetCode+" "+row.Number+")") + "\n")
+	}
+	if remaining := len(s.result.SkippedRows) - limit; remaining > 0 {
+		b.WriteString(sm.GetBlurredStyle().Render("  "+Ellipsis+" and "+strconv.Itoa(remaining)+" more") + "\n")
+	}
+	return b.String()
+}
+
+func (s ImportState) renderResultPhase(sm *StyleManager) string {
+	if s.errMsg != "" {
+		return sm.GetErrorStyle().Render(s.errMsg) + "\n" + sm.GetBlurredStyle().Render("Esc: Close")
+	}
+	var b strings.Builder
+	b.WriteString(sm.GetTitleStyle().Render("Import Summary") + "\n")
+	b.WriteString(sm.GetNoStyle().Render(s.result.Summary()) + "\n")
+	b.WriteString(s.renderSkippedRows(sm))
+	if s.result.Imported > 0 {
+		b.WriteString(sm.GetBlurredStyle().Render(joinHelp("Enter/Y: Apply", "Esc/N: Cancel")))
+	} else {
+		b.WriteString(sm.GetBlurredStyle().Render("No matching cards found. Esc: Close"))
+	}
 	return b.String()
 }

@@ -6,8 +6,8 @@ import (
 	"log/slog"
 	"os"
 
-	_ "github.com/mattn/go-sqlite3"
 	"github.com/spf13/cobra"
+	_ "modernc.org/sqlite"
 
 	"github.com/laiambryant/tui-cardman/internal/config"
 	dbpkg "github.com/laiambryant/tui-cardman/internal/db"
@@ -32,7 +32,7 @@ var migrateCmd = &cobra.Command{
 		defer log.Close()
 		slog.SetDefault(slog.New(slog.NewTextHandler(log, &slog.HandlerOptions{Level: config.GetLogLevel()})))
 		if migrateDSN == "" {
-			migrateDSN = "file:cardman.db?_fk=1"
+			migrateDSN = "file:cardman.db?_pragma=foreign_keys(1)"
 		}
 		sqlDB, err := sql.Open(migrateDriver, migrateDSN)
 		if err != nil {
@@ -49,7 +49,7 @@ var migrateCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(migrateCmd)
-	migrateCmd.Flags().StringVar(&migrateDriver, "driver", "sqlite3", "SQL driver name")
-	migrateCmd.Flags().StringVar(&migrateDSN, "dsn", "file:cardman.db?_fk=1", "Database DSN")
+	migrateCmd.Flags().StringVar(&migrateDriver, "driver", "sqlite", "SQL driver name")
+	migrateCmd.Flags().StringVar(&migrateDSN, "dsn", "file:cardman.db?_pragma=foreign_keys(1)", "Database DSN")
 	migrateCmd.Flags().StringVar(&migrateDir, "dir", "internal/db/migrations", "Migrations directory")
 }

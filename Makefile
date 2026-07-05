@@ -17,13 +17,13 @@ else
 	NULLDEV=/dev/null
 endif
 
-export CGO_ENABLED=1
+export CGO_ENABLED=0
 
 help:
 	@echo "tui-cardman - Terminal UI Card Manager"
 	@echo ""
 	@echo "Available targets:"
-	@echo "  make build          - Build the application (CGO_ENABLED=1)"
+	@echo "  make build          - Build the application (pure Go, no C toolchain needed)"
 	@echo "  make build-fast     - Fast build without optimizations"
 	@echo "  make clean          - Remove build artifacts"
 	@echo "  make clean-all      - Remove build artifacts, database, and logs"

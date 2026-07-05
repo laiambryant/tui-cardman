@@ -1,11 +1,5 @@
 # Build stage
-FROM golang:1.24-bookworm AS builder
-
-# Install gcc for CGO (required by mattn/go-sqlite3)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
-    libc6-dev \
-    && rm -rf /var/lib/apt/lists/*
+FROM golang:1.25-bookworm AS builder
 
 WORKDIR /build
 
@@ -13,18 +7,18 @@ WORKDIR /build
 COPY go.mod go.sum ./
 RUN go mod download
 
-# Copy source and build
+# Copy source and build (pure Go: modernc.org/sqlite needs no CGO)
 COPY . .
-RUN CGO_ENABLED=1 GOOS=linux go build \
+RUN CGO_ENABLED=0 GOOS=linux go build \
+    -trimpath \
     -ldflags="-s -w" \
     -o cardman ./cmd/main.go
 
 # Runtime stage
 FROM debian:bookworm-slim
 
-# Install SQLite runtime library and CA certs
+# CA certs for HTTPS calls to the card APIs
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libsqlite3-0 \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 

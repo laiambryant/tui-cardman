@@ -33,14 +33,7 @@ func (m Model) renderLocalUserSetupBody() string {
 	if m.errorMsg != "" {
 		b.WriteString(errorStyle.Render("Error: "+m.errorMsg) + "\n")
 	}
-	fields := []string{"First Name:", "Last Name:", "Email:"}
-	for i := range m.inputs {
-		b.WriteString(fields[i] + "\n")
-		b.WriteString(m.inputs[i].View())
-		if i < len(m.inputs)-1 {
-			b.WriteString("\n")
-		}
-	}
+	b.WriteString(m.renderLabeledInputs([]string{"First Name:", "Last Name:", "Email:"}))
 	b.WriteString("\n" + RenderButton(m.focusIndex == len(m.inputs), "[ Create Profile ]"))
 	return b.String()
 }
@@ -51,9 +44,13 @@ func (m Model) renderLocalUserSetupFooter() string {
 
 func (m Model) buildLocalSetupHelpText() string {
 	hb := NewHelpBuilder(m.configManager)
-	return hb.Build(KeyItem{"settings", "F1", "Settings"}) + " • " + hb.Pair("nav_up", "↑", "nav_down", "↓", "Navigate") + " • " + hb.Build(
-		KeyItem{"select", "Enter", "Submit"},
-		KeyItem{"quit", "Ctrl+C", "Quit"},
+	return joinHelp(
+		hb.Build(KeyItem{"settings", "F1", "Settings"}),
+		hb.Pair("nav_up", "↑", "nav_down", "↓", "Navigate"),
+		hb.Build(
+			KeyItem{"select", "Enter", "Submit"},
+			KeyItem{"quit", "Ctrl+C", "Quit"},
+		),
 	)
 }
 

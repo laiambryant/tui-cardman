@@ -29,4 +29,4 @@ You will receive a response within 7 days. If the vulnerability is confirmed, a 
 - **SSH server mode**: when running `serve-ssh`, ensure the host key file has restricted permissions (`chmod 600 host_key`) and the port is firewalled appropriately
 - **API keys**: never commit `.env` files containing `API_KEY` or other secrets; use `.env.example` as a template only
 - **SQLite database**: the database file contains user data including password hashes (bcrypt); ensure the file is not world-readable
-- **Dependencies**: this project uses CGO for SQLite (`mattn/go-sqlite3`); keep the C toolchain and system libraries up to date
+- **Dependencies**: SQLite is provided by the pure-Go `modernc.org/sqlite` driver; keep dependencies up to date with `go get -u` and review `go.sum` changes

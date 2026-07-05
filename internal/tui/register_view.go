@@ -66,14 +66,7 @@ func (m Model) registerView() string {
 
 func (m Model) renderRegisterBody() string {
 	var b strings.Builder
-	b.WriteString(RenderConditionalLabel(true, "First Name:") + "\n")
-	b.WriteString(m.inputs[0].View() + "\n")
-	b.WriteString(RenderConditionalLabel(false, "Last Name:") + "\n")
-	b.WriteString(m.inputs[1].View() + "\n")
-	b.WriteString(RenderConditionalLabel(false, "Email:") + "\n")
-	b.WriteString(m.inputs[2].View() + "\n")
-	b.WriteString(RenderConditionalLabel(false, "Password (8+ chars, 1 uppercase, 1 special):") + "\n")
-	b.WriteString(m.inputs[3].View())
+	b.WriteString(m.renderLabeledInputs([]string{"First Name:", "Last Name:", "Email:", "Password (8+ chars, 1 uppercase, 1 special):"}))
 	if m.errorMsg != "" {
 		b.WriteString("\n" + errorStyle.Render("Error: "+m.errorMsg))
 	}

@@ -335,11 +335,10 @@ func (m SettingsModel) buildHelpText() string {
 	if m.activeTab == 1 {
 		parts = append(parts, "Shift+↑/↓: Reorder")
 	}
-	help := strings.Join(parts, " • ")
 	if m.hasChanges {
-		help += " • Ctrl+S: Save"
+		parts = append(parts, "Ctrl+S: Save")
 	}
-	return help
+	return joinHelp(parts...)
 }
 
 func (m *SettingsModel) moveColumnUp() {

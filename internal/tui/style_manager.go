@@ -18,35 +18,44 @@ var (
 )
 
 type colorScheme struct {
-	Focused                 lipgloss.Color
-	Blurred                 lipgloss.Color
-	Error                   lipgloss.Color
-	Title                   lipgloss.Color
+	Focused                 lipgloss.TerminalColor
+	Blurred                 lipgloss.TerminalColor
+	Subtle                  lipgloss.TerminalColor
+	Error                   lipgloss.TerminalColor
+	Success                 lipgloss.TerminalColor
+	Warning                 lipgloss.TerminalColor
+	Title                   lipgloss.TerminalColor
+	Disabled                lipgloss.TerminalColor
 	Background              lipgloss.Color
 	Foreground              lipgloss.Color
 	TableSelectedForeground lipgloss.Color
 	TableSelectedBackground lipgloss.Color
-	Disabled                lipgloss.Color
 }
 
-const (
-	colorMagenta     lipgloss.Color = "#DF57BC"
-	colorBananaCream lipgloss.Color = "#E3E3E3"
-	colorRed         lipgloss.Color = "9"
-	colorPurple      lipgloss.Color = "170"
-	colorMintCream   lipgloss.Color = "#F0F7EE"
+var (
+	colorAccent      = lipgloss.AdaptiveColor{Light: "#EA76CB", Dark: "#F5C2E7"}
+	colorPrimary     = lipgloss.AdaptiveColor{Light: "#8839EF", Dark: "#CBA6F7"}
+	colorMutedText   = lipgloss.AdaptiveColor{Light: "#8C8FA1", Dark: "#9399B2"}
+	colorSubtleEdge  = lipgloss.AdaptiveColor{Light: "#BCC0CC", Dark: "#585B70"}
+	colorSuccess     = lipgloss.AdaptiveColor{Light: "#40A02B", Dark: "#A6E3A1"}
+	colorWarning     = lipgloss.AdaptiveColor{Light: "#DF8E1D", Dark: "#F9E2AF"}
+	colorDanger      = lipgloss.AdaptiveColor{Light: "#D20F39", Dark: "#F38BA8"}
+	colorUnavailable = lipgloss.AdaptiveColor{Light: "#CCD0DA", Dark: "#45475A"}
 )
 
 var defaultScheme = colorScheme{
-	Focused:                 colorMagenta,
-	Blurred:                 colorBananaCream,
-	Error:                   colorRed,
-	Title:                   colorPurple,
+	Focused:                 colorAccent,
+	Blurred:                 colorMutedText,
+	Subtle:                  colorSubtleEdge,
+	Error:                   colorDanger,
+	Success:                 colorSuccess,
+	Warning:                 colorWarning,
+	Title:                   colorPrimary,
+	Disabled:                colorUnavailable,
 	Background:              lipgloss.Color(""),
 	Foreground:              lipgloss.Color(""),
 	TableSelectedForeground: lipgloss.Color(""),
 	TableSelectedBackground: lipgloss.Color(""),
-	Disabled:                colorMintCream,
 }
 
 func init() {
@@ -66,6 +75,8 @@ type StyleManager struct {
 	blurredStyle lipgloss.Style
 	titleStyle   lipgloss.Style
 	errorStyle   lipgloss.Style
+	successStyle lipgloss.Style
+	warningStyle lipgloss.Style
 	helpStyle    lipgloss.Style
 	noStyle      lipgloss.Style
 }
@@ -82,11 +93,13 @@ func (sm *StyleManager) initializeStyles() {
 	sm.blurredStyle = sm.createForegroundStyle(sm.scheme.Blurred)
 	sm.titleStyle = sm.createForegroundStyle(sm.scheme.Title).Bold(true)
 	sm.errorStyle = sm.createForegroundStyle(sm.scheme.Error)
+	sm.successStyle = sm.createForegroundStyle(sm.scheme.Success)
+	sm.warningStyle = sm.createForegroundStyle(sm.scheme.Warning)
 	sm.helpStyle = sm.blurredStyle
 	sm.noStyle = sm.applyBGFG(lipgloss.NewStyle().Inline(true))
 }
 
-func (sm *StyleManager) createForegroundStyle(color lipgloss.Color) lipgloss.Style {
+func (sm *StyleManager) createForegroundStyle(color lipgloss.TerminalColor) lipgloss.Style {
 	return sm.applyBGFG(lipgloss.NewStyle().Foreground(color).Inline(true))
 }
 
@@ -110,6 +123,16 @@ func (sm *StyleManager) GetErrorStyle() lipgloss.Style {
 	return sm.errorStyle
 }
 
+// GetSuccessStyle returns the style for success messages and positive values
+func (sm *StyleManager) GetSuccessStyle() lipgloss.Style {
+	return sm.successStyle
+}
+
+// GetWarningStyle returns the style for warnings and cautionary values
+func (sm *StyleManager) GetWarningStyle() lipgloss.Style {
+	return sm.warningStyle
+}
+
 // GetHelpStyle returns the style for help text
 func (sm *StyleManager) GetHelpStyle() lipgloss.Style {
 	return sm.helpStyle
@@ -127,7 +150,7 @@ func (sm *StyleManager) GetDisabledStyle() lipgloss.Style {
 
 // GetBoxStyle returns a styled box with optional focus
 func (sm *StyleManager) GetBoxStyle(focused bool) lipgloss.Style {
-	color := sm.scheme.Blurred
+	color := sm.scheme.Subtle
 	if focused {
 		color = sm.scheme.Focused
 	}
@@ -138,7 +161,7 @@ func (sm *StyleManager) GetBoxStyle(focused bool) lipgloss.Style {
 	return sm.applyBGFG(style)
 }
 
-func (sm *StyleManager) createRoundedBorderStyle(color lipgloss.Color, pad bool) lipgloss.Style {
+func (sm *StyleManager) createRoundedBorderStyle(color lipgloss.TerminalColor, pad bool) lipgloss.Style {
 	s := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(color)
 	if pad {
 		s = s.Padding(1, 2)
@@ -154,7 +177,7 @@ func (sm *StyleManager) GetModalStyle() lipgloss.Style {
 // GetTableStyles returns styled table configuration
 func (sm *StyleManager) GetTableStyles() table.Styles {
 	s := table.DefaultStyles()
-	s.Header = s.Header.BorderStyle(lipgloss.NormalBorder()).BorderForeground(sm.scheme.Blurred).BorderBottom(true).Bold(true).Align(lipgloss.Center)
+	s.Header = s.Header.BorderStyle(lipgloss.NormalBorder()).BorderForeground(sm.scheme.Subtle).BorderBottom(true).Bold(true).Align(lipgloss.Center)
 	if sm.scheme.Background != "" {
 		s.Header = s.Header.Background(sm.scheme.Background).BorderBackground(sm.scheme.Background)
 	}
@@ -185,7 +208,7 @@ func (sm *StyleManager) GetSettingsSelectedStyle() lipgloss.Style {
 	return style
 }
 
-func (sm *StyleManager) resolveColor(preferred, fallback1, fallback2 lipgloss.Color) lipgloss.Color {
+func (sm *StyleManager) resolveColor(preferred, fallback1 lipgloss.Color, fallback2 lipgloss.TerminalColor) lipgloss.TerminalColor {
 	if preferred != "" {
 		return preferred
 	}
@@ -195,23 +218,28 @@ func (sm *StyleManager) resolveColor(preferred, fallback1, fallback2 lipgloss.Co
 	return fallback2
 }
 
-func (sm *StyleManager) getTableSelectionColors() (lipgloss.Color, lipgloss.Color) {
-	return sm.resolveColor(sm.scheme.TableSelectedForeground, sm.scheme.Foreground, sm.scheme.Focused), sm.resolveColor(sm.scheme.TableSelectedBackground, sm.scheme.Focused, sm.scheme.Title)
+func (sm *StyleManager) getTableSelectionColors() (lipgloss.TerminalColor, lipgloss.TerminalColor) {
+	fg := sm.resolveColor(sm.scheme.TableSelectedForeground, sm.scheme.Foreground, sm.scheme.Focused)
+	bg := lipgloss.TerminalColor(sm.scheme.Focused)
+	if sm.scheme.TableSelectedBackground != "" {
+		bg = sm.scheme.TableSelectedBackground
+	}
+	return fg, bg
 }
 
 // GetTableBaseStyle returns the style for the table container
 func (sm *StyleManager) GetTableBaseStyle() lipgloss.Style {
-	return sm.applyBGFG(lipgloss.NewStyle().BorderStyle(lipgloss.NormalBorder()).BorderForeground(sm.scheme.Blurred))
+	return sm.applyBGFG(lipgloss.NewStyle().BorderStyle(lipgloss.NormalBorder()).BorderForeground(sm.scheme.Subtle))
 }
 
 // GetPanelStyle returns a styled panel
 func (sm *StyleManager) GetPanelStyle() lipgloss.Style {
-	return sm.Box(sm.scheme.Blurred, 0, 0, 0, 2, 1)
+	return sm.Box(sm.scheme.Subtle, 0, 0, 0, 2, 1)
 }
 
 // GetTabStyle returns a styled tab
 func (sm *StyleManager) GetTabStyle(active bool) lipgloss.Style {
-	color := sm.scheme.Blurred
+	color := sm.scheme.Subtle
 	border := sm.createInactiveBorder()
 	if active {
 		color = sm.scheme.Focused
@@ -243,16 +271,10 @@ func (sm *StyleManager) ApplyFullBackground(content string, width, height int) s
 
 // ApplyTextInputStyles configures a textinput with theme-aware colors
 func (sm *StyleManager) ApplyTextInputStyles(ti *textinput.Model) {
-	ts := sm.applyBGFG(lipgloss.NewStyle())
-	ti.TextStyle = ts
-	if sm.scheme.Focused != "" {
-		ti.Cursor.Style = sm.applyBGFG(lipgloss.NewStyle().Foreground(sm.scheme.Focused))
-	}
-	ph := sm.applyBGFG(lipgloss.NewStyle().Foreground(sm.scheme.Blurred))
-	ti.PlaceholderStyle = ph
-	if sm.scheme.Focused != "" {
-		ti.PromptStyle = sm.applyBGFG(lipgloss.NewStyle().Foreground(sm.scheme.Focused))
-	}
+	ti.TextStyle = sm.applyBGFG(lipgloss.NewStyle())
+	ti.Cursor.Style = sm.applyBGFG(lipgloss.NewStyle().Foreground(sm.scheme.Focused))
+	ti.PlaceholderStyle = sm.applyBGFG(lipgloss.NewStyle().Foreground(sm.scheme.Blurred))
+	ti.PromptStyle = sm.applyBGFG(lipgloss.NewStyle().Foreground(sm.scheme.Focused))
 }
 
 func (sm *StyleManager) applyBGFG(s lipgloss.Style) lipgloss.Style {
@@ -266,7 +288,7 @@ func (sm *StyleManager) applyBGFG(s lipgloss.Style) lipgloss.Style {
 	return s
 }
 
-func (sm *StyleManager) Box(borderColor lipgloss.Color, width, height, maxWidth, padX, padY int) lipgloss.Style {
+func (sm *StyleManager) Box(borderColor lipgloss.TerminalColor, width, height, maxWidth, padX, padY int) lipgloss.Style {
 	s := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(borderColor).Padding(padY, padX)
 	if width > 0 {
 		s = s.Width(width)

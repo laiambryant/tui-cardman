@@ -12,6 +12,12 @@ import (
 	"github.com/laiambryant/tui-cardman/internal/runtimecfg"
 )
 
+const helpSeparator = " • "
+
+func joinHelp(parts ...string) string {
+	return strings.Join(parts, helpSeparator)
+}
+
 // HelpBuilder constructs dynamic help text from config manager
 type HelpBuilder struct {
 	cfg *runtimecfg.Manager
@@ -55,7 +61,7 @@ func (h *HelpBuilder) Build(items ...KeyItem) string {
 	for _, item := range items {
 		parts = append(parts, h.formatKeyItem(item))
 	}
-	return strings.Join(parts, " | ")
+	return joinHelp(parts...)
 }
 
 // isModifierKey returns true for non-printable / modifier key combos that should
@@ -304,7 +310,7 @@ func RenderProgressBar(percent float64, width int, sm *StyleManager) string {
 }
 
 func RenderPanel(sm *StyleManager, content string, width, height int, focused bool, padX, padY int) string {
-	borderColor := sm.scheme.Blurred
+	borderColor := sm.scheme.Subtle
 	if focused {
 		borderColor = sm.scheme.Focused
 	}
@@ -312,6 +318,17 @@ func RenderPanel(sm *StyleManager, content string, width, height int, focused bo
 	innerWidth := max(width-borderOverhead-padX*2, 1)
 	innerHeight := max(height-borderOverhead-padY*2, 1)
 	return sm.Box(borderColor, innerWidth, innerHeight, 0, padX, padY).Render(content)
+}
+
+func renderPanelHeading(sm *StyleManager, label string, focused bool) string {
+	if focused {
+		return sm.GetTitleStyle().Render("▍ "+label) + "\n"
+	}
+	return sm.GetBlurredStyle().Render("▏ "+label) + "\n"
+}
+
+func renderSearchLine(sm *StyleManager, inputView, status string) string {
+	return sm.GetBlurredStyle().Render("Search: ") + sm.GetNoStyle().Render(inputView) + " " + sm.GetBlurredStyle().Render(status) + "\n"
 }
 
 func RenderTabBar(sm *StyleManager, tabs []string, activeIndex int) string {
@@ -350,11 +367,13 @@ func RenderButton(isFocused bool, label string) string {
 	return blurredStyle.Render(label)
 }
 
+func buttonContentWidth(maxWidth, labelWidth int) int {
+	borderAndPaddingOverhead := 4
+	return max(maxWidth-borderAndPaddingOverhead, labelWidth)
+}
+
 func RenderButtonItem(sm *StyleManager, label string, isSelected bool, maxWidth int) string {
-	labelWidth := lipgloss.Width(label)
-	// Width() sets content area; border(1+1) + padding(1+1) = 4 overhead on top.
-	// So content width = maxWidth - 4, but never narrower than the label itself.
-	btnWidth := max(maxWidth-4, labelWidth)
+	btnWidth := buttonContentWidth(maxWidth, lipgloss.Width(label))
 	if isSelected {
 		return sm.applyBGFG(lipgloss.NewStyle().
 			Width(btnWidth).
@@ -369,7 +388,7 @@ func RenderButtonItem(sm *StyleManager, label string, isSelected bool, maxWidth 
 		Width(btnWidth).
 		Align(lipgloss.Center).
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(sm.scheme.Blurred).
+		BorderForeground(sm.scheme.Subtle).
 		Padding(0, 1)).Render(label) + "\n"
 }
 
@@ -451,10 +470,47 @@ func buildCardExportRows(cards []model.Card, dbQtys, tempDeltas map[int64]int) [
 	return rows
 }
 
+// searchSource returns the full card list when no query is active, otherwise the filtered one.
+func searchSource(query string, filtered, all []model.Card) []model.Card {
+	if query == "" {
+		return all
+	}
+	return filtered
+}
+
+// cardAtTableCursor resolves the card under the table cursor, accounting for pagination.
+func cardAtTableCursor(tableCursor int, p Pagination, source []model.Card) (model.Card, bool) {
+	if tableCursor < 0 {
+		return model.Card{}, false
+	}
+	actualIndex := p.CurrentPage*p.PageSize + tableCursor
+	if actualIndex >= len(source) {
+		return model.Card{}, false
+	}
+	return source[actualIndex], true
+}
+
+// buildPendingQuantityRows builds table rows for every card with a positive tracked quantity.
+func buildPendingQuantityRows(cards []model.Card, qt *QuantityTracker, vcs VisibleColumnSet) []table.Row {
+	var rows []table.Row
+	for _, card := range cards {
+		qty := qt.total(card.ID)
+		if qty <= 0 {
+			continue
+		}
+		rows = append(rows, vcs.BuildRow(CardToDataMap(card, 0, qty)))
+	}
+	return rows
+}
+
 func (m Model) buildAuthViewHelpText() string {
 	hb := NewHelpBuilder(m.configManager)
-	return hb.Build(KeyItem{"settings", "F1", "Settings"}) + " • " + hb.Pair("nav_prev_tab", "Shift+Tab", "nav_next_tab", "Tab", "Navigate") + " • " + hb.Build(
-		KeyItem{"select", "Enter", "Submit"},
-		KeyItem{"quit", "Ctrl+C", "Quit"},
+	return joinHelp(
+		hb.Build(KeyItem{"settings", "F1", "Settings"}),
+		hb.Pair("nav_prev_tab", "Shift+Tab", "nav_next_tab", "Tab", "Navigate"),
+		hb.Build(
+			KeyItem{"select", "Enter", "Submit"},
+			KeyItem{"quit", "Ctrl+C", "Quit"},
+		),
 	)
 }

@@ -95,37 +95,21 @@ type ListsModel struct {
 	cardPagination    Pagination
 }
 
+func newFormInput(sm *StyleManager, placeholder string, width, charLimit int) textinput.Model {
+	input := textinput.New()
+	input.Placeholder = placeholder
+	input.Width = width
+	input.CharLimit = charLimit
+	sm.ApplyTextInputStyles(&input)
+	return input
+}
+
 func NewListsModel(game *model.CardGame, user *auth.User, listSvc listservice.ListService, cardSvc cardservice.CardService, cards []model.Card, cfg *runtimecfg.Manager, sm *StyleManager) ListsModel {
-	searchInput := textinput.New()
-	searchInput.Placeholder = "Search cards..."
-	searchInput.Width = 30
-	sm.ApplyTextInputStyles(&searchInput)
-	nameInput := textinput.New()
-	nameInput.Placeholder = "List name..."
-	nameInput.Width = 25
-	nameInput.CharLimit = 50
-	sm.ApplyTextInputStyles(&nameInput)
-	descInput := textinput.New()
-	descInput.Placeholder = "Description..."
-	descInput.Width = 25
-	descInput.CharLimit = 100
-	sm.ApplyTextInputStyles(&descInput)
-	columns := []table.Column{
-		{Title: "Name", Width: 25},
-		{Title: "Expansion", Width: 15},
-		{Title: "Rarity", Width: 12},
-		{Title: "Card #", Width: 8},
-		{Title: "Quantity", Width: 8},
-	}
-	cardTable := NewStyledTable(columns, 10, true, sm)
-	listContentsColumns := []table.Column{
-		{Title: "Name", Width: 25},
-		{Title: "Expansion", Width: 15},
-		{Title: "Rarity", Width: 12},
-		{Title: "Card #", Width: 8},
-		{Title: "Quantity", Width: 8},
-	}
-	listContentsTable := NewStyledTable(listContentsColumns, 5, false, sm)
+	searchInput := newSearchInput(sm, "Search cards...")
+	nameInput := newFormInput(sm, "List name...", 25, 50)
+	descInput := newFormInput(sm, "Description...", 25, 100)
+	cardTable := NewStyledTable(defaultSearchTableColumns(), 10, true, sm)
+	listContentsTable := NewStyledTable(defaultSearchTableColumns(), 5, false, sm)
 	return ListsModel{
 		selectedGame:      game,
 		user:              user,
@@ -281,79 +265,105 @@ func (m ListsModel) handleListPanelKeys(s, action string) (ListsModel, tea.Cmd) 
 	return m, nil
 }
 
+func (m ListsModel) returnToListPanel() ListsModel {
+	m.focus = ListsFocusListPanel
+	m.cardSubFocus = listCardSubFocusSearch
+	m.searchInput.Blur()
+	m.cardTable.Blur()
+	m.listContentsTable.Blur()
+	return m
+}
+
+func (m ListsModel) focusListContents() ListsModel {
+	m.cardSubFocus = listCardSubFocusContents
+	m.cardTable.Blur()
+	m.searchInput.Blur()
+	m.listContentsTable.Focus()
+	return m
+}
+
+func (m ListsModel) focusListSearch() ListsModel {
+	m.cardSubFocus = listCardSubFocusSearch
+	m.listContentsTable.Blur()
+	m.cardTable.Focus()
+	m.searchInput.Focus()
+	return m
+}
+
+func (m ListsModel) cycleCardPanelFocus() ListsModel {
+	if m.cardSubFocus == listCardSubFocusSearch {
+		return m.focusListContents()
+	}
+	return m.returnToListPanel()
+}
+
+// backKeyClosesCardPanel is true only when search is not focused, so Esc closes instead of clearing the search.
+func (m ListsModel) backKeyClosesCardPanel(action, s string) bool {
+	return isBackKey(action, s) && m.cardSubFocus != listCardSubFocusSearch
+}
+
+func (m ListsModel) handleCardPanelBack() ListsModel {
+	if m.cardSubFocus == listCardSubFocusContents {
+		return m.focusListSearch()
+	}
+	return m.returnToListPanel()
+}
+
+func (m ListsModel) moveCardPanelCursor(msg tea.KeyMsg, down bool) ListsModel {
+	if m.cardSubFocus == listCardSubFocusContents {
+		if !down || m.listContentsTable.Cursor() < len(m.listContentsTable.Rows())-1 {
+			m.listContentsTable, _ = m.listContentsTable.Update(msg)
+		}
+		return m
+	}
+	if !down || m.cardTable.Cursor() < len(m.cardTable.Rows())-1 {
+		m.cardTable, _ = m.cardTable.Update(msg)
+	}
+	return m
+}
+
+func (m ListsModel) changeCardPage(next bool) ListsModel {
+	if next {
+		m.cardPagination.NextPage()
+	} else {
+		m.cardPagination.PrevPage()
+	}
+	m.updateListCardTable()
+	m.cardTable.SetCursor(0)
+	return m
+}
+
+func (m ListsModel) forwardKeyToListSearch(msg tea.KeyMsg) (ListsModel, tea.Cmd) {
+	var cmd tea.Cmd
+	m.searchInput, cmd = m.searchInput.Update(msg)
+	m.filteredCards = m.filterListCards(m.searchInput.Value())
+	m.cardPagination.Reset()
+	m.updateListCardTable()
+	m.cardTable.SetCursor(0)
+	return m, cmd
+}
+
 func (m ListsModel) handleCardPanelKeys(msg tea.KeyMsg, s, action string) (ListsModel, tea.Cmd) {
 	if s == "tab" {
-		if m.cardSubFocus == listCardSubFocusSearch {
-			m.cardSubFocus = listCardSubFocusContents
-			m.cardTable.Blur()
-			m.searchInput.Blur()
-			m.listContentsTable.Focus()
-		} else {
-			m.focus = ListsFocusListPanel
-			m.cardSubFocus = listCardSubFocusSearch
-			m.cardTable.Blur()
-			m.searchInput.Blur()
-			m.listContentsTable.Blur()
-		}
-		return m, nil
+		return m.cycleCardPanelFocus(), nil
 	}
 	if action == "nav_left" || s == "left" || s == "shift+tab" {
-		m.focus = ListsFocusListPanel
-		m.cardSubFocus = listCardSubFocusSearch
-		m.searchInput.Blur()
-		m.cardTable.Blur()
-		m.listContentsTable.Blur()
-		return m, nil
+		return m.returnToListPanel(), nil
 	}
-	// Back key: only handle when search is NOT focused (so Esc closes, not clears search)
-	if isBackKey(action, s) && m.cardSubFocus != listCardSubFocusSearch {
-		if m.cardSubFocus == listCardSubFocusContents {
-			m.cardSubFocus = listCardSubFocusSearch
-			m.listContentsTable.Blur()
-			m.cardTable.Focus()
-			m.searchInput.Focus()
-			return m, nil
-		}
-		m.focus = ListsFocusListPanel
-		m.cardSubFocus = listCardSubFocusSearch
-		m.searchInput.Blur()
-		m.cardTable.Blur()
-		m.listContentsTable.Blur()
-		return m, nil
+	if m.backKeyClosesCardPanel(action, s) {
+		return m.handleCardPanelBack(), nil
 	}
-	// Arrow navigation — always safe, never consumed by textinput
 	if action == "nav_up" || s == "up" {
-		if m.cardSubFocus == listCardSubFocusContents {
-			m.listContentsTable, _ = m.listContentsTable.Update(msg)
-		} else {
-			m.cardTable, _ = m.cardTable.Update(msg)
-		}
-		return m, nil
+		return m.moveCardPanelCursor(msg, false), nil
 	}
 	if action == "nav_down" || s == "down" {
-		if m.cardSubFocus == listCardSubFocusContents {
-			if m.listContentsTable.Cursor() < len(m.listContentsTable.Rows())-1 {
-				m.listContentsTable, _ = m.listContentsTable.Update(msg)
-			}
-		} else {
-			if m.cardTable.Cursor() < len(m.cardTable.Rows())-1 {
-				m.cardTable, _ = m.cardTable.Update(msg)
-			}
-		}
-		return m, nil
+		return m.moveCardPanelCursor(msg, true), nil
 	}
-	// Modifier-key shortcuts — safe to handle regardless of search focus
 	if action == "page_next" {
-		m.cardPagination.NextPage()
-		m.updateListCardTable()
-		m.cardTable.SetCursor(0)
-		return m, nil
+		return m.changeCardPage(true), nil
 	}
 	if action == "page_prev" {
-		m.cardPagination.PrevPage()
-		m.updateListCardTable()
-		m.cardTable.SetCursor(0)
-		return m, nil
+		return m.changeCardPage(false), nil
 	}
 	if action == "increment_quantity" {
 		return m.handleIncrementQuantity()
@@ -372,15 +382,8 @@ func (m ListsModel) handleCardPanelKeys(msg tea.KeyMsg, s, action string) (Lists
 		m.importState = NewImportState(m.cardService, m.styleManager)
 		return m, nil
 	}
-	// Forward non-modifier printable keys to the search textinput when it is focused
 	if m.cardSubFocus == listCardSubFocusSearch && !isModifierKey(s) {
-		var cmd tea.Cmd
-		m.searchInput, cmd = m.searchInput.Update(msg)
-		m.filteredCards = m.filterListCards(m.searchInput.Value())
-		m.cardPagination.Reset()
-		m.updateListCardTable()
-		m.cardTable.SetCursor(0)
-		return m, cmd
+		return m.forwardKeyToListSearch(msg)
 	}
 	return m, nil
 }
@@ -506,120 +509,108 @@ func (m ListsModel) renderBody(availableHeight int) string {
 	return lipgloss.JoinHorizontal(lipgloss.Top, leftContent, rightPanel)
 }
 
+func colorDotFor(sm *StyleManager, color string) string {
+	return sm.applyBGFG(lipgloss.NewStyle().Foreground(lipgloss.Color(color))).Render("●")
+}
+
 func (m ListsModel) renderListPanel(width, height int) string {
 	var b strings.Builder
 	if m.mode == ListsModeCreate || m.mode == ListsModeEdit {
 		b.WriteString(m.renderForm())
 	} else {
-		b.WriteString(m.styleManager.GetTitleStyle().Render("Your Lists") + "\n")
-		if len(m.lists) == 0 {
-			b.WriteString(m.styleManager.GetBlurredStyle().Render("No lists yet. Press 'n' to create one.") + "\n")
-		} else {
-			for i, l := range m.lists {
-				isSelected := m.listCursor == i && m.focus == ListsFocusListPanel
-				isActive := m.selectedList != nil && m.selectedList.ID == l.ID
-				colorDot := m.styleManager.applyBGFG(lipgloss.NewStyle().Foreground(lipgloss.Color(l.Color))).Render("●")
-				label := colorDot + " " + l.Name
-				if isActive {
-					label += " *"
-				}
-				b.WriteString(RenderListItem(label, isSelected))
-			}
-		}
+		b.WriteString(renderPanelHeading(m.styleManager, "Your Lists", m.focus == ListsFocusListPanel))
+		b.WriteString(m.renderListEntries())
 	}
 	return RenderPanel(m.styleManager, b.String(), width, height, m.focus == ListsFocusListPanel, 1, 0)
 }
 
-func (m ListsModel) renderForm() string {
+func (m ListsModel) renderListEntries() string {
+	if len(m.lists) == 0 {
+		return m.styleManager.GetBlurredStyle().Render("No lists yet. Press 'n' to create one.") + "\n"
+	}
 	var b strings.Builder
+	for i, l := range m.lists {
+		isSelected := m.listCursor == i && m.focus == ListsFocusListPanel
+		label := colorDotFor(m.styleManager, l.Color) + " " + l.Name
+		if m.selectedList != nil && m.selectedList.ID == l.ID {
+			label += " *"
+		}
+		b.WriteString(RenderListItem(label, isSelected))
+	}
+	return b.String()
+}
+
+func (m ListsModel) renderColorPicker() string {
+	co := listColorOptions[m.colorIndex]
+	colorPreview := colorDotFor(m.styleManager, co.Color) + m.styleManager.GetNoStyle().Render(" "+co.Name)
+	arrowStyle := m.styleManager.GetBlurredStyle()
+	if m.formFocus == 2 {
+		arrowStyle = m.styleManager.GetFocusedStyle()
+	}
+	return arrowStyle.Render("<") + " " + colorPreview + " " + arrowStyle.Render(">")
+}
+
+func (m ListsModel) renderForm() string {
 	title := "Create List"
 	if m.mode == ListsModeEdit {
 		title = "Edit List"
 	}
+	var b strings.Builder
 	b.WriteString(m.styleManager.GetTitleStyle().Render(title) + "\n")
-	nameLabel := "Name: "
-	if m.formFocus == 0 {
-		nameLabel = m.styleManager.GetFocusedStyle().Render(nameLabel)
-	} else {
-		nameLabel = m.styleManager.GetBlurredStyle().Render(nameLabel)
-	}
-	b.WriteString(nameLabel + m.nameInput.View() + "\n")
-	descLabel := "Desc: "
-	if m.formFocus == 1 {
-		descLabel = m.styleManager.GetFocusedStyle().Render(descLabel)
-	} else {
-		descLabel = m.styleManager.GetBlurredStyle().Render(descLabel)
-	}
-	b.WriteString(descLabel + m.descInput.View() + "\n")
-	colorLabel := "Color: "
-	if m.formFocus == 2 {
-		colorLabel = m.styleManager.GetFocusedStyle().Render(colorLabel)
-	} else {
-		colorLabel = m.styleManager.GetBlurredStyle().Render(colorLabel)
-	}
-	co := listColorOptions[m.colorIndex]
-	colorPreview := m.styleManager.applyBGFG(lipgloss.NewStyle().Foreground(lipgloss.Color(co.Color))).Render("● " + co.Name)
-	arrows := m.styleManager.GetBlurredStyle().Render("<") + " " + colorPreview + " " + m.styleManager.GetBlurredStyle().Render(">")
-	if m.formFocus == 2 {
-		arrows = m.styleManager.GetFocusedStyle().Render("<") + " " + colorPreview + " " + m.styleManager.GetFocusedStyle().Render(">")
-	}
-	b.WriteString(colorLabel + arrows + "\n")
-	b.WriteString(m.styleManager.GetBlurredStyle().Render("Tab: next field • Enter: confirm • Esc: cancel"))
+	b.WriteString(RenderConditionalLabel(m.formFocus == 0, "Name: ") + m.nameInput.View() + "\n")
+	b.WriteString(RenderConditionalLabel(m.formFocus == 1, "Desc: ") + m.descInput.View() + "\n")
+	b.WriteString(RenderConditionalLabel(m.formFocus == 2, "Color: ") + m.renderColorPicker() + "\n")
+	b.WriteString(m.styleManager.GetBlurredStyle().Render(joinHelp("Tab: next field", "Enter: confirm", "Esc: cancel")))
 	return b.String()
 }
 
-func (m ListsModel) renderCardPanel(width, height int) string {
-	tableWidth := max(width-4, 20)
-	if m.selectedList == nil {
-		var b strings.Builder
-		b.WriteString(m.styleManager.GetBlurredStyle().Render("Select a list to manage cards.") + "\n")
-		return RenderPanel(m.styleManager, b.String(), width, height, m.focus == ListsFocusCardPanel, 1, 0)
-	}
-	topHeight := max(height*6/10, 5)
-	bottomHeight := max(height-topHeight, 5)
-	colorDot := m.styleManager.applyBGFG(lipgloss.NewStyle().Foreground(lipgloss.Color(m.selectedList.Color))).Render("●")
-	searchFocused := m.cardSubFocus == listCardSubFocusSearch
+func (m ListsModel) renderListSearchSection(vcs VisibleColumnSet, topHeight int) string {
 	var top strings.Builder
-	if searchFocused {
-		top.WriteString(colorDot + " " + m.styleManager.GetTitleStyle().Render(m.selectedList.Name) + "\n")
-	} else {
-		top.WriteString(colorDot + " " + m.styleManager.GetBlurredStyle().Render(m.selectedList.Name) + "\n")
-	}
-	top.WriteString(m.styleManager.GetBlurredStyle().Render("Search: ") + m.styleManager.GetNoStyle().Render(m.searchInput.View()) + " " + m.styleManager.GetBlurredStyle().Render(m.cardPagination.StatusText()) + "\n")
-	source := m.filteredCards
-	if m.searchInput.Value() == "" {
-		source = m.cards
-	}
+	colorDot := colorDotFor(m.styleManager, m.selectedList.Color)
+	top.WriteString(colorDot + " " + RenderConditionalLabel(m.cardSubFocus == listCardSubFocusSearch, m.selectedList.Name) + "\n")
+	top.WriteString(renderSearchLine(m.styleManager, m.searchInput.View(), m.cardPagination.StatusText()))
+	source := searchSource(m.searchInput.Value(), m.filteredCards, m.cards)
 	m.cardPagination.TotalItems = len(source)
 	start, end := m.cardPagination.Slice()
-	page := source[start:end]
-	vcs := BuildVisibleColumnSet(CardSearchColumns, GetVisibleColumns(m.configManager), GetColumnOrder(m.configManager), tableWidth)
-	rows := buildCardRows(page, m.quantities.db, m.quantities.temp, vcs)
+	rows := buildCardRows(source[start:end], m.quantities.db, m.quantities.temp, vcs)
 	if len(rows) == 0 {
 		top.WriteString(m.styleManager.GetBlurredStyle().Render("No cards match your search.") + "\n")
-	} else {
-		searchTableHeight := CalcTableHeight(topHeight, 2, 3)
-		m.cardTable.SetColumns(vcs.Columns)
-		m.cardTable.SetRows(rows)
-		m.cardTable.SetHeight(searchTableHeight)
-		top.WriteString(m.cardTable.View())
+		return top.String()
 	}
-	contentsFocused := m.cardSubFocus == listCardSubFocusContents
+	m.cardTable.SetColumns(vcs.Columns)
+	m.cardTable.SetRows(rows)
+	m.cardTable.SetHeight(CalcTableHeight(topHeight, 2, 3))
+	top.WriteString(m.cardTable.View())
+	return top.String()
+}
+
+func (m ListsModel) renderListContentsSection(vcs VisibleColumnSet, bottomHeight int) string {
 	var bottom strings.Builder
-	if contentsFocused {
-		bottom.WriteString(m.styleManager.GetTitleStyle().Render("List Contents") + "\n")
-	} else {
-		bottom.WriteString(m.styleManager.GetBlurredStyle().Render("List Contents") + "\n")
-	}
+	bottom.WriteString(renderPanelHeading(m.styleManager, "List Contents", m.cardSubFocus == listCardSubFocusContents))
 	if len(m.listContentsTable.Rows()) == 0 {
 		bottom.WriteString(m.styleManager.GetBlurredStyle().Render("No cards in list yet.") + "\n")
-	} else {
-		contentsTableHeight := CalcTableHeight(bottomHeight, 1, 3)
-		m.listContentsTable.SetColumns(vcs.Columns)
-		m.listContentsTable.SetHeight(contentsTableHeight)
-		bottom.WriteString(m.listContentsTable.View())
+		return bottom.String()
 	}
-	return renderSplitCardPanel(m.styleManager, top.String(), searchFocused, bottom.String(), contentsFocused, width, topHeight, bottomHeight)
+	m.listContentsTable.SetColumns(vcs.Columns)
+	m.listContentsTable.SetHeight(CalcTableHeight(bottomHeight, 1, 3))
+	bottom.WriteString(m.listContentsTable.View())
+	return bottom.String()
+}
+
+func (m ListsModel) renderCardPanel(width, height int) string {
+	if m.selectedList == nil {
+		placeholder := m.styleManager.GetBlurredStyle().Render("Select a list to manage cards.") + "\n"
+		return RenderPanel(m.styleManager, placeholder, width, height, m.focus == ListsFocusCardPanel, 1, 0)
+	}
+	tableWidth := max(width-4, 20)
+	topHeight := max(height*6/10, 5)
+	bottomHeight := max(height-topHeight, 5)
+	vcs := BuildVisibleColumnSet(CardSearchColumns, GetVisibleColumns(m.configManager), GetColumnOrder(m.configManager), tableWidth)
+	top := m.renderListSearchSection(vcs, topHeight)
+	bottom := m.renderListContentsSection(vcs, bottomHeight)
+	searchFocused := m.cardSubFocus == listCardSubFocusSearch
+	contentsFocused := m.cardSubFocus == listCardSubFocusContents
+	return renderSplitCardPanel(m.styleManager, top, searchFocused, bottom, contentsFocused, width, topHeight, bottomHeight)
 }
 
 func (m ListsModel) renderFooter() string {
@@ -632,9 +623,9 @@ func (m ListsModel) renderFooter() string {
 	hb := NewHelpBuilder(m.configManager)
 	var footer string
 	if m.mode == ListsModeCreate || m.mode == ListsModeEdit {
-		footer = m.styleManager.GetHelpStyle().Render("Tab: next field | Enter: confirm | Esc: cancel")
+		footer = m.styleManager.GetHelpStyle().Render(joinHelp("Tab: next field", "Enter: confirm", "Esc: cancel"))
 	} else if m.focus == ListsFocusCardPanel {
-		footer = m.styleManager.GetHelpStyle().Render(strings.Join([]string{
+		footer = m.styleManager.GetHelpStyle().Render(joinHelp(
 			"Tab: Switch panel",
 			hb.Build(
 				KeyItem{"increment_quantity", "+", "Add"},
@@ -644,10 +635,10 @@ func (m ListsModel) renderFooter() string {
 			hb.Build(KeyItem{"export", "x", "Export"}, KeyItem{"import", "i", "Import"}),
 			hb.Pair("page_next", "Ctrl+N", "page_prev", "Ctrl+P", "Page"),
 			hb.Pair("nav_up", "↑", "nav_down", "↓", "Navigate"),
-			"Left / Shift+Tab: Lists panel",
-		}, " | "))
+			"←/Shift+Tab: Lists panel",
+		))
 	} else {
-		footer = m.styleManager.GetHelpStyle().Render(strings.Join([]string{
+		footer = m.styleManager.GetHelpStyle().Render(joinHelp(
 			hb.Pair("nav_up", "↑", "nav_down", "↓", "Navigate"),
 			hb.Build(KeyItem{"select", "Enter", "Select list"}),
 			hb.Build(
@@ -655,9 +646,9 @@ func (m ListsModel) renderFooter() string {
 				KeyItem{"edit", "e", "Edit"},
 				KeyItem{"delete", "d", "Delete"},
 			),
-			"Right / Tab: Cards panel",
+			"→/Tab: Cards panel",
 			hb.Build(KeyItem{"back", "Q", "Back"}),
-		}, " | "))
+		))
 	}
 	if m.exportState.statusMsg != "" {
 		footer = m.styleManager.GetHelpStyle().Render(m.exportState.statusMsg) + "  " + footer
@@ -666,19 +657,8 @@ func (m ListsModel) renderFooter() string {
 }
 
 func (m ListsModel) getSelectedCard() (model.Card, bool) {
-	selectedRow := m.cardTable.Cursor()
-	if selectedRow < 0 {
-		return model.Card{}, false
-	}
-	source := m.filteredCards
-	if m.searchInput.Value() == "" {
-		source = m.cards
-	}
-	actualIndex := m.cardPagination.CurrentPage*m.cardPagination.PageSize + selectedRow
-	if actualIndex >= len(source) {
-		return model.Card{}, false
-	}
-	return source[actualIndex], true
+	source := searchSource(m.searchInput.Value(), m.filteredCards, m.cards)
+	return cardAtTableCursor(m.cardTable.Cursor(), m.cardPagination, source)
 }
 
 func (m ListsModel) handleIncrementQuantity() (ListsModel, tea.Cmd) {
@@ -794,30 +774,14 @@ func (m ListsModel) refreshLists() (ListsModel, tea.Cmd) {
 }
 
 func (m *ListsModel) updateListCardTable() {
-	source := m.filteredCards
-	if m.searchInput.Value() == "" {
-		source = m.cards
-	}
+	source := searchSource(m.searchInput.Value(), m.filteredCards, m.cards)
 	m.cardPagination.TotalItems = len(source)
 	start, end := m.cardPagination.Slice()
-	page := source[start:end]
 	vcs := BuildVisibleColumnSet(CardSearchColumns, GetVisibleColumns(m.configManager), GetColumnOrder(m.configManager), 80)
 	m.cardTable.SetColumns(vcs.Columns)
-	m.cardTable.SetRows(buildCardRows(page, m.quantities.db, m.quantities.temp, vcs))
+	m.cardTable.SetRows(buildCardRows(source[start:end], m.quantities.db, m.quantities.temp, vcs))
 	m.listContentsTable.SetColumns(vcs.Columns)
-	m.updateListContentsTable(vcs)
-}
-
-func (m *ListsModel) updateListContentsTable(vcs VisibleColumnSet) {
-	var rows []table.Row
-	for _, card := range m.cards {
-		qty := m.quantities.total(card.ID)
-		if qty <= 0 {
-			continue
-		}
-		rows = append(rows, vcs.BuildRow(CardToDataMap(card, 0, qty)))
-	}
-	m.listContentsTable.SetRows(rows)
+	m.listContentsTable.SetRows(buildPendingQuantityRows(m.cards, &m.quantities, vcs))
 }
 
 func (m ListsModel) filterListCards(query string) []model.Card {

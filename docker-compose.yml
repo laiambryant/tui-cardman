@@ -6,14 +6,12 @@ services:
     image: cardman:latest
     container_name: cardman
     environment:
-      - DATABASE_DSN=/app/data/cardman.db
-      - DB_DRIVER=sqlite3
+      - DB_DSN=file:/app/data/cardman.db?_pragma=foreign_keys(1)
       - LOG_LEVEL=INFO
-      # Uncomment for SSH server mode:
-      # - SSH_MODE=true
-      # - PORT=2222
+      # Uncomment for SSH server mode (run the serve-ssh command):
+      # - SSH_PORT=2222
       # - SSH_HOST_KEY=/app/data/host_key
-      # - API_KEY=your_pokemontcg_api_key
+      # - API_KEY=your_tcgdex_api_key
     volumes:
       - cardman_data:/app/data
     # Uncomment to expose SSH server port:
