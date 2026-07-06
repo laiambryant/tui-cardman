@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **SDK modules renamed** to a uniform `<api>-sdk-go` scheme: `sdkygopro` → `ygoprodeck-sdk-go`, `optcgapi-go-sdk` → `optcgapi-sdk-go`, `tcgdex` → `tcgdex-sdk-go` (`mtg-sdk-go` unchanged). All imports updated. Until the renamed repos are published on GitHub, local builds resolve the SDKs through `go.work` replaces; afterwards run `go get <module>@main && go mod tidy` and delete `go.work`.
+- **SQLite driver switched from `mattn/go-sqlite3` (CGO) to `modernc.org/sqlite` (pure Go)** — building and cross-compiling no longer need a C toolchain; the release workflow now cross-compiles every target (including Windows) from a single Linux runner. The default DSN changed from `file:cardman.db?_fk=1` to `file:cardman.db?_pragma=foreign_keys(1)`; if you set a custom `DB_DSN`, update mattn-style `_fk`/`_journal_mode`-style parameters to `_pragma=...` form. The `migrate --driver` default is now `sqlite`.
+
+### Fixed
+
+- `.env.example` and `docker-compose.yml` documented environment variables the app never read (`DATABASE_DSN`, `DB_DRIVER`, `SSH_MODE`, `PORT`); they now match the real configuration (`DB_DSN`, `SSH_PORT`, `SSH_HOST_KEY`, `LOG_LEVEL`, `API_KEY`).
+- `README.md` and the GitHub Pages site (`docs/index.html`) were still Pokémon-only and listed the nonexistent env vars; both now document all four games, the real configuration table, the multi-game `import` group, and the `cards`/`collection`/`decks`/`lists` CLI groups. The site was rebuilt as a self-contained minimal page (no external fonts or scripts).
+
 ## [0.2.0] - 2026-03-30
 
 ### Added
