@@ -4,8 +4,7 @@ Thank you for your interest in contributing to tui-cardman.
 
 ## Prerequisites
 
-- Go 1.24 or later
-- GCC or Clang (required for CGO / SQLite)
+- Go 1.25 or later
 - `make` (optional but convenient)
 
 ## Getting Started
@@ -21,7 +20,7 @@ go mod download
 
 ```bash
 # Build binary
-CGO_ENABLED=1 go build -o cardman ./cmd/main.go
+go build -o cardman ./cmd/main.go
 
 # Using Make
 make build
