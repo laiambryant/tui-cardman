@@ -15,39 +15,28 @@ env:
 jobs:
   build:
     name: Build ${{ matrix.name }}
-    runs-on: ${{ matrix.runner }}
+    # Pure-Go build (modernc.org/sqlite): every target cross-compiles
+    # from a single Linux runner with CGO disabled.
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         include:
           - name: linux-amd64
-            runner: ubuntu-latest
             goos: linux
             goarch: amd64
-            asset_suffix: linux-amd64
-            cc: gcc
-            apt_packages: ""
           - name: linux-arm64
-            runner: ubuntu-latest
             goos: linux
             goarch: arm64
-            asset_suffix: linux-arm64
-            cc: aarch64-linux-gnu-gcc
-            apt_packages: gcc-aarch64-linux-gnu
           - name: darwin-amd64
-            runner: macos-15-intel
             goos: darwin
             goarch: amd64
-            asset_suffix: darwin-amd64
-            cc: clang
-            apt_packages: ""
           - name: darwin-arm64
-            runner: macos-15
             goos: darwin
             goarch: arm64
-            asset_suffix: darwin-arm64
-            cc: clang
-            apt_packages: ""
+          - name: windows-amd64
+            goos: windows
+            goarch: amd64
 
     steps:
       - uses: actions/checkout@v4
@@ -56,24 +45,18 @@ jobs:
         with:
           go-version: stable
 
-      - name: Install Linux cross-compiler
-        if: runner.os == 'Linux' && matrix.apt_packages != ''
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ${{ matrix.apt_packages }}
-
       - name: Build release archive
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
-          CGO_ENABLED: 1
-          CC: ${{ matrix.cc }}
+          CGO_ENABLED: 0
           VERSION: ${{ github.ref_name }}
           COMMIT: ${{ github.sha }}
         run: |
           BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           PACKAGE_DIR="$RUNNER_TEMP/package"
-          ASSET_NAME="${BINARY_NAME}_${VERSION}_${{ matrix.asset_suffix }}.tar.gz"
+          EXT=""
+          if [ "$GOOS" = "windows" ]; then EXT=".exe"; fi
 
           rm -rf "$PACKAGE_DIR"
           mkdir -p "$PACKAGE_DIR"
@@ -81,17 +64,24 @@ jobs:
           go build \
             -trimpath \
             -ldflags="-s -w -X main.version=${VERSION} -X main.commit=${COMMIT} -X main.date=${BUILD_DATE} -X main.builtBy=github-actions" \
-            -o "$PACKAGE_DIR/${BINARY_NAME}" \
+            -o "$PACKAGE_DIR/${BINARY_NAME}${EXT}" \
             ./cmd
 
           cp LICENSE README.md "$PACKAGE_DIR/"
-          tar -czf "$ASSET_NAME" -C "$PACKAGE_DIR" "${BINARY_NAME}" LICENSE README.md
+
+          if [ "$GOOS" = "windows" ]; then
+            ASSET_NAME="${BINARY_NAME}_${VERSION}_${{ matrix.name }}.zip"
+            (cd "$PACKAGE_DIR" && zip -q "$GITHUB_WORKSPACE/$ASSET_NAME" "${BINARY_NAME}${EXT}" LICENSE README.md)
+          else
+            ASSET_NAME="${BINARY_NAME}_${VERSION}_${{ matrix.name }}.tar.gz"
+            tar -czf "$ASSET_NAME" -C "$PACKAGE_DIR" "${BINARY_NAME}" LICENSE README.md
+          fi
 
       - name: Upload release asset
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.name }}
-          path: ${{ env.BINARY_NAME }}_${{ github.ref_name }}_${{ matrix.asset_suffix }}.tar.gz
+          path: ${{ env.BINARY_NAME }}_${{ github.ref_name }}_${{ matrix.name }}.*
           if-no-files-found: error
 
   release:
@@ -108,13 +98,12 @@ jobs:
 
       - name: Generate checksums
         run: |
-          sha256sum dist/*.tar.gz > dist/checksums.txt
+          sha256sum dist/* > dist/checksums.txt
 
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            dist/*.tar.gz
-            dist/checksums.txt
+            dist/*
           generate_release_notes: true
           prerelease: ${{ contains(github.ref_name, '-') }}
