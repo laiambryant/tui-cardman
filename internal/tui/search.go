@@ -34,31 +34,40 @@ type FuzzySearchResult struct {
 	Score int
 }
 
-// fuzzySearchCards searches Name, Number, and Rarity fields independently,
-// merges results keeping the best score per card, and returns sorted by score descending.
-func fuzzySearchCards(cards []model.Card, query string) []FuzzySearchResult {
-	if query == "" || len(cards) == 0 {
-		return nil
+// collectBestScoresByIndex merges fuzzy matches across fields, keeping the best score per index.
+func collectBestScoresByIndex(query string, sources []fuzzy.Source) map[int]int {
+	bestScore := make(map[int]int)
+	for _, source := range sources {
+		for _, m := range fuzzy.FindFrom(query, source) {
+			if existing, ok := bestScore[m.Index]; !ok || m.Score > existing {
+				bestScore[m.Index] = m.Score
+			}
+		}
 	}
+	return bestScore
+}
 
-	bestScore := make(map[int]int) // index → best score
-
+func cardFieldSources(cards []model.Card) []fuzzy.Source {
 	fields := []func(model.Card) string{
 		func(c model.Card) string { return c.Name },
 		func(c model.Card) string { return c.Number },
 		func(c model.Card) string { return c.Rarity },
 		func(c model.Card) string { return c.Artist },
 	}
-
+	sources := make([]fuzzy.Source, 0, len(fields))
 	for _, field := range fields {
-		matches := fuzzy.FindFrom(query, cardFieldSource{cards: cards, field: field})
-		for _, m := range matches {
-			if existing, ok := bestScore[m.Index]; !ok || m.Score > existing {
-				bestScore[m.Index] = m.Score
-			}
-		}
+		sources = append(sources, cardFieldSource{cards: cards, field: field})
 	}
+	return sources
+}
 
+// fuzzySearchCards searches Name, Number, Rarity, and Artist fields independently,
+// merges results keeping the best score per card, and returns sorted by score descending.
+func fuzzySearchCards(cards []model.Card, query string) []FuzzySearchResult {
+	if query == "" || len(cards) == 0 {
+		return nil
+	}
+	bestScore := collectBestScoresByIndex(query, cardFieldSources(cards))
 	results := make([]FuzzySearchResult, 0, len(bestScore))
 	for idx, score := range bestScore {
 		results = append(results, FuzzySearchResult{
@@ -67,60 +76,43 @@ func fuzzySearchCards(cards []model.Card, query string) []FuzzySearchResult {
 			Score: score,
 		})
 	}
-
 	sort.Slice(results, func(i, j int) bool {
 		return results[i].Score > results[j].Score
 	})
-
 	return results
 }
 
-// fuzzySearchCollections searches Card.Name, Card.Number, Card.Rarity, Condition, Notes.
+func collectionCardField(field func(model.Card) string) func(model.UserCollection) string {
+	return func(c model.UserCollection) string {
+		if c.Card != nil {
+			return field(*c.Card)
+		}
+		return ""
+	}
+}
+
+func collectionFieldSources(collections []model.UserCollection) []fuzzy.Source {
+	fields := []func(model.UserCollection) string{
+		collectionCardField(func(c model.Card) string { return c.Name }),
+		collectionCardField(func(c model.Card) string { return c.Number }),
+		collectionCardField(func(c model.Card) string { return c.Rarity }),
+		collectionCardField(func(c model.Card) string { return c.Artist }),
+		func(c model.UserCollection) string { return c.Condition },
+		func(c model.UserCollection) string { return c.Notes },
+	}
+	sources := make([]fuzzy.Source, 0, len(fields))
+	for _, field := range fields {
+		sources = append(sources, collectionFieldSource{collections: collections, field: field})
+	}
+	return sources
+}
+
+// fuzzySearchCollections searches Card.Name, Card.Number, Card.Rarity, Card.Artist, Condition, Notes.
 func fuzzySearchCollections(collections []model.UserCollection, query string) []model.UserCollection {
 	if query == "" || len(collections) == 0 {
 		return nil
 	}
-
-	bestScore := make(map[int]int)
-
-	fields := []func(model.UserCollection) string{
-		func(c model.UserCollection) string {
-			if c.Card != nil {
-				return c.Card.Name
-			}
-			return ""
-		},
-		func(c model.UserCollection) string {
-			if c.Card != nil {
-				return c.Card.Number
-			}
-			return ""
-		},
-		func(c model.UserCollection) string {
-			if c.Card != nil {
-				return c.Card.Rarity
-			}
-			return ""
-		},
-		func(c model.UserCollection) string {
-			if c.Card != nil {
-				return c.Card.Artist
-			}
-			return ""
-		},
-		func(c model.UserCollection) string { return c.Condition },
-		func(c model.UserCollection) string { return c.Notes },
-	}
-
-	for _, field := range fields {
-		matches := fuzzy.FindFrom(query, collectionFieldSource{collections: collections, field: field})
-		for _, m := range matches {
-			if existing, ok := bestScore[m.Index]; !ok || m.Score > existing {
-				bestScore[m.Index] = m.Score
-			}
-		}
-	}
-
+	bestScore := collectBestScoresByIndex(query, collectionFieldSources(collections))
 	type scored struct {
 		index int
 		score int
@@ -132,7 +124,6 @@ func fuzzySearchCollections(collections []model.UserCollection, query string) []
 	sort.Slice(ranked, func(i, j int) bool {
 		return ranked[i].score > ranked[j].score
 	})
-
 	results := make([]model.UserCollection, 0, len(ranked))
 	for _, r := range ranked {
 		results = append(results, collections[r.index])

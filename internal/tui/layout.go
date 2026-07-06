@@ -81,12 +81,11 @@ func calculateFrameLayout(headerLines, footerLines, width, height int) FrameLayo
 func renderFrameSection(content string, width, height int, styleManager *StyleManager) string {
 	contentWidth := max(width-frameBorderSize-framePaddingX*2, 0)
 	contentHeight := max(height-frameBorderSize-framePaddingY*2, 0)
-
-	style := mstyle(styleManager).Box(styleManager.scheme.Blurred, contentWidth, contentHeight, 0, framePaddingX, framePaddingY)
+	style := mstyle(styleManager).Box(styleManager.scheme.Subtle, contentWidth, contentHeight, 0, framePaddingX, framePaddingY)
 	return style.Render(content)
 }
 
-// helper to safely access styleManager in layout functions
+// mstyle safely accesses the styleManager in layout functions, falling back to the default.
 func mstyle(sm *StyleManager) *StyleManager {
 	if sm == nil {
 		return defaultStyleManager
@@ -133,11 +132,10 @@ func resolveMinSectionHeight(height int) int {
 	return 3
 }
 
+// reduceSectionHeights shrinks header and footer heights to recover the given deficit,
+// never going below one visible content line plus its border (height 3).
 func reduceSectionHeights(headerHeight, footerHeight, deficit, minSectionHeight int) (int, int) {
-	// Ensure we never reduce below 3 to maintain at least 1 line of visible content
-	// (3 = 1 content line + 2 for border)
 	minAllowedHeight := max(minSectionHeight, 3)
-
 	for deficit > 0 && (headerHeight > minAllowedHeight || footerHeight > minAllowedHeight) {
 		if headerHeight > minAllowedHeight {
 			headerHeight--

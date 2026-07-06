@@ -16,7 +16,7 @@ func TestLoadConfig_Defaults(t *testing.T) {
 	LoadConfig()
 
 	assert.Equal(t, LogLevel("INFO"), Cfg.LogLevel)
-	assert.Equal(t, "file:cardman.db?_fk=1", Cfg.DBDSN)
+	assert.Equal(t, "file:cardman.db?_pragma=foreign_keys(1)", Cfg.DBDSN)
 	assert.Equal(t, 2222, Cfg.SSHPort)
 	assert.Equal(t, "~/.ssh/cardman_host_key", Cfg.SSHHostKey)
 	assert.Equal(t, "", Cfg.APIKey)
@@ -27,7 +27,7 @@ func TestLoadConfig_FromEnvironment(t *testing.T) {
 
 	// Set environment variables
 	t.Setenv("LOG_LEVEL", "DEBUG")
-	t.Setenv("DB_DSN", "file:test.db?_fk=1")
+	t.Setenv("DB_DSN", "file:test.db?_pragma=foreign_keys(1)")
 	t.Setenv("SSH_PORT", "3333")
 	t.Setenv("SSH_HOST_KEY", "/tmp/test_key")
 	t.Setenv("API_KEY", "test-api-key-12345")
@@ -35,7 +35,7 @@ func TestLoadConfig_FromEnvironment(t *testing.T) {
 	LoadConfig()
 
 	assert.Equal(t, LogLevel("DEBUG"), Cfg.LogLevel)
-	assert.Equal(t, "file:test.db?_fk=1", Cfg.DBDSN)
+	assert.Equal(t, "file:test.db?_pragma=foreign_keys(1)", Cfg.DBDSN)
 	assert.Equal(t, 3333, Cfg.SSHPort)
 	assert.Equal(t, "/tmp/test_key", Cfg.SSHHostKey)
 	assert.Equal(t, "test-api-key-12345", Cfg.APIKey)
@@ -46,7 +46,7 @@ func TestLoadConfig_FromDotEnvFile(t *testing.T) {
 
 	// Create a temporary .env file
 	envContent := `LOG_LEVEL=WARN
-DB_DSN=file:dotenv_test.db?_fk=1
+DB_DSN=file:dotenv_test.db?_pragma=foreign_keys(1)
 SSH_PORT=4444
 SSH_HOST_KEY=/home/user/.ssh/custom_key
 API_KEY=dotenv-api-key
@@ -70,7 +70,7 @@ API_KEY=dotenv-api-key
 	LoadConfig()
 
 	assert.Equal(t, LogLevel("WARN"), Cfg.LogLevel)
-	assert.Equal(t, "file:dotenv_test.db?_fk=1", Cfg.DBDSN)
+	assert.Equal(t, "file:dotenv_test.db?_pragma=foreign_keys(1)", Cfg.DBDSN)
 	assert.Equal(t, 4444, Cfg.SSHPort)
 	assert.Equal(t, "/home/user/.ssh/custom_key", Cfg.SSHHostKey)
 	assert.Equal(t, "dotenv-api-key", Cfg.APIKey)
@@ -275,7 +275,7 @@ func TestConfig_DefaultValues(t *testing.T) {
 		{
 			name:         "DB_DSN default",
 			envVar:       "DB_DSN",
-			defaultValue: "file:cardman.db?_fk=1",
+			defaultValue: "file:cardman.db?_pragma=foreign_keys(1)",
 			checkFunc:    func() interface{} { return Cfg.DBDSN },
 		},
 		{

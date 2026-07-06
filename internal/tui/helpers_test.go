@@ -61,7 +61,7 @@ func TestHelpBuilder_Build_NilConfig(t *testing.T) {
 		KeyItem{"quit", "ctrl+c", "Quit"},
 		KeyItem{"select", "enter", "Select"},
 	)
-	assert.Equal(t, "ctrl+c: Quit | enter: Select", result)
+	assert.Equal(t, "ctrl+c: Quit • enter: Select", result)
 }
 
 func TestHelpBuilder_Build_Empty(t *testing.T) {

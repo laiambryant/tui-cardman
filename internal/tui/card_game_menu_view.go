@@ -95,24 +95,29 @@ func (m CardGameMenuModel) renderHeader() string {
 	return m.styleManager.GetTitleStyle().Render("Select Mode")
 }
 
+// menuButtonWidth accounts for frame border, frame padding, button border, and button padding overhead.
+func menuButtonWidth(totalWidth int) int {
+	const frameAndButtonOverhead = 8
+	return max(totalWidth-frameAndButtonOverhead, 10)
+}
+
 func (m CardGameMenuModel) renderBody(availableHeight int) string {
 	var b strings.Builder
 	b.WriteString(m.styleManager.GetTitleStyle().Render("Select Mode") + "\n\n")
-	// frame border(2) + padding(2) + button border(2) + button padding(2) = 8 overhead
-	btnWidth := max(m.width-8, 10)
-	b.WriteString(RenderButtonItem(m.styleManager, "My Collection", m.cursor == 0, btnWidth))
-	b.WriteString(RenderButtonItem(m.styleManager, "My Lists", m.cursor == 1, btnWidth))
-	b.WriteString(RenderButtonItem(m.styleManager, "My Decks", m.cursor == 2, btnWidth))
-	b.WriteString(RenderButtonItem(m.styleManager, "Import Sets", m.cursor == 3, btnWidth))
+	btnWidth := menuButtonWidth(m.width)
+	for i, label := range modeLabels {
+		b.WriteString(RenderButtonItem(m.styleManager, label, m.cursor == i, btnWidth))
+	}
 	return b.String()
 }
 
 func (m CardGameMenuModel) renderFooter() string {
 	hb := NewHelpBuilder(m.configManager)
-	return m.styleManager.GetHelpStyle().Render(
-		hb.Pair("nav_up", "↑", "nav_down", "↓", "Navigate") + " • " + hb.Build(
+	return m.styleManager.GetHelpStyle().Render(joinHelp(
+		hb.Pair("nav_up", "↑", "nav_down", "↓", "Navigate"),
+		hb.Build(
 			KeyItem{"select", "Enter", "Select"},
 			KeyItem{"back", "Q", "Back"},
 		),
-	)
+	))
 }

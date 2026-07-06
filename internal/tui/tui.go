@@ -176,56 +176,63 @@ func NewModel(db *sql.DB, isSSHMode bool) (*Model, error) {
 	return m, nil
 }
 
+type importerDeps struct {
+	db         *sql.DB
+	logger     *slog.Logger
+	sets       sets.SetService
+	cards      card.CardService
+	importRuns importruns.ImportRunService
+}
+
+func buildPokemonImporter(d importerDeps) gameimporter.GameImporter {
+	client := pokemontcg.NewClient(config.GetAPIKey())
+	service := pokemontcg.NewImportService(d.db, client, d.logger,
+		d.importRuns, d.sets, d.cards,
+		prices.NewTCGPlayerPriceService(d.db), prices.NewCardMarketPriceService(d.db),
+		pokemoncard.NewPokemonCardService(d.db))
+	return pokemontcg.NewPokemonGameImporter(client, service, d.sets)
+}
+
+func buildYuGiOhImporter(d importerDeps) gameimporter.GameImporter {
+	client := yugioh.NewClient()
+	service := yugioh.NewImportService(d.db, client, d.logger,
+		d.importRuns, d.sets, d.cards, yugiohcard.NewYuGiOhCardService(d.db))
+	return yugioh.NewYuGiOhGameImporter(client, service, d.sets)
+}
+
+func buildMTGImporter(d importerDeps) gameimporter.GameImporter {
+	client := mtg.NewClient()
+	service := mtg.NewImportService(d.db, client, d.logger,
+		d.importRuns, d.sets, d.cards, mtgcard.NewMTGCardService(d.db))
+	return mtg.NewMTGGameImporter(client, service, d.sets)
+}
+
+func buildOnePieceImporter(d importerDeps) gameimporter.GameImporter {
+	client := onepiece.NewClient()
+	service := onepiece.NewImportService(d.db, client, d.logger,
+		d.importRuns, d.sets, d.cards, onepiececard.NewOnePieceCardService(d.db))
+	return onepiece.NewOnePieceGameImporter(client, service, d.sets)
+}
+
 // initImporters constructs game-specific importers keyed by card game DB ID.
 func initImporters(db *sql.DB, cardGames []model.CardGame, logger *slog.Logger) map[int64]gameimporter.GameImporter {
+	deps := importerDeps{
+		db:         db,
+		logger:     logger,
+		sets:       sets.NewSetService(db),
+		cards:      card.NewCardService(db),
+		importRuns: importruns.NewImportRunService(db),
+	}
+	byName := map[string]gameimporter.GameImporter{
+		"Pokemon":              buildPokemonImporter(deps),
+		"Yu-Gi-Oh!":            buildYuGiOhImporter(deps),
+		"Magic: The Gathering": buildMTGImporter(deps),
+		"One Piece":            buildOnePieceImporter(deps),
+	}
 	importers := make(map[int64]gameimporter.GameImporter)
-
-	setService := sets.NewSetService(db)
-	cardService := card.NewCardService(db)
-	importRunService := importruns.NewImportRunService(db)
-
-	// Pokemon
-	apiKey := config.GetAPIKey()
-	ptcgClient := pokemontcg.NewClient(apiKey)
-	pokemonCardSvc := pokemoncard.NewPokemonCardService(db)
-	tcgPriceSvc := prices.NewTCGPlayerPriceService(db)
-	cmPriceSvc := prices.NewCardMarketPriceService(db)
-	ptcgService := pokemontcg.NewImportService(db, ptcgClient, logger,
-		importRunService, setService, cardService,
-		tcgPriceSvc, cmPriceSvc, pokemonCardSvc)
-	ptcgImporter := pokemontcg.NewPokemonGameImporter(ptcgClient, ptcgService, setService)
-
-	// Yu-Gi-Oh!
-	ygoClient := yugioh.NewClient()
-	yugiohCardSvc := yugiohcard.NewYuGiOhCardService(db)
-	ygoService := yugioh.NewImportService(db, ygoClient, logger,
-		importRunService, setService, cardService, yugiohCardSvc)
-	ygoImporter := yugioh.NewYuGiOhGameImporter(ygoClient, ygoService, setService)
-
-	// Magic: The Gathering
-	mtgClient := mtg.NewClient()
-	mtgCardSvc := mtgcard.NewMTGCardService(db)
-	mtgService := mtg.NewImportService(db, mtgClient, logger,
-		importRunService, setService, cardService, mtgCardSvc)
-	mtgImporter := mtg.NewMTGGameImporter(mtgClient, mtgService, setService)
-
-	opClient := onepiece.NewClient()
-	opCardSvc := onepiececard.NewOnePieceCardService(db)
-	opService := onepiece.NewImportService(db, opClient, logger,
-		importRunService, setService, cardService, opCardSvc)
-	opImporter := onepiece.NewOnePieceGameImporter(opClient, opService, setService)
-
 	for i := range cardGames {
-		g := &cardGames[i]
-		switch g.Name {
-		case "Pokemon":
-			importers[g.ID] = ptcgImporter
-		case "Yu-Gi-Oh!":
-			importers[g.ID] = ygoImporter
-		case "Magic: The Gathering":
-			importers[g.ID] = mtgImporter
-		case "One Piece":
-			importers[g.ID] = opImporter
+		if importer, ok := byName[cardGames[i].Name]; ok {
+			importers[cardGames[i].ID] = importer
 		}
 	}
 	return importers
@@ -342,11 +349,10 @@ func (m *Model) handleLocalUserSetupSelect() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// selectCardGame marks the highlighted game as selected and moves focus to the mode panel.
 func (m *Model) selectCardGame() (tea.Model, tea.Cmd) {
 	if len(m.cardGames) > 0 && m.cursor < len(m.cardGames) {
-		selectedGame := &m.cardGames[m.cursor]
-		m.selectedGame = selectedGame
-		// Switch focus to right panel so user can pick a mode directly
+		m.selectedGame = &m.cardGames[m.cursor]
 		m.mainFocusPanel = 1
 		m.rightPanelCursor = 0
 		m.errorMsg = ""
@@ -391,6 +397,30 @@ func (m *Model) handleQuitKey(action, s string) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+func (m *Model) enterMainScreenCmds() tea.Cmd {
+	var cmds []tea.Cmd
+	if m.user != nil && len(m.cardGames) > 0 {
+		m.statsLoading = true
+		cmds = append(cmds, m.loadGameStatsCmd(m.cardGames[m.cursor].ID))
+	}
+	if m.importModel != nil {
+		cmds = append(cmds, m.importModel.Init())
+	}
+	return tea.Batch(cmds...)
+}
+
+// returnFocusToGamesPanel moves focus from the right panel back to the games panel on back/left keys.
+func (m *Model) returnFocusToGamesPanel(action, s string) bool {
+	if m.screen != ScreenMain || m.mainFocusPanel != 1 {
+		return false
+	}
+	if action == "nav_left" || s == "left" || isBackKey(action, s) {
+		m.mainFocusPanel = 0
+		return true
+	}
+	return false
+}
+
 func (m Model) Init() tea.Cmd {
 	return tea.Batch(
 		textinput.Blink,
@@ -405,16 +435,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case splashDoneMsg:
 		m.screen = m.postSplashScreen
 		if m.screen == ScreenMain {
-			var cmds []tea.Cmd
-			// Load initial stats for the first highlighted card game
-			if m.user != nil && len(m.cardGames) > 0 {
-				m.statsLoading = true
-				cmds = append(cmds, m.loadGameStatsCmd(m.cardGames[m.cursor].ID))
-			}
-			if m.importModel != nil {
-				cmds = append(cmds, m.importModel.Init())
-			}
-			return m, tea.Batch(cmds...)
+			return m, m.enterMainScreenCmds()
 		}
 		return m, nil
 	case tea.WindowSizeMsg:
@@ -433,16 +454,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if newModel, cmd := m.handleSettingsKey(action); cmd != nil {
 			return newModel, cmd
 		}
-		// When right panel is focused on main screen, back key switches back to left panel
-		if m.screen == ScreenMain && m.mainFocusPanel == 1 {
-			if action == "nav_left" || s == "left" {
-				m.mainFocusPanel = 0
-				return m, nil
-			}
-			if isBackKey(action, s) {
-				m.mainFocusPanel = 0
-				return m, nil
-			}
+		if m.returnFocusToGamesPanel(action, s) {
+			return m, nil
 		}
 		if newModel, cmd := m.handleQuitKey(action, s); cmd != nil {
 			return newModel, cmd
@@ -481,28 +494,34 @@ func (m *Model) handleMainScreenNavigation(action, s string) (tea.Model, tea.Cmd
 		return m, nil
 	}
 	if m.mainFocusPanel == 0 {
-		prevCursor := m.cursor
-		m.handleMainScreenCursor(action, s)
-		// If cursor changed and we have a selected game, load stats for the new highlighted game
-		if m.cursor != prevCursor && m.user != nil && len(m.cardGames) > 0 && m.cursor < len(m.cardGames) {
-			m.gameStats = nil
-			m.statsLoading = true
-			return m, m.loadGameStatsCmd(m.cardGames[m.cursor].ID)
+		return m, m.moveGameCursorAndReloadStats(action, s)
+	}
+	m.moveModeCursor(action, s)
+	return m, nil
+}
+
+// moveGameCursorAndReloadStats moves the games cursor and reloads stats when the highlighted game changes.
+func (m *Model) moveGameCursorAndReloadStats(action, s string) tea.Cmd {
+	prevCursor := m.cursor
+	m.handleMainScreenCursor(action, s)
+	if m.cursor == prevCursor || m.user == nil || len(m.cardGames) == 0 || m.cursor >= len(m.cardGames) {
+		return nil
+	}
+	m.gameStats = nil
+	m.statsLoading = true
+	return m.loadGameStatsCmd(m.cardGames[m.cursor].ID)
+}
+
+func (m *Model) moveModeCursor(action, s string) {
+	if action == "nav_up" || s == "up" || s == "k" {
+		if m.rightPanelCursor > 0 {
+			m.rightPanelCursor--
 		}
-	} else {
-		// Navigate mode options in right panel
-		if action == "nav_up" || s == "up" || s == "k" {
-			if m.rightPanelCursor > 0 {
-				m.rightPanelCursor--
-			}
-		} else if action == "nav_down" || s == "down" || s == "j" || s == "tab" {
-			const numModes = 4
-			if m.rightPanelCursor < numModes-1 {
-				m.rightPanelCursor++
-			}
+	} else if action == "nav_down" || s == "down" || s == "j" || s == "tab" {
+		if m.rightPanelCursor < len(modeLabels)-1 {
+			m.rightPanelCursor++
 		}
 	}
-	return m, nil
 }
 
 func (m Model) handleSelectKeys() (tea.Model, tea.Cmd) {
@@ -523,20 +542,23 @@ func (m *Model) handleMainScreenSelect() (tea.Model, tea.Cmd) {
 	if m.mainFocusPanel == 0 {
 		return m.selectCardGame()
 	}
-	// Right panel: navigate to selected mode for the currently highlighted/selected game
-	if m.mainFocusPanel == 1 {
-		// Use selectedGame if set, otherwise use cursor game
-		game := m.selectedGame
-		if game == nil && len(m.cardGames) > 0 && m.cursor < len(m.cardGames) {
-			game = &m.cardGames[m.cursor]
-			m.selectedGame = game
-		}
-		if game == nil {
-			return m, nil
-		}
-		return m.navigateToMode(game, m.rightPanelCursor)
+	game := m.resolveTargetGame()
+	if game == nil {
+		return m, nil
 	}
-	return m, nil
+	return m.navigateToMode(game, m.rightPanelCursor)
+}
+
+// resolveTargetGame returns the explicitly selected game, falling back to the highlighted one.
+func (m *Model) resolveTargetGame() *model.CardGame {
+	if m.selectedGame != nil {
+		return m.selectedGame
+	}
+	if len(m.cardGames) > 0 && m.cursor < len(m.cardGames) {
+		m.selectedGame = &m.cardGames[m.cursor]
+		return m.selectedGame
+	}
+	return nil
 }
 
 func (m *Model) navigateToMode(game *model.CardGame, modeIdx int) (tea.Model, tea.Cmd) {
@@ -615,25 +637,11 @@ func (m *Model) isImportSuccessMessage(msg tea.Msg) bool {
 	return false
 }
 
+// dispatchScreenUpdate routes messages to the active screen; cardsReloadedMsg is handled
+// regardless of screen so the card search tab stays current after a background import.
 func (m Model) dispatchScreenUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
-	// cardsReloadedMsg is handled regardless of current screen so the card
-	// search tab stays current after an import finishes in the background.
 	if reloadMsg, ok := msg.(cardsReloadedMsg); ok {
-		if m.selectedGame != nil && m.selectedGame.ID == reloadMsg.gameID {
-			m.cardGameTabs.cards = reloadMsg.cards
-			m.cardGameTabs.filteredCards = reloadMsg.cards
-			m.cardGameTabs.updateCardTable()
-			if m.deckBuilderModel != nil {
-				m.deckBuilderModel.cards = reloadMsg.cards
-				m.deckBuilderModel.filteredCards = reloadMsg.cards
-				m.deckBuilderModel.updateCardTable()
-			}
-			if m.listsModel != nil {
-				m.listsModel.cards = reloadMsg.cards
-				m.listsModel.filteredCards = reloadMsg.cards
-				m.listsModel.updateListCardTable()
-			}
-		}
+		m.applyReloadedCards(reloadMsg)
 		return m, nil
 	}
 	switch m.screen {
@@ -652,16 +660,39 @@ func (m Model) dispatchScreenUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case ScreenImport:
 		return m.updateImport(msg)
 	case ScreenMain:
-		// Handle stats message on main screen
 		if statsMsg, ok := msg.(gameStatsMsg); ok {
-			if len(m.cardGames) > 0 && m.cursor < len(m.cardGames) && m.cardGames[m.cursor].ID == statsMsg.gameID {
-				statsCopy := statsMsg.stats
-				m.gameStats = &statsCopy
-				m.statsLoading = false
-			}
+			m.applyLoadedStats(statsMsg)
 		}
 	}
 	return m, nil
+}
+
+func (m *Model) applyReloadedCards(reloadMsg cardsReloadedMsg) {
+	if m.selectedGame == nil || m.selectedGame.ID != reloadMsg.gameID {
+		return
+	}
+	m.cardGameTabs.cards = reloadMsg.cards
+	m.cardGameTabs.filteredCards = reloadMsg.cards
+	m.cardGameTabs.updateCardTable()
+	if m.deckBuilderModel != nil {
+		m.deckBuilderModel.cards = reloadMsg.cards
+		m.deckBuilderModel.filteredCards = reloadMsg.cards
+		m.deckBuilderModel.updateCardTable()
+	}
+	if m.listsModel != nil {
+		m.listsModel.cards = reloadMsg.cards
+		m.listsModel.filteredCards = reloadMsg.cards
+		m.listsModel.updateListCardTable()
+	}
+}
+
+func (m *Model) applyLoadedStats(statsMsg gameStatsMsg) {
+	if len(m.cardGames) == 0 || m.cursor >= len(m.cardGames) || m.cardGames[m.cursor].ID != statsMsg.gameID {
+		return
+	}
+	statsCopy := statsMsg.stats
+	m.gameStats = &statsCopy
+	m.statsLoading = false
 }
 
 func (m *Model) updateSettings(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -698,38 +729,7 @@ func (m *Model) updateCardGameMenu(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	if m.cardGameMenuModel.optionChosen {
 		m.cardGameMenuModel.optionChosen = false
-		switch m.cardGameMenuModel.selectedOption {
-		case MenuMyCollection:
-			cardGameTabs, err := m.createCardGameTabsModel(m.selectedGame)
-			if err != nil {
-				slog.Error("failed to create card game tabs model", "error", err)
-				m.errorMsg = fmt.Sprintf("Failed to load card game: %v", err)
-				return m, nil
-			}
-			m.cardGameTabs = cardGameTabs
-			m.screen = ScreenCardGameTabs
-			return m, m.cardGameTabs.Init()
-		case MenuMyLists:
-			listsModel, err := m.createListsModel(m.selectedGame)
-			if err != nil {
-				slog.Error("failed to create lists model", "error", err)
-				m.errorMsg = fmt.Sprintf("Failed to load lists: %v", err)
-				return m, nil
-			}
-			m.listsModel = listsModel
-			m.screen = ScreenLists
-			return m, m.listsModel.Init()
-		case MenuMyDecks:
-			deckModel, err := m.createDeckBuilderModel(m.selectedGame)
-			if err != nil {
-				slog.Error("failed to create deck builder model", "error", err)
-				m.errorMsg = fmt.Sprintf("Failed to load decks: %v", err)
-				return m, nil
-			}
-			m.deckBuilderModel = deckModel
-			m.screen = ScreenDeckBuilder
-			return m, m.deckBuilderModel.Init()
-		}
+		return m.navigateToMode(m.selectedGame, int(m.cardGameMenuModel.selectedOption))
 	}
 	return m, cmd
 }
@@ -762,24 +762,24 @@ func (m *Model) updateDeckBuilder(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
+// updateImport forwards messages to the import model and reloads cards after a successful import.
 func (m *Model) updateImport(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if m.importModel != nil {
-		var cmd tea.Cmd
-		*m.importModel, cmd = m.importModel.Update(msg)
-		if keyMsg, ok := msg.(tea.KeyMsg); ok {
-			action := GetAction(m.configManager, keyMsg.String())
-			if isBackKey(action, keyMsg.String()) && !m.importModel.isImporting {
-				m.screen = ScreenMain
-				return m, nil
-			}
-		}
-		// After a successful import, reload cards so the card search tab stays current
-		if m.isImportSuccessMessage(msg) && m.selectedGame != nil {
-			return m, tea.Batch(cmd, m.reloadCardsCmd(m.selectedGame.ID))
-		}
-		return m, cmd
+	if m.importModel == nil {
+		return m, nil
 	}
-	return m, nil
+	var cmd tea.Cmd
+	*m.importModel, cmd = m.importModel.Update(msg)
+	if keyMsg, ok := msg.(tea.KeyMsg); ok {
+		action := GetAction(m.configManager, keyMsg.String())
+		if isBackKey(action, keyMsg.String()) && !m.importModel.isImporting {
+			m.screen = ScreenMain
+			return m, nil
+		}
+	}
+	if m.isImportSuccessMessage(msg) && m.selectedGame != nil {
+		return m, tea.Batch(cmd, m.reloadCardsCmd(m.selectedGame.ID))
+	}
+	return m, cmd
 }
 
 // reloadCardsCmd fetches fresh cards for the given game and sends a cardsReloadedMsg.
@@ -991,91 +991,84 @@ func (m *Model) createImportModel(game *model.CardGame) (ImportModel, error) {
 	return importModel, nil
 }
 
+func sumQuantities(quantities map[int64]int) int {
+	total := 0
+	for _, qty := range quantities {
+		total += qty
+	}
+	return total
+}
+
+// countSetCompletion groups cards by set and returns how many sets are fully owned and the total set count.
+func countSetCompletion(cards []model.Card, quantities map[int64]int) (int, int) {
+	type setInfo struct {
+		total int
+		owned int
+	}
+	setMap := map[int64]*setInfo{}
+	for _, c := range cards {
+		if c.Set == nil {
+			continue
+		}
+		if _, ok := setMap[c.Set.ID]; !ok {
+			setMap[c.Set.ID] = &setInfo{}
+		}
+		setMap[c.Set.ID].total++
+		if quantities[c.ID] > 0 {
+			setMap[c.Set.ID].owned++
+		}
+	}
+	completeSets := 0
+	for _, si := range setMap {
+		if si.total > 0 && si.owned >= si.total {
+			completeSets++
+		}
+	}
+	return completeSets, len(setMap)
+}
+
+func (m *Model) collectGameStats(userID, gameID int64) GameStats {
+	stats := GameStats{}
+	quantities, err := m.collectionService.GetAllQuantitiesForGame(userID, gameID)
+	if err != nil {
+		slog.Error("failed to load quantities for stats", "game_id", gameID, "error", err)
+	} else {
+		stats.TotalCardsOwned = sumQuantities(quantities)
+	}
+	value, err := m.collectionService.GetCollectionValue(userID, gameID)
+	if err != nil {
+		slog.Error("failed to load collection value for stats", "game_id", gameID, "error", err)
+	} else {
+		stats.CollectionValue = value
+	}
+	lists, err := m.listService.GetListsByUserAndGame(userID, gameID)
+	if err != nil {
+		slog.Error("failed to load lists for stats", "game_id", gameID, "error", err)
+	} else {
+		stats.ListCount = len(lists)
+	}
+	decks, err := m.deckService.GetDecksByUserAndGame(userID, gameID)
+	if err != nil {
+		slog.Error("failed to load decks for stats", "game_id", gameID, "error", err)
+	} else {
+		stats.DeckCount = len(decks)
+	}
+	cards, err := m.cardService.GetCardsByGameID(gameID)
+	if err != nil {
+		slog.Error("failed to load cards for stats", "game_id", gameID, "error", err)
+	} else if quantities != nil {
+		stats.SetsComplete, stats.TotalSets = countSetCompletion(cards, quantities)
+	}
+	return stats
+}
+
 // loadGameStatsCmd loads stats for a given card game asynchronously.
 func (m *Model) loadGameStatsCmd(gameID int64) tea.Cmd {
-	userID := int64(0)
-	if m.user != nil {
-		userID = m.user.ID
+	if m.user == nil {
+		return func() tea.Msg { return gameStatsMsg{gameID: gameID, stats: GameStats{}} }
 	}
-	collectionSvc := m.collectionService
-	listSvc := m.listService
-	deckSvc := m.deckService
-	cardSvc := m.cardService
-
+	userID := m.user.ID
 	return func() tea.Msg {
-		stats := GameStats{}
-
-		// Total cards owned (sum of quantities)
-		if userID != 0 {
-			quantities, err := collectionSvc.GetAllQuantitiesForGame(userID, gameID)
-			if err != nil {
-				slog.Error("failed to load quantities for stats", "game_id", gameID, "error", err)
-			} else {
-				total := 0
-				for _, qty := range quantities {
-					total += qty
-				}
-				stats.TotalCardsOwned = total
-			}
-
-			// Collection value
-			value, err := collectionSvc.GetCollectionValue(userID, gameID)
-			if err != nil {
-				slog.Error("failed to load collection value for stats", "game_id", gameID, "error", err)
-			} else {
-				stats.CollectionValue = value
-			}
-
-			// List count
-			lists, err := listSvc.GetListsByUserAndGame(userID, gameID)
-			if err != nil {
-				slog.Error("failed to load lists for stats", "game_id", gameID, "error", err)
-			} else {
-				stats.ListCount = len(lists)
-			}
-
-			// Deck count
-			decks, err := deckSvc.GetDecksByUserAndGame(userID, gameID)
-			if err != nil {
-				slog.Error("failed to load decks for stats", "game_id", gameID, "error", err)
-			} else {
-				stats.DeckCount = len(decks)
-			}
-
-			// Set completion: count cards grouped by set, compare owned vs total per set
-			cards, err := cardSvc.GetCardsByGameID(gameID)
-			if err != nil {
-				slog.Error("failed to load cards for stats", "game_id", gameID, "error", err)
-			} else if quantities != nil {
-				// Build a set -> total cards map and owned set tracker
-				type setInfo struct {
-					total int
-					owned int
-				}
-				setMap := map[int64]*setInfo{}
-				for _, c := range cards {
-					if c.Set != nil {
-						if _, ok := setMap[c.Set.ID]; !ok {
-							setMap[c.Set.ID] = &setInfo{}
-						}
-						setMap[c.Set.ID].total++
-						if quantities[c.ID] > 0 {
-							setMap[c.Set.ID].owned++
-						}
-					}
-				}
-				totalSets := len(setMap)
-				completeSets := 0
-				for _, si := range setMap {
-					if si.total > 0 && si.owned >= si.total {
-						completeSets++
-					}
-				}
-				stats.TotalSets = totalSets
-				stats.SetsComplete = completeSets
-			}
-		}
-
-		return gameStatsMsg{gameID: gameID, stats: stats}
+		return gameStatsMsg{gameID: gameID, stats: m.collectGameStats(userID, gameID)}
 	}
 }

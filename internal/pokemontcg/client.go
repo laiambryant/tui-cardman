@@ -7,10 +7,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/laiambryant/tcgdex"
-	"github.com/laiambryant/tcgdex/client"
-	tcgdexModels "github.com/laiambryant/tcgdex/models"
-	"github.com/laiambryant/tcgdex/query"
+	tcgdex "github.com/laiambryant/tcgdex-sdk-go"
+	"github.com/laiambryant/tcgdex-sdk-go/client"
+	tcgdexModels "github.com/laiambryant/tcgdex-sdk-go/models"
+	"github.com/laiambryant/tcgdex-sdk-go/query"
 	"golang.org/x/time/rate"
 )
 

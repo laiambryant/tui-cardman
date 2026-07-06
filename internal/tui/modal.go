@@ -101,7 +101,7 @@ func (m ModalModel) View() string {
 		return m.renderModalBox()
 	}
 	header := m.styleManager.GetTitleStyle().Render(m.title)
-	footer := m.styleManager.GetBlurredStyle().Render("← → to select • enter to confirm • esc to cancel")
+	footer := m.styleManager.GetBlurredStyle().Render(joinHelp("←/→: Select", "Enter: Confirm", "Esc: Cancel"))
 	layout := calculateFrameLayout(lipgloss.Height(header), lipgloss.Height(footer), m.width, m.height)
 	body := m.renderModalBody(layout.ContentWidth, layout.BodyContentHeight)
 	return renderFramedViewWithLayout(header, body, footer, layout, m.styleManager)
@@ -126,7 +126,7 @@ func (m ModalModel) createButtonStyle(focused bool) lipgloss.Style {
 		s := m.styleManager.GetFocusedStyle().Border(lipgloss.RoundedBorder()).BorderForeground(m.styleManager.scheme.Focused).Padding(0, 2).Bold(true)
 		return m.styleManager.applyBGFG(s)
 	}
-	s := m.styleManager.GetBlurredStyle().Border(lipgloss.RoundedBorder()).BorderForeground(m.styleManager.scheme.Blurred).Padding(0, 2)
+	s := m.styleManager.GetBlurredStyle().Border(lipgloss.RoundedBorder()).BorderForeground(m.styleManager.scheme.Subtle).Padding(0, 2)
 	return m.styleManager.applyBGFG(s)
 }
 
