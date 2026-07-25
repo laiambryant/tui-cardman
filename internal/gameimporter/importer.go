@@ -42,6 +42,7 @@ type ImportRunner interface {
 // Base implements GameImporter for any game given an ImportRunner, a set
 // service and a game-specific set fetcher.
 type Base struct {
+	CardGameID  int64
 	Runner      ImportRunner
 	SetService  sets.SetService
 	FetchSetsFn func(ctx context.Context) ([]GameSet, error)
@@ -52,7 +53,7 @@ func (b *Base) FetchSets(ctx context.Context) ([]GameSet, error) {
 }
 
 func (b *Base) GetImportedSetIDs(ctx context.Context) (map[string]bool, error) {
-	apiIDs, err := b.SetService.GetAllSetAPIIDs(ctx)
+	apiIDs, err := b.SetService.GetAllSetAPIIDs(ctx, b.CardGameID)
 	if err != nil {
 		return nil, err
 	}
@@ -64,11 +65,11 @@ func (b *Base) GetImportedSetIDs(ctx context.Context) (map[string]bool, error) {
 }
 
 func (b *Base) GetImportedSetCounts(ctx context.Context) (map[string]int, error) {
-	return b.SetService.GetAllSetAPIIDsWithCounts(ctx)
+	return b.SetService.GetAllSetAPIIDsWithCounts(ctx, b.CardGameID)
 }
 
 func (b *Base) CheckSetInDB(ctx context.Context, apiID string) (bool, bool, error) {
-	dbSetID, err := b.SetService.GetSetIDByAPIID(ctx, apiID)
+	dbSetID, err := b.SetService.GetSetIDByAPIID(ctx, b.CardGameID, apiID)
 	if err == sql.ErrNoRows {
 		return false, false, nil
 	}

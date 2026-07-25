@@ -36,9 +36,6 @@ WORKDIR /app
 # Copy binary
 COPY --from=builder /build/cardman /usr/local/bin/cardman
 
-# Copy runtime migration files required on startup
-COPY --from=builder /build/internal/db/migrations /app/internal/db/migrations
-
 # Data directory for SQLite database and config
 RUN mkdir -p /app/data && chown cardman:cardman /app/data
 

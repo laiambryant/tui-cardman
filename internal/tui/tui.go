@@ -129,7 +129,10 @@ func NewModel(db *sql.DB, isSSHMode bool) (*Model, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to load card games: %w", err)
 	}
-	importers := initImporters(db, cardGames, slog.Default())
+	importers, err := initImporters(db, cardGames, slog.Default())
+	if err != nil {
+		return nil, err
+	}
 	m := &Model{
 		authService:       authSvc,
 		userService:       userService,
@@ -179,7 +182,7 @@ func NewModel(db *sql.DB, isSSHMode bool) (*Model, error) {
 }
 
 // initImporters constructs game-specific importers keyed by card game DB ID.
-func initImporters(db *sql.DB, cardGames []model.CardGame, logger *slog.Logger) map[int64]gameimporter.GameImporter {
+func initImporters(db *sql.DB, cardGames []model.CardGame, logger *slog.Logger) (map[int64]gameimporter.GameImporter, error) {
 	importers := make(map[int64]gameimporter.GameImporter)
 
 	setService := sets.NewSetService(db)
@@ -192,29 +195,41 @@ func initImporters(db *sql.DB, cardGames []model.CardGame, logger *slog.Logger) 
 	pokemonCardSvc := pokemoncard.NewPokemonCardService(db)
 	tcgPriceSvc := prices.NewTCGPlayerPriceService(db)
 	cmPriceSvc := prices.NewCardMarketPriceService(db)
-	ptcgService := pokemontcg.NewImportService(db, ptcgClient, logger,
+	ptcgService, err := pokemontcg.NewImportService(db, ptcgClient, logger,
 		importRunService, setService, cardService,
 		tcgPriceSvc, cmPriceSvc, pokemonCardSvc)
+	if err != nil {
+		return nil, fmt.Errorf("initialize Pokemon importer: %w", err)
+	}
 	ptcgImporter := pokemontcg.NewPokemonGameImporter(ptcgClient, ptcgService, setService)
 
 	// Yu-Gi-Oh!
 	ygoClient := yugioh.NewClient()
 	yugiohCardSvc := yugiohcard.NewYuGiOhCardService(db)
-	ygoService := yugioh.NewImportService(db, ygoClient, logger,
+	ygoService, err := yugioh.NewImportService(db, ygoClient, logger,
 		importRunService, setService, cardService, yugiohCardSvc)
+	if err != nil {
+		return nil, fmt.Errorf("initialize Yu-Gi-Oh! importer: %w", err)
+	}
 	ygoImporter := yugioh.NewYuGiOhGameImporter(ygoClient, ygoService, setService)
 
 	// Magic: The Gathering
 	mtgClient := mtg.NewClient()
 	mtgCardSvc := mtgcard.NewMTGCardService(db)
-	mtgService := mtg.NewImportService(db, mtgClient, logger,
+	mtgService, err := mtg.NewImportService(db, mtgClient, logger,
 		importRunService, setService, cardService, mtgCardSvc)
+	if err != nil {
+		return nil, fmt.Errorf("initialize MTG importer: %w", err)
+	}
 	mtgImporter := mtg.NewMTGGameImporter(mtgClient, mtgService, setService)
 
 	opClient := onepiece.NewClient()
 	opCardSvc := onepiececard.NewOnePieceCardService(db)
-	opService := onepiece.NewImportService(db, opClient, logger,
+	opService, err := onepiece.NewImportService(db, opClient, logger,
 		importRunService, setService, cardService, opCardSvc)
+	if err != nil {
+		return nil, fmt.Errorf("initialize One Piece importer: %w", err)
+	}
 	opImporter := onepiece.NewOnePieceGameImporter(opClient, opService, setService)
 
 	for i := range cardGames {
@@ -230,7 +245,7 @@ func initImporters(db *sql.DB, cardGames []model.CardGame, logger *slog.Logger) 
 			importers[g.ID] = opImporter
 		}
 	}
-	return importers
+	return importers, nil
 }
 
 func initServices(db *sql.DB) (user.UserService, cardgame.CardGameService, card.CardService, usercollection.UserCollectionService, listservice.ListService, deck.DeckService, prices.TCGPlayerPriceService, prices.CardMarketPriceService, *auth.Service) {
@@ -537,9 +552,10 @@ func (m *Model) handleMainScreenSelect() (tea.Model, tea.Cmd) {
 	}
 	// Right panel: navigate to selected mode for the currently highlighted/selected game
 	if m.mainFocusPanel == 1 {
-		// Use selectedGame if set, otherwise use cursor game
+		// The mode panel belongs to the game currently highlighted in the left
+		// panel. selectedGame may still refer to a game visited previously.
 		game := m.selectedGame
-		if game == nil && len(m.cardGames) > 0 && m.cursor < len(m.cardGames) {
+		if len(m.cardGames) > 0 && m.cursor < len(m.cardGames) {
 			game = &m.cardGames[m.cursor]
 			m.selectedGame = game
 		}
@@ -552,6 +568,7 @@ func (m *Model) handleMainScreenSelect() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) navigateToMode(game *model.CardGame, modeIdx int) (tea.Model, tea.Cmd) {
+	m.selectedGame = game
 	switch CardGameMenuOption(modeIdx) {
 	case MenuMyCollection:
 		cardGameTabs, err := m.createCardGameTabsModel(game)

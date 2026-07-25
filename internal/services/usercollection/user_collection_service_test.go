@@ -35,8 +35,8 @@ func setupTestData(t *testing.T, db *sql.DB) (userID, gameID, cardID int64) {
 
 	// Create a test set
 	var setID int64
-	result, err = db.Exec(`INSERT INTO sets (api_id, name) VALUES (?, ?)`,
-		"base1", "Base Set")
+	result, err = db.Exec(`INSERT INTO sets (card_game_id, api_id, name) VALUES (?, ?, ?)`,
+		gameID, "base1", "Base Set")
 	require.NoError(t, err)
 	setID, err = result.LastInsertId()
 	require.NoError(t, err)
@@ -192,8 +192,8 @@ func TestGetUserCollectionByGameID_FiltersByGame(t *testing.T) {
 	err := db.QueryRow(`SELECT id FROM card_games WHERE name = ?`, "Magic: The Gathering").Scan(&gameID2)
 	require.NoError(t, err)
 
-	result, err := db.Exec(`INSERT INTO sets (api_id, name) VALUES (?, ?)`,
-		"alpha", "Alpha")
+	result, err := db.Exec(`INSERT INTO sets (card_game_id, api_id, name) VALUES (?, ?, ?)`,
+		gameID2, "alpha", "Alpha")
 	require.NoError(t, err)
 	setID2, err := result.LastInsertId()
 	require.NoError(t, err)
@@ -263,8 +263,8 @@ func TestCreateSampleCollectionData(t *testing.T) {
 	gameID1, err := result.LastInsertId()
 	require.NoError(t, err)
 
-	result, err = db.Exec(`INSERT INTO sets (api_id, name) VALUES (?, ?)`,
-		"base1", "Base Set")
+	result, err = db.Exec(`INSERT INTO sets (card_game_id, api_id, name) VALUES (?, ?, ?)`,
+		gameID1, "base1", "Base Set")
 	require.NoError(t, err)
 	setID1, err := result.LastInsertId()
 	require.NoError(t, err)
@@ -283,8 +283,8 @@ func TestCreateSampleCollectionData(t *testing.T) {
 	err = db.QueryRow(`SELECT id FROM card_games WHERE name = ?`, "Magic: The Gathering").Scan(&gameID2)
 	require.NoError(t, err)
 
-	result, err = db.Exec(`INSERT INTO sets (api_id, name) VALUES (?, ?)`,
-		"alpha", "Alpha")
+	result, err = db.Exec(`INSERT INTO sets (card_game_id, api_id, name) VALUES (?, ?, ?)`,
+		gameID2, "alpha", "Alpha")
 	require.NoError(t, err)
 	setID2, err := result.LastInsertId()
 	require.NoError(t, err)
@@ -302,8 +302,8 @@ func TestCreateSampleCollectionData(t *testing.T) {
 	err = db.QueryRow(`SELECT id FROM card_games WHERE name = ?`, "Yu-Gi-Oh!").Scan(&gameID3)
 	require.NoError(t, err)
 
-	result, err = db.Exec(`INSERT INTO sets (api_id, name) VALUES (?, ?)`,
-		"lob", "Legend of Blue Eyes")
+	result, err = db.Exec(`INSERT INTO sets (card_game_id, api_id, name) VALUES (?, ?, ?)`,
+		gameID3, "lob", "Legend of Blue Eyes")
 	require.NoError(t, err)
 	setID3, err := result.LastInsertId()
 	require.NoError(t, err)

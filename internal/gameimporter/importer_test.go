@@ -2,6 +2,7 @@ package gameimporter
 
 import (
 	"context"
+	"database/sql"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -12,19 +13,23 @@ type mockSetService struct {
 	counts map[string]int
 }
 
-func (m *mockSetService) GetSetIDByAPIID(_ context.Context, apiID string) (int64, error) {
+func (m *mockSetService) GetSetIDByAPIID(_ context.Context, _ int64, apiID string) (int64, error) {
 	return 0, nil
 }
 
-func (m *mockSetService) UpsertSet(_ context.Context, _, _, _ string, _, _ int) (int64, error) {
+func (m *mockSetService) UpsertSet(_ context.Context, _ int64, _, _, _ string, _, _ int) (int64, error) {
 	return 1, nil
 }
 
-func (m *mockSetService) GetAllSetAPIIDs(_ context.Context) ([]string, error) {
+func (m *mockSetService) UpsertSetTx(_ context.Context, _ *sql.Tx, _ int64, _, _, _ string, _, _ int) (int64, error) {
+	return 1, nil
+}
+
+func (m *mockSetService) GetAllSetAPIIDs(_ context.Context, _ int64) ([]string, error) {
 	return m.apiIDs, nil
 }
 
-func (m *mockSetService) GetAllSetAPIIDsWithCounts(_ context.Context) (map[string]int, error) {
+func (m *mockSetService) GetAllSetAPIIDsWithCounts(_ context.Context, _ int64) (map[string]int, error) {
 	return m.counts, nil
 }
 

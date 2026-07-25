@@ -147,22 +147,34 @@ func buildImporterForGame(database *sql.DB, gameName string, cfg config.Config) 
 		tcgSvc := prices.NewTCGPlayerPriceService(database)
 		cmSvc := prices.NewCardMarketPriceService(database)
 		pokSvc := pokemoncard.NewPokemonCardService(database)
-		svc := pokemontcg.NewImportService(database, client, logger, importRunSvc, setSvc, cardSvc, tcgSvc, cmSvc, pokSvc)
+		svc, err := pokemontcg.NewImportService(database, client, logger, importRunSvc, setSvc, cardSvc, tcgSvc, cmSvc, pokSvc)
+		if err != nil {
+			return nil, fmt.Errorf("initialize Pokemon importer: %w", err)
+		}
 		return pokemontcg.NewPokemonGameImporter(client, svc, setSvc), nil
 	case "Magic: The Gathering":
 		client := mtg.NewClient()
 		mtgSvc := mtgcard.NewMTGCardService(database)
-		svc := mtg.NewImportService(database, client, logger, importRunSvc, setSvc, cardSvc, mtgSvc)
+		svc, err := mtg.NewImportService(database, client, logger, importRunSvc, setSvc, cardSvc, mtgSvc)
+		if err != nil {
+			return nil, fmt.Errorf("initialize MTG importer: %w", err)
+		}
 		return mtg.NewMTGGameImporter(client, svc, setSvc), nil
 	case "Yu-Gi-Oh!":
 		client := yugioh.NewClient()
 		ygoSvc := yugiohcard.NewYuGiOhCardService(database)
-		svc := yugioh.NewImportService(database, client, logger, importRunSvc, setSvc, cardSvc, ygoSvc)
+		svc, err := yugioh.NewImportService(database, client, logger, importRunSvc, setSvc, cardSvc, ygoSvc)
+		if err != nil {
+			return nil, fmt.Errorf("initialize Yu-Gi-Oh! importer: %w", err)
+		}
 		return yugioh.NewYuGiOhGameImporter(client, svc, setSvc), nil
 	case "One Piece":
 		client := onepiece.NewClient()
 		opSvc := onepiececard.NewOnePieceCardService(database)
-		svc := onepiece.NewImportService(database, client, logger, importRunSvc, setSvc, cardSvc, opSvc)
+		svc, err := onepiece.NewImportService(database, client, logger, importRunSvc, setSvc, cardSvc, opSvc)
+		if err != nil {
+			return nil, fmt.Errorf("initialize One Piece importer: %w", err)
+		}
 		return onepiece.NewOnePieceGameImporter(client, svc, setSvc), nil
 	default:
 		return nil, fmt.Errorf("unknown game: %q (try: pokemon, mtg, yugioh, onepiece)", gameName)

@@ -35,12 +35,12 @@ func setupCardTestData(t *testing.T, db *sql.DB) (gameID1, gameID2, setID1, setI
 	require.NoError(t, err)
 
 	// Create sets
-	result, err := db.Exec(`INSERT INTO sets (api_id, code, name) VALUES (?, ?, ?)`, "base1", "base1", "Base Set")
+	result, err := db.Exec(`INSERT INTO sets (card_game_id, api_id, code, name) VALUES (?, ?, ?, ?)`, gameID1, "base1", "base1", "Base Set")
 	require.NoError(t, err)
 	setID1, err = result.LastInsertId()
 	require.NoError(t, err)
 
-	result, err = db.Exec(`INSERT INTO sets (api_id, code, name) VALUES (?, ?, ?)`, "jungle", "jungle", "Jungle")
+	result, err = db.Exec(`INSERT INTO sets (card_game_id, api_id, code, name) VALUES (?, ?, ?, ?)`, gameID1, "jungle", "jungle", "Jungle")
 	require.NoError(t, err)
 	setID2, err = result.LastInsertId()
 	require.NoError(t, err)
@@ -655,7 +655,7 @@ func TestGetCardByGameAndSetCodeAndNumber(t *testing.T) {
 
 	gameID1, gameID2, setID1, _ := setupCardTestData(t, db)
 
-	result, err := db.Exec(`INSERT INTO sets (api_id, name, code) VALUES (?, ?, ?)`, "base1-mtg", "Base Set MTG", "base1")
+	result, err := db.Exec(`INSERT INTO sets (card_game_id, api_id, name, code) VALUES (?, ?, ?, ?)`, gameID2, "base1-mtg", "Base Set MTG", "base1")
 	require.NoError(t, err)
 	setID2, err := result.LastInsertId()
 	require.NoError(t, err)

@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"embed"
 	"fmt"
@@ -114,9 +115,31 @@ func applyMigration(db *sql.DB, m migration) error {
 	if err != nil {
 		return err
 	}
-	tx, err := db.Begin()
+	foreignKeysOff := strings.Contains(string(content), "-- cardman:foreign_keys_off")
+	var (
+		tx   *sql.Tx
+		conn *sql.Conn
+	)
+	if foreignKeysOff {
+		conn, err = db.Conn(context.Background())
+		if err != nil {
+			return fmt.Errorf("open dedicated migration connection: %w", err)
+		}
+		defer conn.Close()
+		if _, err = conn.ExecContext(context.Background(), "PRAGMA foreign_keys = OFF"); err != nil {
+			return fmt.Errorf("disable foreign keys for %s: %w", m.path, err)
+		}
+		defer func() {
+			if _, pragmaErr := conn.ExecContext(context.Background(), "PRAGMA foreign_keys = ON"); pragmaErr != nil {
+				slog.Error("failed to restore foreign key enforcement", "migration", m.path, "error", pragmaErr)
+			}
+		}()
+		tx, err = conn.BeginTx(context.Background(), nil)
+	} else {
+		tx, err = db.Begin()
+	}
 	if err != nil {
-		return err
+		return fmt.Errorf("begin migration %s: %w", m.path, err)
 	}
 	defer func() {
 		if err := tx.Rollback(); err != nil && err != sql.ErrTxDone {
@@ -128,6 +151,11 @@ func applyMigration(db *sql.DB, m migration) error {
 	if _, err := tx.Exec(string(content)); err != nil {
 		slog.Debug("tx exec failed", "version", m.version, "err", err)
 		return fmt.Errorf("apply %s: %w", m.path, err)
+	}
+	if foreignKeysOff {
+		if err := verifyForeignKeys(tx); err != nil {
+			return fmt.Errorf("verify %s: %w", m.path, err)
+		}
 	}
 	slog.Debug("tx exec", "query", logging.SanitizeQuery(recordMigration), "args", []any{m.version, time.Now().UTC()})
 	if _, err := tx.Exec(recordMigration, m.version, time.Now().UTC()); err != nil {
@@ -141,6 +169,27 @@ func applyMigration(db *sql.DB, m migration) error {
 	slog.Debug("tx commit", "version", m.version)
 	slog.Debug("migration applied successfully", "version", m.version)
 	return nil
+}
+
+func verifyForeignKeys(tx *sql.Tx) error {
+	rows, err := tx.Query("PRAGMA foreign_key_check")
+	if err != nil {
+		return fmt.Errorf("run foreign key check: %w", err)
+	}
+	defer rows.Close()
+	if !rows.Next() {
+		return rows.Err()
+	}
+	var (
+		table  string
+		rowID  sql.NullInt64
+		parent string
+		fkID   int
+	)
+	if err := rows.Scan(&table, &rowID, &parent, &fkID); err != nil {
+		return fmt.Errorf("scan foreign key violation: %w", err)
+	}
+	return fmt.Errorf("foreign key violation in table %s row %v referencing %s (constraint %d)", table, rowID, parent, fkID)
 }
 
 type migration struct {

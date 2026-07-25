@@ -33,7 +33,7 @@ func NewImportService(
 	setService sets.SetService,
 	cardService card.CardService,
 	opCardSvc onepiececard.OnePieceCardService,
-) *ImportService {
+) (*ImportService, error) {
 	svc := &ImportService{
 		db:               db,
 		client:           client,
@@ -44,9 +44,9 @@ func NewImportService(
 		opCardSvc:        opCardSvc,
 	}
 	if err := svc.initGameID(context.Background()); err != nil {
-		logger.Error("failed to initialize One Piece game ID", "error", err)
+		return nil, err
 	}
-	return svc
+	return svc, nil
 }
 
 func (s *ImportService) initGameID(ctx context.Context) error {
@@ -66,35 +66,29 @@ func (s *ImportService) ImportSet(ctx context.Context, set OPSet) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	setID, err := s.setService.UpsertSet(ctx, set.SetID, set.SetID, set.SetName, len(cards), len(cards))
-	if err != nil {
-		return 0, fmt.Errorf("failed to upsert set %s: %w", set.SetID, err)
-	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer func() {
-		if rollbackErr := tx.Rollback(); rollbackErr != nil && err == nil {
-			err = rollbackErr
-		}
-	}()
-	cardsImported := 0
+	defer tx.Rollback()
+
+	setID, err := s.setService.UpsertSetTx(ctx, tx, s.opGameID, set.SetID, set.SetID, set.SetName, len(cards), len(cards))
+	if err != nil {
+		return 0, fmt.Errorf("failed to upsert set %s: %w", set.SetID, err)
+	}
 	for _, c := range cards {
-		if upsertErr := s.upsertCardTx(ctx, tx, c, setID); upsertErr != nil {
-			s.logger.Error("failed to upsert One Piece card", "card_set_id", c.CardSetID, "name", c.CardName, "error", upsertErr)
-			continue
+		if err := s.upsertCardTx(ctx, tx, c, setID); err != nil {
+			return 0, fmt.Errorf("failed to upsert One Piece card %s in set %s: %w", c.CardSetID, set.SetID, err)
 		}
-		cardsImported++
 	}
 	if err = tx.Commit(); err != nil {
-		return cardsImported, fmt.Errorf("failed to commit set transaction for %s: %w", set.SetID, err)
+		return 0, fmt.Errorf("failed to commit set transaction for %s: %w", set.SetID, err)
 	}
-	if cardsImported == 0 {
+	if len(cards) == 0 {
 		s.logger.Warn("One Piece set import completed with zero cards", "set_id", set.SetID)
 	}
-	s.logger.Info("completed One Piece set import", "set_id", set.SetID, "total_cards", cardsImported)
-	return cardsImported, nil
+	s.logger.Info("completed One Piece set import", "set_id", set.SetID, "total_cards", len(cards))
+	return len(cards), nil
 }
 
 func (s *ImportService) upsertCardTx(ctx context.Context, tx *sql.Tx, c OPCard, setID int64) error {
@@ -174,7 +168,7 @@ func (s *ImportService) ImportNewSets(ctx context.Context) error {
 		_ = s.importRunService.UpdateImportRun(ctx, runID, "failed", 0, 0, 1, fmt.Sprintf("failed to fetch sets: %v", err))
 		return fmt.Errorf("failed to fetch One Piece sets: %w", err)
 	}
-	existing, err := s.setService.GetAllSetAPIIDs(ctx)
+	existing, err := s.setService.GetAllSetAPIIDs(ctx, s.opGameID)
 	if err != nil {
 		_ = s.importRunService.UpdateImportRun(ctx, runID, "failed", 0, 0, 1, fmt.Sprintf("failed to query existing sets: %v", err))
 		return fmt.Errorf("failed to query existing sets: %w", err)
@@ -233,7 +227,7 @@ func (s *ImportService) ImportSpecificSets(ctx context.Context, setIDs []string)
 }
 
 func (s *ImportService) DeleteSetByAPIID(ctx context.Context, setID string) error {
-	dbSetID, err := s.setService.GetSetIDByAPIID(ctx, setID)
+	dbSetID, err := s.setService.GetSetIDByAPIID(ctx, s.opGameID, setID)
 	if err == sql.ErrNoRows {
 		s.logger.Debug("One Piece set not in database, nothing to delete", "set_id", setID)
 		return nil

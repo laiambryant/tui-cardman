@@ -41,12 +41,16 @@ func buildImportService() (*importDeps, error) {
 	cardMarketPriceService := prices.NewCardMarketPriceService(database)
 
 	pokemonCardService := pokemoncard.NewPokemonCardService(database)
-	importService := pokemontcg.NewImportService(
+	importService, err := pokemontcg.NewImportService(
 		database, client, logger,
 		importRunService, setService, cardService,
 		tcgPlayerPriceService, cardMarketPriceService,
 		pokemonCardService,
 	)
+	if err != nil {
+		runtime.Close()
+		return nil, err
+	}
 
 	return &importDeps{
 		runtime:       runtime,

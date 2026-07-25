@@ -71,6 +71,8 @@ type CardGameTabsModel struct {
 	collectionCache      *SearchCache
 	cardPagination       Pagination
 	collectionPagination Pagination
+	mutationPending      bool
+	mutationStatus       string
 }
 
 // NewCardGameTabsModel creates a new card game tabs model
@@ -304,7 +306,12 @@ func (m CardGameTabsModel) Update(msg tea.Msg) (CardGameTabsModel, tea.Cmd) {
 		return m, nil
 	case saveCollectionMsg:
 		return m.performSaveCollection()
+	case collectionMutationMsg:
+		return m.handleCollectionMutation(msg)
 	case tea.KeyMsg:
+		if m.mutationPending {
+			return m, nil
+		}
 		s := msg.String()
 		action := MatchActionOrDefault(m.configManager, s, "")
 		if action == "quit" || s == "ctrl+c" {
@@ -566,6 +573,9 @@ func (m CardGameTabsModel) renderCardGameTabsFooter() string {
 	footer := m.styleManager.GetHelpStyle().Render(m.buildHelpText())
 	if m.exportState.statusMsg != "" {
 		footer = m.styleManager.GetHelpStyle().Render(m.exportState.statusMsg) + "  " + footer
+	}
+	if m.mutationStatus != "" {
+		footer = m.styleManager.GetHelpStyle().Render(m.mutationStatus) + "  " + footer
 	}
 	return footer
 }
@@ -855,16 +865,33 @@ func (m CardGameTabsModel) handleSaveCollection() (CardGameTabsModel, tea.Cmd) {
 	return m, nil
 }
 
-type saveCollectionMsg struct{}
+type (
+	saveCollectionMsg     struct{}
+	collectionMutationMsg struct {
+		err     error
+		updates map[int64]int
+	}
+)
 
 func (m CardGameTabsModel) performSaveCollection() (CardGameTabsModel, tea.Cmd) {
 	updates := m.quantities.buildUpdates()
-	ctx := context.Background()
-	err := m.collectionService.UpsertCollectionBatch(ctx, m.user.ID, updates)
-	if err != nil {
+	userID := m.user.ID
+	service := m.collectionService
+	m.mutationPending = true
+	m.mutationStatus = "Saving collection..."
+	return m, func() tea.Msg {
+		err := service.UpsertCollectionBatch(context.Background(), userID, updates)
+		return collectionMutationMsg{err: err, updates: updates}
+	}
+}
+
+func (m CardGameTabsModel) handleCollectionMutation(msg collectionMutationMsg) (CardGameTabsModel, tea.Cmd) {
+	m.mutationPending = false
+	if msg.err != nil {
+		m.mutationStatus = fmt.Sprintf("Failed to save collection: %v", msg.err)
 		return m, nil
 	}
-	m.quantities.commit(updates)
+	m.quantities.commit(msg.updates)
 	m.searchCache.Invalidate()
 	m.collectionCache.Invalidate()
 	m.updateCardTable()
@@ -877,6 +904,7 @@ func (m CardGameTabsModel) performSaveCollection() (CardGameTabsModel, tea.Cmd) 
 			m.computeCollectionStats()
 		}
 	}
+	m.mutationStatus = "Collection saved"
 	return m, nil
 }
 

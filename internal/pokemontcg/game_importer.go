@@ -10,6 +10,7 @@ import (
 // NewPokemonGameImporter creates a gameimporter.GameImporter for Pokemon TCG.
 func NewPokemonGameImporter(client *Client, service *ImportService, setService sets.SetService) *gameimporter.Base {
 	return &gameimporter.Base{
+		CardGameID: service.pokemonGameID,
 		Runner:     service,
 		SetService: setService,
 		FetchSetsFn: func(ctx context.Context) ([]gameimporter.GameSet, error) {

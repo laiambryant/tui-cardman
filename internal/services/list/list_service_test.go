@@ -35,7 +35,7 @@ func seedListTestData(t *testing.T, db *sql.DB) (userID, cardGameID, cardID1, ca
 
 	// Insert a set (real schema: api_id, code, name, printed_total, total, symbol_url, logo_url, updated_at)
 	var setID int64
-	res, err = db.Exec(`INSERT INTO sets (api_id, name) VALUES ('base1', 'Base Set')`)
+	res, err = db.Exec(`INSERT INTO sets (card_game_id, api_id, name) VALUES (?, 'base1', 'Base Set')`, cardGameID)
 	require.NoError(t, err)
 	setID, err = res.LastInsertId()
 	require.NoError(t, err)

@@ -1,0 +1,2 @@
+-- This migration intentionally has no automatic down migration. Collapsing
+-- per-game sets can lose data when two games use the same API set identifier.

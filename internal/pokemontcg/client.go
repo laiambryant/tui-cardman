@@ -4,7 +4,6 @@ package pokemontcg
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"time"
 
@@ -99,8 +98,7 @@ func (c *Client) GetCardsForSet(ctx context.Context, setID string, page int) (*P
 		}
 		fullCard, err := c.sdk.Card.Get(ctx, tcgdexCard.ID)
 		if err != nil {
-			slog.Warn("skipping card: failed to fetch details", "card_id", tcgdexCard.ID, "set_id", setID, "error", err)
-			continue
+			return nil, nil, fmt.Errorf("fetch card %s details for set %s: %w", tcgdexCard.ID, setID, err)
 		}
 		cards = append(cards, mapTCGDexCardToCard(fullCard))
 	}

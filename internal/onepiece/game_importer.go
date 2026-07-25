@@ -10,6 +10,7 @@ import (
 // NewOnePieceGameImporter creates a gameimporter.GameImporter for One Piece.
 func NewOnePieceGameImporter(client *Client, service *ImportService, setService sets.SetService) *gameimporter.Base {
 	return &gameimporter.Base{
+		CardGameID: service.opGameID,
 		Runner:     service,
 		SetService: setService,
 		FetchSetsFn: func(ctx context.Context) ([]gameimporter.GameSet, error) {

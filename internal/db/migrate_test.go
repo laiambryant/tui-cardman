@@ -239,3 +239,70 @@ func TestApplyEmbeddedMigrations(t *testing.T) {
 	err = ApplyEmbeddedMigrations(db)
 	require.NoError(t, err)
 }
+
+func TestScopeSetsMigrationSplitsSharedHistoricalSet(t *testing.T) {
+	db := testutil.SetupTestDB(t)
+	defer testutil.CleanupTestDB(t, db)
+
+	_, err := db.Exec(`
+		PRAGMA foreign_keys = ON;
+		CREATE TABLE schema_migrations (
+			version TEXT PRIMARY KEY,
+			applied_at DATETIME NOT NULL
+		);
+		CREATE TABLE card_games (
+			id INTEGER PRIMARY KEY,
+			name TEXT NOT NULL UNIQUE
+		);
+		CREATE TABLE sets (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			api_id TEXT UNIQUE NOT NULL,
+			code TEXT,
+			name TEXT NOT NULL,
+			printed_total INTEGER,
+			total INTEGER,
+			symbol_url TEXT,
+			logo_url TEXT,
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		);
+		CREATE TABLE cards (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			card_game_id INTEGER NOT NULL REFERENCES card_games(id),
+			name TEXT NOT NULL,
+			set_id INTEGER REFERENCES sets(id)
+		);
+		INSERT INTO card_games (id, name) VALUES
+			(1, 'Pokemon'),
+			(2, 'Magic: The Gathering');
+		INSERT INTO sets (id, api_id, code, name, total)
+			VALUES (10, 'shared', 'SH', 'Shared Set', 2);
+		INSERT INTO cards (card_game_id, name, set_id) VALUES
+			(1, 'Pokemon Card', 10),
+			(2, 'Magic Card', 10);
+	`)
+	require.NoError(t, err)
+
+	err = applyMigration(db, migration{
+		version: "022",
+		path:    "022_scope_sets_to_card_games.up.sql",
+		fsys:    os.DirFS("./migrations"),
+	})
+	require.NoError(t, err)
+
+	var setCount int
+	require.NoError(t, db.QueryRow("SELECT COUNT(*) FROM sets WHERE api_id = 'shared'").Scan(&setCount))
+	assert.Equal(t, 2, setCount)
+	var mismatches int
+	require.NoError(t, db.QueryRow(`
+		SELECT COUNT(*)
+		FROM cards c
+		JOIN sets s ON s.id = c.set_id
+		WHERE c.card_game_id != s.card_game_id
+	`).Scan(&mismatches))
+	assert.Zero(t, mismatches)
+	rows, err := db.Query("PRAGMA foreign_key_check")
+	require.NoError(t, err)
+	defer rows.Close()
+	assert.False(t, rows.Next())
+	require.NoError(t, rows.Err())
+}

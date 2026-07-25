@@ -69,12 +69,21 @@ type DeckBuilderModel struct {
 	importState       ImportState
 	searchCache       *SearchCache
 	cardPagination    Pagination
+	mutationPending   bool
+	mutationStatus    string
 }
 
 type (
-	saveDeckMsg   struct{}
-	createDeckMsg struct{}
-	deleteDeckMsg struct{}
+	saveDeckMsg     struct{}
+	createDeckMsg   struct{}
+	deleteDeckMsg   struct{}
+	deckMutationMsg struct {
+		operation string
+		err       error
+		updates   map[int64]int
+		deckID    int64
+		name      string
+	}
 )
 
 func NewDeckBuilderModel(game *model.CardGame, user *auth.User, deckService deck.DeckService, cardSvc cardservice.CardService, cards []model.Card, cfg *runtimecfg.Manager, sm *StyleManager) DeckBuilderModel {
@@ -171,9 +180,14 @@ func (m DeckBuilderModel) Update(msg tea.Msg) (DeckBuilderModel, tea.Cmd) {
 		return m.performCreateDeck()
 	case deleteDeckMsg:
 		return m.performDeleteDeck()
+	case deckMutationMsg:
+		return m.handleMutationResult(msg)
 	}
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		if m.mutationPending {
+			return m, nil
+		}
 		s := msg.String()
 		action := MatchActionOrDefault(m.configManager, s, "")
 		if action == "quit" || s == "ctrl+c" {
@@ -478,15 +492,14 @@ func (m DeckBuilderModel) performSave() (DeckBuilderModel, tea.Cmd) {
 		return m, nil
 	}
 	updates := m.quantities.buildUpdates()
-	ctx := context.Background()
-	err := m.deckService.UpsertDeckCardBatch(ctx, m.selectedDeck.ID, updates)
-	if err != nil {
-		return m, nil
+	deckID := m.selectedDeck.ID
+	service := m.deckService
+	m.mutationPending = true
+	m.mutationStatus = "Saving deck changes..."
+	return m, func() tea.Msg {
+		err := service.UpsertDeckCardBatch(context.Background(), deckID, updates)
+		return deckMutationMsg{operation: "save cards", err: err, updates: updates, deckID: deckID}
 	}
-	m.quantities.commit(updates)
-	m.searchCache.Invalidate()
-	m.updateCardTable()
-	return m, nil
 }
 
 func (m DeckBuilderModel) performCreateDeck() (DeckBuilderModel, tea.Cmd) {
@@ -494,53 +507,92 @@ func (m DeckBuilderModel) performCreateDeck() (DeckBuilderModel, tea.Cmd) {
 		return m, nil
 	}
 	name := m.nameInput.Value()
-	ctx := context.Background()
 	var editID int64
 	if m.mode == DeckModeEdit && m.selectedDeck != nil {
 		editID = m.selectedDeck.ID
-		_ = m.deckService.UpdateDeck(ctx, editID, name)
-	} else {
-		_, _ = m.deckService.CreateDeck(ctx, m.user.ID, m.selectedGame.ID, name)
 	}
-	m.mode = DeckModeNormal
-	m.nameInput.Blur()
-	m.refreshDecks()
+	userID := m.user.ID
+	gameID := m.selectedGame.ID
+	service := m.deckService
+	operation := "create deck"
 	if editID != 0 {
-		for i, d := range m.decks {
-			if d.ID == editID {
-				m.deckCursor = i
-				break
-			}
-		}
-	} else {
-		for i, d := range m.decks {
-			if d.Name == name {
-				m.deckCursor = i
-				break
-			}
-		}
+		operation = "update deck"
 	}
-	if len(m.decks) > 0 {
-		m.selectCurrentDeck()
+	m.mutationPending = true
+	m.mutationStatus = "Saving deck..."
+	return m, func() tea.Msg {
+		var err error
+		if editID != 0 {
+			err = service.UpdateDeck(context.Background(), editID, name)
+		} else {
+			_, err = service.CreateDeck(context.Background(), userID, gameID, name)
+		}
+		return deckMutationMsg{operation: operation, err: err, deckID: editID, name: name}
 	}
-	return m, nil
 }
 
 func (m DeckBuilderModel) performDeleteDeck() (DeckBuilderModel, tea.Cmd) {
 	if m.selectedDeck == nil {
 		return m, nil
 	}
-	ctx := context.Background()
-	_ = m.deckService.DeleteDeck(ctx, m.selectedDeck.ID)
-	m.selectedDeck = nil
-	m.quantities.reset()
+	deckID := m.selectedDeck.ID
+	service := m.deckService
+	m.mutationPending = true
+	m.mutationStatus = "Deleting deck..."
+	return m, func() tea.Msg {
+		err := service.DeleteDeck(context.Background(), deckID)
+		return deckMutationMsg{operation: "delete deck", err: err, deckID: deckID}
+	}
+}
+
+func (m DeckBuilderModel) handleMutationResult(msg deckMutationMsg) (DeckBuilderModel, tea.Cmd) {
+	m.mutationPending = false
+	if msg.err != nil {
+		m.mutationStatus = fmt.Sprintf("Failed to %s: %v", msg.operation, msg.err)
+		return m, nil
+	}
+
+	if msg.operation == "save cards" {
+		if m.selectedDeck != nil && m.selectedDeck.ID == msg.deckID {
+			m.quantities.commit(msg.updates)
+			m.searchCache.Invalidate()
+			m.updateCardTable()
+		}
+		m.mutationStatus = "Deck saved"
+		return m, nil
+	}
+
+	if msg.operation == "delete deck" && m.selectedDeck != nil && m.selectedDeck.ID == msg.deckID {
+		m.selectedDeck = nil
+		m.quantities.reset()
+	}
+	m.mode = DeckModeNormal
+	m.nameInput.Blur()
 	m.refreshDecks()
-	if m.deckCursor >= len(m.decks) && m.deckCursor > 0 {
-		m.deckCursor--
+	switch msg.operation {
+	case "update deck":
+		for i, d := range m.decks {
+			if d.ID == msg.deckID {
+				m.deckCursor = i
+				break
+			}
+		}
+	case "create deck":
+		for i, d := range m.decks {
+			if d.Name == msg.name {
+				m.deckCursor = i
+				break
+			}
+		}
+	case "delete deck":
+		if m.deckCursor >= len(m.decks) && m.deckCursor > 0 {
+			m.deckCursor--
+		}
 	}
 	if len(m.decks) > 0 {
 		m.selectCurrentDeck()
 	}
+	m.mutationStatus = "Changes saved"
 	return m, nil
 }
 
@@ -682,6 +734,9 @@ func (m DeckBuilderModel) renderFooter() string {
 	}
 	if m.exportState.statusMsg != "" {
 		footer = m.styleManager.GetHelpStyle().Render(m.exportState.statusMsg) + "  " + footer
+	}
+	if m.mutationStatus != "" {
+		footer = m.styleManager.GetHelpStyle().Render(m.mutationStatus) + "  " + footer
 	}
 	return footer
 }

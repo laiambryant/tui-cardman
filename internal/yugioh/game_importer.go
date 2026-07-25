@@ -10,6 +10,7 @@ import (
 // NewYuGiOhGameImporter creates a gameimporter.GameImporter for Yu-Gi-Oh!.
 func NewYuGiOhGameImporter(client *Client, service *ImportService, setService sets.SetService) *gameimporter.Base {
 	return &gameimporter.Base{
+		CardGameID: service.yugiohGameID,
 		Runner:     service,
 		SetService: setService,
 		FetchSetsFn: func(ctx context.Context) ([]gameimporter.GameSet, error) {

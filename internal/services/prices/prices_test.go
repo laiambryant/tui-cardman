@@ -29,8 +29,8 @@ func seedTestCard(t *testing.T, db *sql.DB) int64 {
 	require.NoError(t, err)
 
 	// Create a set
-	result, err = db.Exec(`INSERT INTO sets (api_id, name) VALUES (?, ?)`,
-		"base1", "Base Set")
+	result, err = db.Exec(`INSERT INTO sets (card_game_id, api_id, name) VALUES (?, ?, ?)`,
+		gameID, "base1", "Base Set")
 	require.NoError(t, err)
 	setID, err := result.LastInsertId()
 	require.NoError(t, err)
@@ -587,7 +587,7 @@ func TestTCGPlayerDeletePrices_PartialDelete(t *testing.T) {
 	gID, err := gameID.LastInsertId()
 	require.NoError(t, err)
 
-	setID, err := db.Exec(`INSERT INTO sets (api_id, name) VALUES (?, ?)`, "test-set", "Test Set")
+	setID, err := db.Exec(`INSERT INTO sets (card_game_id, api_id, name) VALUES (?, ?, ?)`, gID, "test-set", "Test Set")
 	require.NoError(t, err)
 	sID, err := setID.LastInsertId()
 	require.NoError(t, err)
@@ -654,7 +654,7 @@ func TestCardMarketDeletePrices_PartialDelete(t *testing.T) {
 	gID, err := gameID.LastInsertId()
 	require.NoError(t, err)
 
-	setID, err := db.Exec(`INSERT INTO sets (api_id, name) VALUES (?, ?)`, "test-set-2", "Test Set 2")
+	setID, err := db.Exec(`INSERT INTO sets (card_game_id, api_id, name) VALUES (?, ?, ?)`, gID, "test-set-2", "Test Set 2")
 	require.NoError(t, err)
 	sID, err := setID.LastInsertId()
 	require.NoError(t, err)

@@ -27,6 +27,17 @@ func TestFromCSV_HeaderOnly(t *testing.T) {
 	assert.Empty(t, rows)
 }
 
+func TestToCSVReportsFlushError(t *testing.T) {
+	if _, err := os.Stat("/dev/full"); err != nil {
+		t.Skip("/dev/full is not available on this platform")
+	}
+
+	err := export.ToCSV([]export.CardRow{{Name: "Pikachu", Quantity: 1}}, "/dev/full")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "flush CSV")
+}
+
 func TestFromCSV_WrongColumnCount_TooMany(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "too_many.csv")

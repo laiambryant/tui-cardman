@@ -66,22 +66,35 @@ var serveSSHCmd = &cobra.Command{
 		}
 		done := make(chan os.Signal, 1)
 		signal.Notify(done, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
+		defer signal.Stop(done)
+		serverErr := make(chan error, 1)
 		go func() {
 			slog.Info("Starting SSH server", "port", runtime.config.SSHPort)
 			fmt.Printf("SSH server starting on port %d\n", runtime.config.SSHPort)
 			fmt.Printf("Host key: %s\n", hostKeyPath)
 			fmt.Println("Press Ctrl+C to stop")
-			if err := s.ListenAndServe(); err != nil && !errors.Is(err, ssh.ErrServerClosed) {
-				slog.Error("SSH server error", "error", err)
+			err := s.ListenAndServe()
+			if errors.Is(err, ssh.ErrServerClosed) {
+				err = nil
 			}
+			serverErr <- err
 		}()
-		<-done
-		slog.Info("Stopping SSH server")
-		fmt.Println("\nShutting down SSH server...")
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-		if err := s.Shutdown(ctx); err != nil {
-			return fmt.Errorf("shutdown SSH server: %w", err)
+
+		select {
+		case err := <-serverErr:
+			if err != nil {
+				slog.Error("SSH server error", "error", err)
+				return fmt.Errorf("serve SSH: %w", err)
+			}
+			return nil
+		case <-done:
+			slog.Info("Stopping SSH server")
+			fmt.Println("\nShutting down SSH server...")
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			if err := s.Shutdown(ctx); err != nil {
+				return fmt.Errorf("shutdown SSH server: %w", err)
+			}
 		}
 
 		return nil

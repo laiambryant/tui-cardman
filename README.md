@@ -12,7 +12,7 @@ A terminal UI for managing your trading card collection. Track cards, build deck
 ## Features
 
 - **Collection management** — track cards you own with quantities
-- **Deck builder** — build and validate 60-card Pokemon TCG decks (enforces 4-copy and basic energy rules)
+- **Deck builder** — build decks for each supported game
 - **Lists / wishlists** — maintain custom card lists with color labels
 - **Card import** — import all Pokemon TCG sets and cards from the TCGDex API
 - **Price tracking** — TCGPlayer and CardMarket price snapshots
@@ -177,7 +177,6 @@ cardman decks list <game>
 cardman decks create <game> <name>
 cardman decks show <deck-id>
 cardman decks add-card <deck-id> <set-code> <number> <quantity>
-cardman decks validate <deck-id>
 cardman import list-sets <game>
 cardman import sets <game> <set-id...>
 cardman import all <game>
