@@ -19,6 +19,7 @@ type CardService interface {
 	GetCardIDByAPIID(ctx context.Context, apiID string) (int64, error)
 	UpsertCard(ctx context.Context, tx *sql.Tx, apiID string, setID int64, number, name, rarity, artist string, cardGameID int64) (int64, error)
 	GetCardBySetCodeAndNumber(setCode, number string) (*model.Card, error)
+	GetCardByGameAndSetCodeAndNumber(gameID int64, setCode, number string) (*model.Card, error)
 }
 
 // CardServiceImpl implements the CardService interface
@@ -67,6 +68,18 @@ const (
 		JOIN card_games cg ON c.card_game_id = cg.id
 		JOIN sets s ON c.set_id = s.id
 		WHERE s.code = ? AND c.number = ?
+		LIMIT 1
+	`
+
+	selectCardByGameSetCodeAndNumberQuery = `
+		SELECT c.id, c.card_game_id, c.name, c.rarity, c.is_placeholder, c.created_at,
+		       c.api_id, c.set_id, c.number, c.artist, c.updated_at,
+		       cg.id, cg.name, cg.created_at,
+		       s.id, s.name, s.code, s.printed_total, s.total
+		FROM cards c
+		JOIN card_games cg ON c.card_game_id = cg.id
+		JOIN sets s ON c.set_id = s.id
+		WHERE c.card_game_id = ? AND s.code = ? AND c.number = ?
 		LIMIT 1
 	`
 
@@ -233,6 +246,23 @@ func (s *CardServiceImpl) UpsertCard(ctx context.Context, tx *sql.Tx, apiID stri
 // GetCardBySetCodeAndNumber retrieves a card by its set code and card number
 func (s *CardServiceImpl) GetCardBySetCodeAndNumber(setCode, number string) (*model.Card, error) {
 	rows, err := db.Query(s.db, selectCardBySetCodeAndNumberQuery, setCode, number)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query card: %w", err)
+	}
+	defer rows.Close()
+	cards, err := s.scanCards(rows)
+	if err != nil {
+		return nil, err
+	}
+	if len(cards) == 0 {
+		return nil, nil
+	}
+	return &cards[0], nil
+}
+
+// GetCardByGameAndSetCodeAndNumber retrieves a card by game, set code, and card number.
+func (s *CardServiceImpl) GetCardByGameAndSetCodeAndNumber(gameID int64, setCode, number string) (*model.Card, error) {
+	rows, err := db.Query(s.db, selectCardByGameSetCodeAndNumberQuery, gameID, setCode, number)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query card: %w", err)
 	}

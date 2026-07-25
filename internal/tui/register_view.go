@@ -58,7 +58,7 @@ func (m *Model) handleRegister() (tea.Model, tea.Cmd) {
 }
 
 func (m Model) registerView() string {
-	header := titleStyle.Render("CardMan - Register")
+	header := RenderBreadcrumbs(m.styleManager, "Register")
 	body := m.renderRegisterBody()
 	footer := m.renderRegisterFooter()
 	return renderFramedView(header, body, footer, m.width, m.height, m.styleManager)

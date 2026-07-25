@@ -13,3 +13,16 @@ func SanitizeQuery(q string) string {
 	s = strings.ReplaceAll(s, "\n", " ")
 	return strings.Join(strings.Fields(s), " ")
 }
+
+// SanitizeArgs redacts all argument values for queries that touch
+// sensitive columns (e.g. password hashes) so they never reach logs.
+func SanitizeArgs(query string, args []any) []any {
+	if !strings.Contains(strings.ToLower(query), "password") {
+		return args
+	}
+	redacted := make([]any, len(args))
+	for i := range redacted {
+		redacted[i] = "[REDACTED]"
+	}
+	return redacted
+}

@@ -59,6 +59,15 @@ type (
 	deleteListMsg    struct{ listID int64 }
 	createListMsg    struct{}
 	updateListMsg    struct{}
+	listMutationMsg  struct {
+		operation string
+		err       error
+		updates   map[int64]int
+		listID    int64
+		name      string
+		desc      string
+		color     string
+	}
 )
 
 type ListsModel struct {
@@ -93,6 +102,8 @@ type ListsModel struct {
 	importState       ImportState
 	searchCache       *SearchCache
 	cardPagination    Pagination
+	mutationPending   bool
+	mutationStatus    string
 }
 
 func NewListsModel(game *model.CardGame, user *auth.User, listSvc listservice.ListService, cardSvc cardservice.CardService, cards []model.Card, cfg *runtimecfg.Manager, sm *StyleManager) ListsModel {
@@ -198,7 +209,12 @@ func (m ListsModel) Update(msg tea.Msg) (ListsModel, tea.Cmd) {
 		return m.performCreateList()
 	case updateListMsg:
 		return m.performUpdateList()
+	case listMutationMsg:
+		return m.handleMutationResult(msg)
 	case tea.KeyMsg:
+		if m.mutationPending {
+			return m, nil
+		}
 		s := msg.String()
 		action := MatchActionOrDefault(m.configManager, s, "")
 		if action == "quit" || s == "ctrl+c" {
@@ -369,7 +385,7 @@ func (m ListsModel) handleCardPanelKeys(msg tea.KeyMsg, s, action string) (Lists
 		return m, nil
 	}
 	if action == "import" && m.selectedList != nil {
-		m.importState = NewImportState(m.cardService, m.styleManager)
+		m.importState = NewImportState(m.cardService, m.selectedGame.ID, m.styleManager)
 		return m, nil
 	}
 	// Forward non-modifier printable keys to the search textinput when it is focused
@@ -489,7 +505,7 @@ func (m ListsModel) View() string {
 func (m ListsModel) renderHeader() string {
 	var b strings.Builder
 	if m.selectedGame != nil {
-		b.WriteString(m.styleManager.GetTitleStyle().Render(m.selectedGame.Name + " - Lists"))
+		b.WriteString(RenderBreadcrumbs(m.styleManager, m.selectedGame.Name, "Lists"))
 	}
 	return b.String()
 }
@@ -508,35 +524,32 @@ func (m ListsModel) renderBody(availableHeight int) string {
 
 func (m ListsModel) renderListPanel(width, height int) string {
 	var b strings.Builder
+	title := "Your Lists"
 	if m.mode == ListsModeCreate || m.mode == ListsModeEdit {
 		b.WriteString(m.renderForm())
+		title = "Create List"
+		if m.mode == ListsModeEdit {
+			title = "Edit List"
+		}
+	} else if len(m.lists) == 0 {
+		b.WriteString(m.styleManager.GetBlurredStyle().Render("No lists yet. Press 'n' to create one.") + "\n")
 	} else {
-		b.WriteString(m.styleManager.GetTitleStyle().Render("Your Lists") + "\n")
-		if len(m.lists) == 0 {
-			b.WriteString(m.styleManager.GetBlurredStyle().Render("No lists yet. Press 'n' to create one.") + "\n")
-		} else {
-			for i, l := range m.lists {
-				isSelected := m.listCursor == i && m.focus == ListsFocusListPanel
-				isActive := m.selectedList != nil && m.selectedList.ID == l.ID
-				colorDot := m.styleManager.applyBGFG(lipgloss.NewStyle().Foreground(lipgloss.Color(l.Color))).Render("●")
-				label := colorDot + " " + l.Name
-				if isActive {
-					label += " *"
-				}
-				b.WriteString(RenderListItem(label, isSelected))
+		for i, l := range m.lists {
+			isSelected := m.listCursor == i && m.focus == ListsFocusListPanel
+			isActive := m.selectedList != nil && m.selectedList.ID == l.ID
+			colorDot := m.styleManager.applyBGFG(lipgloss.NewStyle().Foreground(lipgloss.Color(l.Color))).Render("●")
+			label := colorDot + " " + l.Name
+			if isActive {
+				label += " *"
 			}
+			b.WriteString(RenderListItem(label, isSelected))
 		}
 	}
-	return RenderPanel(m.styleManager, b.String(), width, height, m.focus == ListsFocusListPanel, 1, 0)
+	return RenderTitledPanel(m.styleManager, title, b.String(), width, height, m.focus == ListsFocusListPanel, 1, 0)
 }
 
 func (m ListsModel) renderForm() string {
 	var b strings.Builder
-	title := "Create List"
-	if m.mode == ListsModeEdit {
-		title = "Edit List"
-	}
-	b.WriteString(m.styleManager.GetTitleStyle().Render(title) + "\n")
 	nameLabel := "Name: "
 	if m.formFocus == 0 {
 		nameLabel = m.styleManager.GetFocusedStyle().Render(nameLabel)
@@ -564,7 +577,11 @@ func (m ListsModel) renderForm() string {
 		arrows = m.styleManager.GetFocusedStyle().Render("<") + " " + colorPreview + " " + m.styleManager.GetFocusedStyle().Render(">")
 	}
 	b.WriteString(colorLabel + arrows + "\n")
-	b.WriteString(m.styleManager.GetBlurredStyle().Render("Tab: next field • Enter: confirm • Esc: cancel"))
+	b.WriteString(JoinHelpHints(
+		RenderHelpHint("Tab", "Next field"),
+		RenderHelpHint("Enter", "Confirm"),
+		RenderHelpHint("Esc", "Cancel"),
+	))
 	return b.String()
 }
 
@@ -585,7 +602,7 @@ func (m ListsModel) renderCardPanel(width, height int) string {
 	} else {
 		top.WriteString(colorDot + " " + m.styleManager.GetBlurredStyle().Render(m.selectedList.Name) + "\n")
 	}
-	top.WriteString(m.styleManager.GetBlurredStyle().Render("Search: ") + m.styleManager.GetNoStyle().Render(m.searchInput.View()) + " " + m.styleManager.GetBlurredStyle().Render(m.cardPagination.StatusText()) + "\n")
+	top.WriteString(renderSearchPrompt(m.styleManager, m.searchInput.View(), m.cardPagination.StatusText()) + "\n")
 	source := m.filteredCards
 	if m.searchInput.Value() == "" {
 		source = m.cards
@@ -632,10 +649,14 @@ func (m ListsModel) renderFooter() string {
 	hb := NewHelpBuilder(m.configManager)
 	var footer string
 	if m.mode == ListsModeCreate || m.mode == ListsModeEdit {
-		footer = m.styleManager.GetHelpStyle().Render("Tab: next field | Enter: confirm | Esc: cancel")
+		footer = JoinHelpHints(
+			RenderHelpHint("Tab", "Next field"),
+			RenderHelpHint("Enter", "Confirm"),
+			RenderHelpHint("Esc", "Cancel"),
+		)
 	} else if m.focus == ListsFocusCardPanel {
-		footer = m.styleManager.GetHelpStyle().Render(strings.Join([]string{
-			"Tab: Switch panel",
+		footer = JoinHelpHints(
+			RenderHelpHint("Tab", "Switch panel"),
 			hb.Build(
 				KeyItem{"increment_quantity", "+", "Add"},
 				KeyItem{"decrement_quantity", "Delete", "Remove"},
@@ -644,10 +665,10 @@ func (m ListsModel) renderFooter() string {
 			hb.Build(KeyItem{"export", "x", "Export"}, KeyItem{"import", "i", "Import"}),
 			hb.Pair("page_next", "Ctrl+N", "page_prev", "Ctrl+P", "Page"),
 			hb.Pair("nav_up", "↑", "nav_down", "↓", "Navigate"),
-			"Left / Shift+Tab: Lists panel",
-		}, " | "))
+			RenderHelpHint("←/Shift+Tab", "Lists panel"),
+		)
 	} else {
-		footer = m.styleManager.GetHelpStyle().Render(strings.Join([]string{
+		footer = JoinHelpHints(
 			hb.Pair("nav_up", "↑", "nav_down", "↓", "Navigate"),
 			hb.Build(KeyItem{"select", "Enter", "Select list"}),
 			hb.Build(
@@ -655,12 +676,15 @@ func (m ListsModel) renderFooter() string {
 				KeyItem{"edit", "e", "Edit"},
 				KeyItem{"delete", "d", "Delete"},
 			),
-			"Right / Tab: Cards panel",
+			RenderHelpHint("→/Tab", "Cards panel"),
 			hb.Build(KeyItem{"back", "Q", "Back"}),
-		}, " | "))
+		)
 	}
 	if m.exportState.statusMsg != "" {
 		footer = m.styleManager.GetHelpStyle().Render(m.exportState.statusMsg) + "  " + footer
+	}
+	if m.mutationStatus != "" {
+		footer = m.styleManager.GetHelpStyle().Render(m.mutationStatus) + "  " + footer
 	}
 	return footer
 }
@@ -723,57 +747,91 @@ func (m ListsModel) performSaveListCards() (ListsModel, tea.Cmd) {
 		return m, nil
 	}
 	updates := m.quantities.buildUpdates()
-	ctx := context.Background()
-	err := m.listService.UpsertListCardBatch(ctx, m.selectedList.ID, updates)
-	if err != nil {
-		return m, nil
+	listID := m.selectedList.ID
+	service := m.listService
+	m.mutationPending = true
+	m.mutationStatus = "Saving list changes..."
+	return m, func() tea.Msg {
+		err := service.UpsertListCardBatch(context.Background(), listID, updates)
+		return listMutationMsg{operation: "save cards", err: err, updates: updates, listID: listID}
 	}
-	m.quantities.commit(updates)
-	m.searchCache.Invalidate()
-	m.updateListCardTable()
-	return m, nil
 }
 
 func (m ListsModel) performDeleteList(listID int64) (ListsModel, tea.Cmd) {
-	ctx := context.Background()
-	err := m.listService.DeleteList(ctx, listID)
-	if err != nil {
-		return m, nil
+	service := m.listService
+	m.mutationPending = true
+	m.mutationStatus = "Deleting list..."
+	return m, func() tea.Msg {
+		err := service.DeleteList(context.Background(), listID)
+		return listMutationMsg{operation: "delete list", err: err, listID: listID}
 	}
-	if m.selectedList != nil && m.selectedList.ID == listID {
-		m.selectedList = nil
-		m.quantities.reset()
-	}
-	return m.refreshLists()
 }
 
 func (m ListsModel) performCreateList() (ListsModel, tea.Cmd) {
-	ctx := context.Background()
 	color := listColorOptions[m.colorIndex].Color
-	_, err := m.listService.CreateList(ctx, m.user.ID, m.selectedGame.ID, m.nameInput.Value(), m.descInput.Value(), color)
-	if err != nil {
-		return m, nil
+	name := m.nameInput.Value()
+	desc := m.descInput.Value()
+	userID := m.user.ID
+	gameID := m.selectedGame.ID
+	service := m.listService
+	m.mutationPending = true
+	m.mutationStatus = "Creating list..."
+	return m, func() tea.Msg {
+		_, err := service.CreateList(context.Background(), userID, gameID, name, desc, color)
+		return listMutationMsg{operation: "create list", err: err, name: name, desc: desc, color: color}
 	}
-	m.mode = ListsModeNormal
-	m.nameInput.Blur()
-	m.descInput.Blur()
-	return m.refreshLists()
 }
 
 func (m ListsModel) performUpdateList() (ListsModel, tea.Cmd) {
-	ctx := context.Background()
 	color := listColorOptions[m.colorIndex].Color
-	err := m.listService.UpdateList(ctx, m.editingListID, m.nameInput.Value(), m.descInput.Value(), color)
-	if err != nil {
+	listID := m.editingListID
+	name := m.nameInput.Value()
+	desc := m.descInput.Value()
+	service := m.listService
+	m.mutationPending = true
+	m.mutationStatus = "Updating list..."
+	return m, func() tea.Msg {
+		err := service.UpdateList(context.Background(), listID, name, desc, color)
+		return listMutationMsg{operation: "update list", err: err, listID: listID, name: name, desc: desc, color: color}
+	}
+}
+
+func (m ListsModel) handleMutationResult(msg listMutationMsg) (ListsModel, tea.Cmd) {
+	m.mutationPending = false
+	if msg.err != nil {
+		m.mutationStatus = fmt.Sprintf("Failed to %s: %v", msg.operation, msg.err)
 		return m, nil
 	}
-	m.mode = ListsModeNormal
-	m.nameInput.Blur()
-	m.descInput.Blur()
-	if m.selectedList != nil && m.selectedList.ID == m.editingListID {
-		m.selectedList.Name = m.nameInput.Value()
-		m.selectedList.Description = m.descInput.Value()
-		m.selectedList.Color = color
+
+	switch msg.operation {
+	case "save cards":
+		if m.selectedList != nil && m.selectedList.ID == msg.listID {
+			m.quantities.commit(msg.updates)
+			m.searchCache.Invalidate()
+			m.updateListCardTable()
+		}
+	case "delete list":
+		if m.selectedList != nil && m.selectedList.ID == msg.listID {
+			m.selectedList = nil
+			m.quantities.reset()
+		}
+	case "create list":
+		m.mode = ListsModeNormal
+		m.nameInput.Blur()
+		m.descInput.Blur()
+	case "update list":
+		m.mode = ListsModeNormal
+		m.nameInput.Blur()
+		m.descInput.Blur()
+		if m.selectedList != nil && m.selectedList.ID == msg.listID {
+			m.selectedList.Name = msg.name
+			m.selectedList.Description = msg.desc
+			m.selectedList.Color = msg.color
+		}
+	}
+	m.mutationStatus = "Changes saved"
+	if msg.operation == "save cards" {
+		return m, nil
 	}
 	return m.refreshLists()
 }

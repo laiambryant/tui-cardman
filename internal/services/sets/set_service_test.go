@@ -11,6 +11,8 @@ import (
 	"github.com/laiambryant/tui-cardman/internal/testutil"
 )
 
+const testCardGameID int64 = 1
+
 func TestNewSetService(t *testing.T) {
 	db := testutil.SetupTestDB(t)
 	defer testutil.CleanupTestDB(t, db)
@@ -31,13 +33,13 @@ func TestGetSetIDByAPIID(t *testing.T) {
 	ctx := context.Background()
 
 	// Create a set first
-	result, err := db.Exec(`INSERT INTO sets (api_id, name) VALUES (?, ?)`, "base1", "Base Set")
+	result, err := db.Exec(`INSERT INTO sets (card_game_id, api_id, name) VALUES (1, ?, ?)`, "base1", "Base Set")
 	require.NoError(t, err)
 	expectedID, err := result.LastInsertId()
 	require.NoError(t, err)
 
 	// Get set ID by API ID
-	setID, err := service.GetSetIDByAPIID(ctx, "base1")
+	setID, err := service.GetSetIDByAPIID(ctx, testCardGameID, "base1")
 
 	require.NoError(t, err)
 	assert.Equal(t, expectedID, setID)
@@ -52,7 +54,7 @@ func TestGetSetIDByAPIID_NotFound(t *testing.T) {
 	service := NewSetService(db)
 	ctx := context.Background()
 
-	setID, err := service.GetSetIDByAPIID(ctx, "nonexistent")
+	setID, err := service.GetSetIDByAPIID(ctx, testCardGameID, "nonexistent")
 
 	assert.Error(t, err)
 	assert.Equal(t, int64(0), setID)
@@ -69,7 +71,7 @@ func TestUpsertSet_Insert(t *testing.T) {
 	ctx := context.Background()
 
 	// Insert a new set
-	setID, err := service.UpsertSet(ctx, "base1", "BS", "Base Set", 102, 102)
+	setID, err := service.UpsertSet(ctx, testCardGameID, "base1", "BS", "Base Set", 102, 102)
 
 	require.NoError(t, err)
 	assert.Greater(t, setID, int64(0))
@@ -98,11 +100,11 @@ func TestUpsertSet_Update(t *testing.T) {
 	ctx := context.Background()
 
 	// Insert initial set
-	setID1, err := service.UpsertSet(ctx, "base1", "BS", "Base Set", 102, 102)
+	setID1, err := service.UpsertSet(ctx, testCardGameID, "base1", "BS", "Base Set", 102, 102)
 	require.NoError(t, err)
 
 	// Update the same set with different values
-	setID2, err := service.UpsertSet(ctx, "base1", "BS1", "Base Set Unlimited", 103, 103)
+	setID2, err := service.UpsertSet(ctx, testCardGameID, "base1", "BS1", "Base Set Unlimited", 103, 103)
 	require.NoError(t, err)
 
 	// Should return the same ID
@@ -147,7 +149,7 @@ func TestUpsertSet_MultipleSets(t *testing.T) {
 
 	// Insert multiple sets
 	for _, s := range sets {
-		setID, err := service.UpsertSet(ctx, s.apiID, s.code, s.name, s.printedTotal, s.total)
+		setID, err := service.UpsertSet(ctx, testCardGameID, s.apiID, s.code, s.name, s.printedTotal, s.total)
 		require.NoError(t, err)
 		setIDs = append(setIDs, setID)
 	}
@@ -175,7 +177,7 @@ func TestUpsertSet_EmptyStrings(t *testing.T) {
 	ctx := context.Background()
 
 	// Insert set with empty code
-	setID, err := service.UpsertSet(ctx, "test-set", "", "Test Set", 0, 0)
+	setID, err := service.UpsertSet(ctx, testCardGameID, "test-set", "", "Test Set", 0, 0)
 
 	require.NoError(t, err)
 	assert.Greater(t, setID, int64(0))
@@ -197,7 +199,7 @@ func TestUpsertSet_ZeroValues(t *testing.T) {
 	ctx := context.Background()
 
 	// Insert set with zero totals
-	setID, err := service.UpsertSet(ctx, "zero-set", "ZS", "Zero Set", 0, 0)
+	setID, err := service.UpsertSet(ctx, testCardGameID, "zero-set", "ZS", "Zero Set", 0, 0)
 
 	require.NoError(t, err)
 	assert.Greater(t, setID, int64(0))
@@ -223,7 +225,7 @@ func TestUpsertSet_TransactionRollback(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately
 
-	_, err := service.UpsertSet(ctx, "canceled-set", "CS", "Canceled Set", 10, 10)
+	_, err := service.UpsertSet(ctx, testCardGameID, "canceled-set", "CS", "Canceled Set", 10, 10)
 
 	assert.Error(t, err)
 
@@ -255,12 +257,12 @@ func TestGetAllSetAPIIDs(t *testing.T) {
 	}
 
 	for _, s := range sets {
-		_, err := db.Exec(`INSERT INTO sets (api_id, name) VALUES (?, ?)`, s.apiID, s.name)
+		_, err := db.Exec(`INSERT INTO sets (card_game_id, api_id, name) VALUES (1, ?, ?)`, s.apiID, s.name)
 		require.NoError(t, err)
 	}
 
 	// Get all set API IDs
-	apiIDs, err := service.GetAllSetAPIIDs(ctx)
+	apiIDs, err := service.GetAllSetAPIIDs(ctx, testCardGameID)
 
 	require.NoError(t, err)
 	assert.Len(t, apiIDs, 4)
@@ -279,7 +281,7 @@ func TestGetAllSetAPIIDs_Empty(t *testing.T) {
 	service := NewSetService(db)
 	ctx := context.Background()
 
-	apiIDs, err := service.GetAllSetAPIIDs(ctx)
+	apiIDs, err := service.GetAllSetAPIIDs(ctx, testCardGameID)
 
 	require.NoError(t, err)
 	assert.Empty(t, apiIDs) // Will be nil slice when no rows (Go SQL pattern)
@@ -295,10 +297,10 @@ func TestGetAllSetAPIIDs_SingleSet(t *testing.T) {
 	ctx := context.Background()
 
 	// Insert single set
-	_, err := db.Exec(`INSERT INTO sets (api_id, name) VALUES (?, ?)`, "single", "Single Set")
+	_, err := db.Exec(`INSERT INTO sets (card_game_id, api_id, name) VALUES (1, ?, ?)`, "single", "Single Set")
 	require.NoError(t, err)
 
-	apiIDs, err := service.GetAllSetAPIIDs(ctx)
+	apiIDs, err := service.GetAllSetAPIIDs(ctx, testCardGameID)
 
 	require.NoError(t, err)
 	assert.Len(t, apiIDs, 1)
@@ -317,26 +319,26 @@ func TestSetService_Integration(t *testing.T) {
 	// Test complete flow: upsert (insert) -> get by api_id -> upsert (update) -> get all
 
 	// Insert new set
-	setID1, err := service.UpsertSet(ctx, "integration-test", "IT", "Integration Test", 50, 50)
+	setID1, err := service.UpsertSet(ctx, testCardGameID, "integration-test", "IT", "Integration Test", 50, 50)
 	require.NoError(t, err)
 	assert.Greater(t, setID1, int64(0))
 
 	// Get set by API ID
-	retrievedID, err := service.GetSetIDByAPIID(ctx, "integration-test")
+	retrievedID, err := service.GetSetIDByAPIID(ctx, testCardGameID, "integration-test")
 	require.NoError(t, err)
 	assert.Equal(t, setID1, retrievedID)
 
 	// Update the set
-	setID2, err := service.UpsertSet(ctx, "integration-test", "IT2", "Integration Test Updated", 75, 75)
+	setID2, err := service.UpsertSet(ctx, testCardGameID, "integration-test", "IT2", "Integration Test Updated", 75, 75)
 	require.NoError(t, err)
 	assert.Equal(t, setID1, setID2) // Should be same ID
 
 	// Insert another set
-	_, err = service.UpsertSet(ctx, "second-set", "SS", "Second Set", 25, 25)
+	_, err = service.UpsertSet(ctx, testCardGameID, "second-set", "SS", "Second Set", 25, 25)
 	require.NoError(t, err)
 
 	// Get all API IDs
-	apiIDs, err := service.GetAllSetAPIIDs(ctx)
+	apiIDs, err := service.GetAllSetAPIIDs(ctx, testCardGameID)
 	require.NoError(t, err)
 	assert.Len(t, apiIDs, 2)
 	assert.Contains(t, apiIDs, "integration-test")
@@ -353,11 +355,11 @@ func TestUpsertSet_ConcurrentTransactions(t *testing.T) {
 	ctx := context.Background()
 
 	// First transaction: insert
-	setID1, err := service.UpsertSet(ctx, "concurrent", "C1", "Concurrent Test 1", 10, 10)
+	setID1, err := service.UpsertSet(ctx, testCardGameID, "concurrent", "C1", "Concurrent Test 1", 10, 10)
 	require.NoError(t, err)
 
 	// Second transaction: update
-	setID2, err := service.UpsertSet(ctx, "concurrent", "C2", "Concurrent Test 2", 20, 20)
+	setID2, err := service.UpsertSet(ctx, testCardGameID, "concurrent", "C2", "Concurrent Test 2", 20, 20)
 	require.NoError(t, err)
 
 	// Should be same ID
@@ -383,7 +385,7 @@ func TestUpsertSet_UpdatedAtTimestamp(t *testing.T) {
 	ctx := context.Background()
 
 	// Insert set
-	setID, err := service.UpsertSet(ctx, "timestamp-test", "TT", "Timestamp Test", 10, 10)
+	setID, err := service.UpsertSet(ctx, testCardGameID, "timestamp-test", "TT", "Timestamp Test", 10, 10)
 	require.NoError(t, err)
 
 	// Get initial updated_at
@@ -393,7 +395,7 @@ func TestUpsertSet_UpdatedAtTimestamp(t *testing.T) {
 	assert.True(t, updatedAt1.Valid)
 
 	// Update set
-	_, err = service.UpsertSet(ctx, "timestamp-test", "TT2", "Timestamp Test Updated", 20, 20)
+	_, err = service.UpsertSet(ctx, testCardGameID, "timestamp-test", "TT2", "Timestamp Test Updated", 20, 20)
 	require.NoError(t, err)
 
 	// Get new updated_at
@@ -416,11 +418,11 @@ func TestUpsertSet_UniqueAPIID(t *testing.T) {
 	ctx := context.Background()
 
 	// Insert first set
-	setID1, err := service.UpsertSet(ctx, "unique-test", "UT1", "Unique Test 1", 10, 10)
+	setID1, err := service.UpsertSet(ctx, testCardGameID, "unique-test", "UT1", "Unique Test 1", 10, 10)
 	require.NoError(t, err)
 
 	// "Insert" again with same api_id (should update)
-	setID2, err := service.UpsertSet(ctx, "unique-test", "UT2", "Unique Test 2", 20, 20)
+	setID2, err := service.UpsertSet(ctx, testCardGameID, "unique-test", "UT2", "Unique Test 2", 20, 20)
 	require.NoError(t, err)
 
 	// Should be same ID (update, not insert)
@@ -433,6 +435,35 @@ func TestUpsertSet_UniqueAPIID(t *testing.T) {
 	assert.Equal(t, 1, count)
 }
 
+func TestUpsertSet_SameAPIIDAcrossGames(t *testing.T) {
+	db := testutil.SetupTestDB(t)
+	defer testutil.CleanupTestDB(t, db)
+	testutil.ApplyTestMigrations(t, db, "../../db/migrations")
+
+	service := NewSetService(db)
+	ctx := context.Background()
+
+	pokemonSetID, err := service.UpsertSet(ctx, 1, "shared", "PKM", "Pokemon Shared", 10, 10)
+	require.NoError(t, err)
+	mtgSetID, err := service.UpsertSet(ctx, 2, "shared", "MTG", "MTG Shared", 20, 20)
+	require.NoError(t, err)
+
+	assert.NotEqual(t, pokemonSetID, mtgSetID)
+	retrievedPokemonID, err := service.GetSetIDByAPIID(ctx, 1, "shared")
+	require.NoError(t, err)
+	assert.Equal(t, pokemonSetID, retrievedPokemonID)
+	retrievedMTGID, err := service.GetSetIDByAPIID(ctx, 2, "shared")
+	require.NoError(t, err)
+	assert.Equal(t, mtgSetID, retrievedMTGID)
+
+	pokemonSets, err := service.GetAllSetAPIIDs(ctx, 1)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"shared"}, pokemonSets)
+	mtgCounts, err := service.GetAllSetAPIIDsWithCounts(ctx, 2)
+	require.NoError(t, err)
+	assert.Equal(t, map[string]int{"shared": 20}, mtgCounts)
+}
+
 func TestGetAllSetAPIIDsWithCounts(t *testing.T) {
 	db := testutil.SetupTestDB(t)
 	defer testutil.CleanupTestDB(t, db)
@@ -442,14 +473,14 @@ func TestGetAllSetAPIIDsWithCounts(t *testing.T) {
 	service := NewSetService(db)
 	ctx := context.Background()
 
-	_, err := service.UpsertSet(ctx, "base1", "BS", "Base Set", 102, 102)
+	_, err := service.UpsertSet(ctx, testCardGameID, "base1", "BS", "Base Set", 102, 102)
 	require.NoError(t, err)
-	_, err = service.UpsertSet(ctx, "jungle", "JU", "Jungle", 64, 64)
+	_, err = service.UpsertSet(ctx, testCardGameID, "jungle", "JU", "Jungle", 64, 64)
 	require.NoError(t, err)
-	_, err = service.UpsertSet(ctx, "fossil", "FO", "Fossil", 62, 62)
+	_, err = service.UpsertSet(ctx, testCardGameID, "fossil", "FO", "Fossil", 62, 62)
 	require.NoError(t, err)
 
-	counts, err := service.GetAllSetAPIIDsWithCounts(ctx)
+	counts, err := service.GetAllSetAPIIDsWithCounts(ctx, testCardGameID)
 
 	require.NoError(t, err)
 	assert.Len(t, counts, 3)
@@ -467,7 +498,7 @@ func TestGetAllSetAPIIDsWithCounts_Empty(t *testing.T) {
 	service := NewSetService(db)
 	ctx := context.Background()
 
-	counts, err := service.GetAllSetAPIIDsWithCounts(ctx)
+	counts, err := service.GetAllSetAPIIDsWithCounts(ctx, testCardGameID)
 
 	require.NoError(t, err)
 	assert.Empty(t, counts)
@@ -482,10 +513,10 @@ func TestGetAllSetAPIIDsWithCounts_ZeroTotal(t *testing.T) {
 	service := NewSetService(db)
 	ctx := context.Background()
 
-	_, err := service.UpsertSet(ctx, "zero-set", "ZS", "Zero Set", 0, 0)
+	_, err := service.UpsertSet(ctx, testCardGameID, "zero-set", "ZS", "Zero Set", 0, 0)
 	require.NoError(t, err)
 
-	counts, err := service.GetAllSetAPIIDsWithCounts(ctx)
+	counts, err := service.GetAllSetAPIIDsWithCounts(ctx, testCardGameID)
 
 	require.NoError(t, err)
 	assert.Len(t, counts, 1)
@@ -501,13 +532,13 @@ func TestGetAllSetAPIIDsWithCounts_AfterUpdate(t *testing.T) {
 	service := NewSetService(db)
 	ctx := context.Background()
 
-	_, err := service.UpsertSet(ctx, "update-test", "UT", "Update Test", 0, 0)
+	_, err := service.UpsertSet(ctx, testCardGameID, "update-test", "UT", "Update Test", 0, 0)
 	require.NoError(t, err)
 
-	_, err = service.UpsertSet(ctx, "update-test", "UT", "Update Test", 150, 150)
+	_, err = service.UpsertSet(ctx, testCardGameID, "update-test", "UT", "Update Test", 150, 150)
 	require.NoError(t, err)
 
-	counts, err := service.GetAllSetAPIIDsWithCounts(ctx)
+	counts, err := service.GetAllSetAPIIDsWithCounts(ctx, testCardGameID)
 
 	require.NoError(t, err)
 	assert.Equal(t, 150, counts["update-test"])
@@ -525,12 +556,12 @@ func TestGetAllSetAPIIDs_Ordering(t *testing.T) {
 	// Insert sets in specific order
 	apiIDs := []string{"charlie", "alpha", "bravo", "delta"}
 	for _, apiID := range apiIDs {
-		_, err := db.Exec(`INSERT INTO sets (api_id, name) VALUES (?, ?)`, apiID, apiID)
+		_, err := db.Exec(`INSERT INTO sets (card_game_id, api_id, name) VALUES (1, ?, ?)`, apiID, apiID)
 		require.NoError(t, err)
 	}
 
 	// Get all API IDs
-	retrievedIDs, err := service.GetAllSetAPIIDs(ctx)
+	retrievedIDs, err := service.GetAllSetAPIIDs(ctx, testCardGameID)
 	require.NoError(t, err)
 
 	// Verify all IDs are present (order doesn't matter based on query)

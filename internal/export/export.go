@@ -19,14 +19,17 @@ type CardRow struct {
 	Quantity int
 }
 
-func ToCSV(rows []CardRow, filepath string) error {
+func ToCSV(rows []CardRow, filepath string) (err error) {
 	f, err := os.Create(filepath)
 	if err != nil {
 		return fmt.Errorf("failed to create file: %w", err)
 	}
-	defer f.Close()
+	defer func() {
+		if closeErr := f.Close(); closeErr != nil && err == nil {
+			err = fmt.Errorf("failed to close CSV file: %w", closeErr)
+		}
+	}()
 	w := csv.NewWriter(f)
-	defer w.Flush()
 	if err := w.Write([]string{"Name", "Set", "Set Code", "Number", "Rarity", "Quantity"}); err != nil {
 		return fmt.Errorf("failed to write header: %w", err)
 	}
@@ -34,6 +37,10 @@ func ToCSV(rows []CardRow, filepath string) error {
 		if err := w.Write([]string{r.Name, r.SetName, r.SetCode, r.Number, r.Rarity, fmt.Sprintf("%d", r.Quantity)}); err != nil {
 			return fmt.Errorf("failed to write row: %w", err)
 		}
+	}
+	w.Flush()
+	if err := w.Error(); err != nil {
+		return fmt.Errorf("failed to flush CSV: %w", err)
 	}
 	return nil
 }

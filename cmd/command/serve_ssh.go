@@ -2,6 +2,7 @@ package command
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -18,8 +19,6 @@ import (
 	"github.com/charmbracelet/wish/logging"
 	"github.com/spf13/cobra"
 
-	"github.com/laiambryant/tui-cardman/internal/config"
-	dbpkg "github.com/laiambryant/tui-cardman/internal/db"
 	"github.com/laiambryant/tui-cardman/internal/tui"
 )
 
@@ -28,27 +27,18 @@ var serveSSHCmd = &cobra.Command{
 	Short: "Start the SSH server for remote TUI access",
 	Long:  `Launch an SSH server that provides authenticated access to the card management TUI.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		config.LoadConfig()
-		log, err := os.Create(logFileName)
+		runtime, err := newCommandRuntime(true, true)
 		if err != nil {
-			return fmt.Errorf("create log file: %w", err)
+			return err
 		}
-		defer log.Close()
-		slog.SetDefault(slog.New(slog.NewTextHandler(log, &slog.HandlerOptions{Level: config.GetLogLevel()})))
-		db, err := dbpkg.OpenDB(config.Cfg.DBDSN)
-		if err != nil {
-			return fmt.Errorf("open db: %w", err)
-		}
-		defer db.Close()
-		if err := dbpkg.ApplyMigrations(db, "internal/db/migrations"); err != nil {
-			return fmt.Errorf("apply migrations: %w", err)
-		}
-		hostKeyPath, err := ensureHostKey(config.Cfg.SSHHostKey)
+		defer runtime.Close()
+
+		hostKeyPath, err := ensureHostKey(runtime.config.SSHHostKey)
 		if err != nil {
 			return fmt.Errorf("ensure host key: %w", err)
 		}
 		s, err := wish.NewServer(
-			wish.WithAddress(fmt.Sprintf(":%d", config.Cfg.SSHPort)),
+			wish.WithAddress(fmt.Sprintf(":%d", runtime.config.SSHPort)),
 			wish.WithHostKeyPath(hostKeyPath),
 			wish.WithMiddleware(
 				bubbletea.Middleware(func(s ssh.Session) (tea.Model, []tea.ProgramOption) {
@@ -57,7 +47,7 @@ var serveSSHCmd = &cobra.Command{
 						fmt.Println("no active terminal, skipping")
 						return nil, nil
 					}
-					model, err := tui.NewModel(db, true)
+					model, err := tui.NewModel(runtime.db, true)
 					if err != nil {
 						slog.Error("failed to create TUI model", "error", err)
 						return nil, nil
@@ -76,22 +66,35 @@ var serveSSHCmd = &cobra.Command{
 		}
 		done := make(chan os.Signal, 1)
 		signal.Notify(done, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
+		defer signal.Stop(done)
+		serverErr := make(chan error, 1)
 		go func() {
-			slog.Info("Starting SSH server", "port", config.Cfg.SSHPort)
-			fmt.Printf("SSH server starting on port %d\n", config.Cfg.SSHPort)
+			slog.Info("Starting SSH server", "port", runtime.config.SSHPort)
+			fmt.Printf("SSH server starting on port %d\n", runtime.config.SSHPort)
 			fmt.Printf("Host key: %s\n", hostKeyPath)
 			fmt.Println("Press Ctrl+C to stop")
-			if err = s.ListenAndServe(); err != nil {
-				slog.Error("SSH server error", "error", err)
+			err := s.ListenAndServe()
+			if errors.Is(err, ssh.ErrServerClosed) {
+				err = nil
 			}
+			serverErr <- err
 		}()
-		<-done
-		slog.Info("Stopping SSH server")
-		fmt.Println("\nShutting down SSH server...")
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-		if err := s.Shutdown(ctx); err != nil {
-			return fmt.Errorf("shutdown SSH server: %w", err)
+
+		select {
+		case err := <-serverErr:
+			if err != nil {
+				slog.Error("SSH server error", "error", err)
+				return fmt.Errorf("serve SSH: %w", err)
+			}
+			return nil
+		case <-done:
+			slog.Info("Stopping SSH server")
+			fmt.Println("\nShutting down SSH server...")
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			if err := s.Shutdown(ctx); err != nil {
+				return fmt.Errorf("shutdown SSH server: %w", err)
+			}
 		}
 
 		return nil
@@ -100,7 +103,10 @@ var serveSSHCmd = &cobra.Command{
 
 // ensureHostKey generates SSH host key if it doesn't exist
 func ensureHostKey(keyPath string) (string, error) {
-	if keyPath[:2] == "~/" {
+	if keyPath == "" {
+		return "", fmt.Errorf("SSH_HOST_KEY must not be empty")
+	}
+	if len(keyPath) >= 2 && keyPath[:2] == "~/" {
 		home, err := os.UserHomeDir()
 		if err != nil {
 			return "", fmt.Errorf("get home dir: %w", err)

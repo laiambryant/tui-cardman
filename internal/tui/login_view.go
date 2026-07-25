@@ -22,7 +22,7 @@ func (m *Model) initLoginInputs() {
 }
 
 func (m *Model) initSSHConfigManager(userID int64) {
-	if !m.isSSHMode || m.configManager != nil {
+	if !m.isSSHMode {
 		return
 	}
 	buttonConfigService := buttonconfig.NewButtonConfigService(m.db)
@@ -39,6 +39,7 @@ func (m *Model) initSSHConfigManager(userID int64) {
 		m.errorMsg = fmt.Sprintf("Login successful but failed to load config: %v", err)
 	} else {
 		m.configManager = configManager
+		m.applyConfiguredTheme()
 	}
 }
 
@@ -65,7 +66,7 @@ func (m *Model) handleLogin() (tea.Model, tea.Cmd) {
 }
 
 func (m Model) loginView() string {
-	header := titleStyle.Render("CardMan - Login")
+	header := RenderBreadcrumbs(m.styleManager, "Login")
 	body := m.renderLoginBody()
 	footer := m.renderLoginFooter()
 	return renderFramedView(header, body, footer, m.width, m.height, m.styleManager)

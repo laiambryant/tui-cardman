@@ -1,0 +1,1 @@
+ALTER TABLE decks ADD COLUMN format TEXT NOT NULL DEFAULT 'standard';

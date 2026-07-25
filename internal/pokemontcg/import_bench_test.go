@@ -206,7 +206,7 @@ func BenchmarkImportPerCardTransaction(b *testing.B) {
 			for i := 0; b.Loop(); i++ {
 				b.StopTimer()
 				// Create a new set for each iteration
-				setID, err := setService.UpsertSet(ctx, fmt.Sprintf("test-set-%d", i), "TST", fmt.Sprintf("Test Set %d", i), count, count)
+				setID, err := setService.UpsertSet(ctx, 1, fmt.Sprintf("test-set-%d", i), "TST", fmt.Sprintf("Test Set %d", i), count, count)
 				if err != nil {
 					b.Fatalf("failed to create set: %v", err)
 				}
@@ -255,7 +255,7 @@ func BenchmarkImportPerSetTransaction(b *testing.B) {
 			for i := 0; b.Loop(); i++ {
 				b.StopTimer()
 				// Create a new set for each iteration
-				setID, err := setService.UpsertSet(ctx, fmt.Sprintf("test-set-%d", i), "TST", fmt.Sprintf("Test Set %d", i), count, count)
+				setID, err := setService.UpsertSet(ctx, 1, fmt.Sprintf("test-set-%d", i), "TST", fmt.Sprintf("Test Set %d", i), count, count)
 				if err != nil {
 					b.Fatalf("failed to create set: %v", err)
 				}

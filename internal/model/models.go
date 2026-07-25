@@ -98,7 +98,6 @@ type Deck struct {
 	UserID     int64
 	CardGameID int64
 	Name       string
-	Format     string
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
 }

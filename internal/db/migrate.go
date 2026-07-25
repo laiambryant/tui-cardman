@@ -1,8 +1,11 @@
 package db
 
 import (
+	"context"
 	"database/sql"
+	"embed"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -22,12 +25,29 @@ const (
 	recordMigration       = `INSERT INTO schema_migrations(version, applied_at) VALUES (?, ?)`
 )
 
+//go:embed migrations/*.sql
+var embeddedMigrations embed.FS
+
+// ApplyEmbeddedMigrations applies the migrations compiled into the binary.
+// This works regardless of the process working directory.
+func ApplyEmbeddedMigrations(db *sql.DB) error {
+	sub, err := fs.Sub(embeddedMigrations, "migrations")
+	if err != nil {
+		return fmt.Errorf("open embedded migrations: %w", err)
+	}
+	return applyMigrationsFS(db, sub)
+}
+
+// ApplyMigrations applies migrations from a directory on disk.
 func ApplyMigrations(db *sql.DB, migrationsDir string) error {
-	slog.Debug("starting migration process", "dir", migrationsDir)
+	return applyMigrationsFS(db, os.DirFS(migrationsDir))
+}
+
+func applyMigrationsFS(db *sql.DB, fsys fs.FS) error {
 	if err := ensureMigrationsTable(db); err != nil {
 		return err
 	}
-	migrations, err := loadPendingMigrations(db, migrationsDir)
+	migrations, err := loadPendingMigrations(db, fsys)
 	if err != nil {
 		return err
 	}
@@ -48,8 +68,8 @@ func ensureMigrationsTable(db *sql.DB) error {
 	return err
 }
 
-func loadPendingMigrations(db *sql.DB, dir string) ([]migration, error) {
-	files, err := filepath.Glob(filepath.Join(dir, "*.up.sql"))
+func loadPendingMigrations(db *sql.DB, fsys fs.FS) ([]migration, error) {
+	files, err := fs.Glob(fsys, "*.up.sql")
 	if err != nil {
 		return nil, err
 	}
@@ -69,7 +89,7 @@ func loadPendingMigrations(db *sql.DB, dir string) ([]migration, error) {
 			continue
 		}
 		slog.Debug("migration pending", "version", version, "path", path)
-		pending = append(pending, migration{version: version, path: path})
+		pending = append(pending, migration{version: version, path: path, fsys: fsys})
 	}
 	return pending, nil
 }
@@ -91,13 +111,35 @@ func isApplied(db *sql.DB, version string) (bool, error) {
 
 func applyMigration(db *sql.DB, m migration) error {
 	slog.Debug("applying migration", "version", m.version, "path", m.path)
-	content, err := os.ReadFile(m.path)
+	content, err := fs.ReadFile(m.fsys, m.path)
 	if err != nil {
 		return err
 	}
-	tx, err := db.Begin()
+	foreignKeysOff := strings.Contains(string(content), "-- cardman:foreign_keys_off")
+	var (
+		tx   *sql.Tx
+		conn *sql.Conn
+	)
+	if foreignKeysOff {
+		conn, err = db.Conn(context.Background())
+		if err != nil {
+			return fmt.Errorf("open dedicated migration connection: %w", err)
+		}
+		defer conn.Close()
+		if _, err = conn.ExecContext(context.Background(), "PRAGMA foreign_keys = OFF"); err != nil {
+			return fmt.Errorf("disable foreign keys for %s: %w", m.path, err)
+		}
+		defer func() {
+			if _, pragmaErr := conn.ExecContext(context.Background(), "PRAGMA foreign_keys = ON"); pragmaErr != nil {
+				slog.Error("failed to restore foreign key enforcement", "migration", m.path, "error", pragmaErr)
+			}
+		}()
+		tx, err = conn.BeginTx(context.Background(), nil)
+	} else {
+		tx, err = db.Begin()
+	}
 	if err != nil {
-		return err
+		return fmt.Errorf("begin migration %s: %w", m.path, err)
 	}
 	defer func() {
 		if err := tx.Rollback(); err != nil && err != sql.ErrTxDone {
@@ -109,6 +151,11 @@ func applyMigration(db *sql.DB, m migration) error {
 	if _, err := tx.Exec(string(content)); err != nil {
 		slog.Debug("tx exec failed", "version", m.version, "err", err)
 		return fmt.Errorf("apply %s: %w", m.path, err)
+	}
+	if foreignKeysOff {
+		if err := verifyForeignKeys(tx); err != nil {
+			return fmt.Errorf("verify %s: %w", m.path, err)
+		}
 	}
 	slog.Debug("tx exec", "query", logging.SanitizeQuery(recordMigration), "args", []any{m.version, time.Now().UTC()})
 	if _, err := tx.Exec(recordMigration, m.version, time.Now().UTC()); err != nil {
@@ -124,7 +171,29 @@ func applyMigration(db *sql.DB, m migration) error {
 	return nil
 }
 
+func verifyForeignKeys(tx *sql.Tx) error {
+	rows, err := tx.Query("PRAGMA foreign_key_check")
+	if err != nil {
+		return fmt.Errorf("run foreign key check: %w", err)
+	}
+	defer rows.Close()
+	if !rows.Next() {
+		return rows.Err()
+	}
+	var (
+		table  string
+		rowID  sql.NullInt64
+		parent string
+		fkID   int
+	)
+	if err := rows.Scan(&table, &rowID, &parent, &fkID); err != nil {
+		return fmt.Errorf("scan foreign key violation: %w", err)
+	}
+	return fmt.Errorf("foreign key violation in table %s row %v referencing %s (constraint %d)", table, rowID, parent, fkID)
+}
+
 type migration struct {
 	version string
 	path    string
+	fsys    fs.FS
 }

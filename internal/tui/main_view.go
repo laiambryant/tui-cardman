@@ -16,10 +16,12 @@ func (m Model) mainView() string {
 }
 
 func (m Model) renderMainHeader() string {
+	brand := RenderBrand(m.styleManager)
+	divider := subtleStyle.Render("  │  ")
 	if m.user != nil {
-		return titleStyle.Render(fmt.Sprintf("CardMan - Welcome, %s %s!", m.user.Name, m.user.Surname))
+		return brand + divider + helpStyle.Render(fmt.Sprintf("Welcome back, %s %s", m.user.Name, m.user.Surname))
 	}
-	return titleStyle.Render("CardMan - Card Management TUI")
+	return brand + divider + helpStyle.Render("Card Collection Manager")
 }
 
 func (m Model) renderMainFooter() string {
@@ -46,7 +48,6 @@ func (m Model) renderSplitMainBody(contentWidth, contentHeight int) string {
 
 func (m Model) renderCardGamesPanel(width, height int) string {
 	var b strings.Builder
-	b.WriteString(titleStyle.Render("Card Games") + "\n")
 	innerWidth := max(width-6, 10)
 	btnMaxWidth := max(innerWidth-4, 6)
 	if len(m.cardGames) == 0 {
@@ -57,7 +58,7 @@ func (m Model) renderCardGamesPanel(width, height int) string {
 			b.WriteString(RenderButtonItem(m.styleManager, game.Name, focused, btnMaxWidth))
 		}
 	}
-	return RenderPanel(m.styleManager, b.String(), width, height, m.mainFocusPanel == 0, 2, 1)
+	return RenderTitledPanel(m.styleManager, "Card Games", b.String(), width, height, m.mainFocusPanel == 0, 2, 1)
 }
 
 // renderRightPanel renders the right side of the home screen split into
@@ -76,7 +77,7 @@ func (m Model) renderRightPanel(width, height int) string {
 	bottomContent := m.renderStatsSection(innerWidth, bottomHeight)
 
 	body := lipgloss.JoinVertical(lipgloss.Left, topContent, bottomContent)
-	return RenderPanel(m.styleManager, body, width, height, m.mainFocusPanel == 1, 2, 1)
+	return RenderTitledPanel(m.styleManager, "Browse", body, width, height, m.mainFocusPanel == 1, 2, 1)
 }
 
 var modeLabels = []string{
@@ -88,7 +89,7 @@ var modeLabels = []string{
 
 func (m Model) renderModesSection(innerWidth, btnMaxWidth, availHeight int) string {
 	var b strings.Builder
-	b.WriteString(titleStyle.Render("Select Mode") + "\n")
+	b.WriteString(secondaryStyle.Bold(true).Render("Select Mode") + "\n")
 	for i, label := range modeLabels {
 		focused := m.rightPanelCursor == i && m.mainFocusPanel == 1
 		b.WriteString(RenderButtonItem(m.styleManager, label, focused, btnMaxWidth))
@@ -98,12 +99,11 @@ func (m Model) renderModesSection(innerWidth, btnMaxWidth, availHeight int) stri
 }
 
 func (m Model) renderStatsSection(innerWidth, availHeight int) string {
-	_ = innerWidth
 	_ = availHeight
 	sm := m.styleManager
 
 	var b strings.Builder
-	b.WriteString(titleStyle.Render("Stats") + "\n")
+	b.WriteString(secondaryStyle.Bold(true).Render("Stats") + "\n")
 
 	if m.user == nil {
 		b.WriteString(sm.GetHelpStyle().Render("Login to see stats.") + "\n")
@@ -118,7 +118,7 @@ func (m Model) renderStatsSection(innerWidth, availHeight int) string {
 	// Show which game the stats are for
 	if m.cursor < len(m.cardGames) {
 		gameName := m.cardGames[m.cursor].Name
-		b.WriteString(sm.GetHelpStyle().Render(gameName) + "\n\n")
+		b.WriteString(RenderStatusBadge(sm, "info", gameName) + "\n\n")
 	}
 
 	if m.statsLoading {
@@ -133,20 +133,23 @@ func (m Model) renderStatsSection(innerWidth, availHeight int) string {
 
 	s := m.gameStats
 	labelStyle := sm.GetHelpStyle()
-	valueStyle := sm.GetTitleStyle()
+	valueStyle := sm.GetTitleStyle().Bold(true)
 
 	line := func(label, value string) string {
-		return labelStyle.Render(label+": ") + valueStyle.Render(value) + "\n"
+		return labelStyle.Render(fmt.Sprintf("%-18s", label)) + valueStyle.Render(value) + "\n"
 	}
 
 	b.WriteString(line("Cards owned", fmt.Sprintf("%d", s.TotalCardsOwned)))
 	b.WriteString(line("Lists", fmt.Sprintf("%d", s.ListCount)))
 	b.WriteString(line("Decks", fmt.Sprintf("%d", s.DeckCount)))
 	if s.CollectionValue > 0 {
-		b.WriteString(line("Collection value", fmt.Sprintf("$%.2f", s.CollectionValue)))
+		b.WriteString(labelStyle.Render(fmt.Sprintf("%-18s", "Collection value")) + sm.GetSuccessStyle().Bold(true).Render(fmt.Sprintf("$%.2f", s.CollectionValue)) + "\n")
 	}
 	if s.TotalSets > 0 {
+		percent := float64(s.SetsComplete) / float64(s.TotalSets) * 100
+		barWidth := min(max(innerWidth-4, 10), 30)
 		b.WriteString(line("Sets complete", fmt.Sprintf("%d / %d", s.SetsComplete, s.TotalSets)))
+		b.WriteString(RenderProgressBar(percent, barWidth, sm) + "\n")
 	}
 
 	return b.String()
@@ -154,13 +157,13 @@ func (m Model) renderStatsSection(innerWidth, availHeight int) string {
 
 func (m Model) renderMainMenuHelp() string {
 	hb := NewHelpBuilder(m.configManager)
-	help := hb.Build(KeyItem{"settings", "F1", "Settings"}) +
-		" • Left/Right: Switch Panel • " +
-		hb.Pair("nav_up", "↑", "nav_down", "↓", "Navigate") +
-		" • " +
+	return JoinHelpHints(
+		hb.Build(KeyItem{"settings", "F1", "Settings"}),
+		RenderHelpHint("←/→", "Switch panel"),
+		hb.Pair("nav_up", "↑", "nav_down", "↓", "Navigate"),
 		hb.Build(
 			KeyItem{"select", "Enter", "Select"},
 			KeyItem{"quit", "Ctrl+C", "Quit"},
-		)
-	return helpStyle.Render(help)
+		),
+	)
 }

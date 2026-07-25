@@ -24,6 +24,11 @@ func TestOpenDB(t *testing.T) {
 			dsn:     "file::memory:?cache=shared",
 			wantErr: false,
 		},
+		{
+			name:    "unopenable database",
+			dsn:     "file:/this/path/does/not/exist/cardman.db?mode=rw",
+			wantErr: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -31,6 +36,7 @@ func TestOpenDB(t *testing.T) {
 			db, err := OpenDB(tt.dsn)
 			if tt.wantErr {
 				require.Error(t, err)
+				require.Nil(t, db)
 				return
 			}
 

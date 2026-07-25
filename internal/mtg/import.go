@@ -33,7 +33,7 @@ func NewImportService(
 	setService sets.SetService,
 	cardService card.CardService,
 	mtgCardSvc mtgcard.MTGCardService,
-) *ImportService {
+) (*ImportService, error) {
 	svc := &ImportService{
 		db:               db,
 		client:           client,
@@ -44,9 +44,9 @@ func NewImportService(
 		mtgCardSvc:       mtgCardSvc,
 	}
 	if err := svc.initMTGGameID(context.Background()); err != nil {
-		logger.Error("failed to initialize MTG game ID", "error", err)
+		return nil, err
 	}
-	return svc
+	return svc, nil
 }
 
 func (s *ImportService) initMTGGameID(ctx context.Context) error {
@@ -62,53 +62,51 @@ func (s *ImportService) initMTGGameID(ctx context.Context) error {
 
 func (s *ImportService) ImportSet(ctx context.Context, set MTGSet) (int, error) {
 	s.logger.Info("importing MTG set", "set_code", set.SetCode, "set_name", set.Name)
-	setID, err := s.setService.UpsertSet(ctx, set.SetCode, set.SetCode, set.Name, set.NumCards, set.NumCards)
-	if err != nil {
-		return 0, fmt.Errorf("failed to upsert set %s: %w", set.SetCode, err)
-	}
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return 0, fmt.Errorf("failed to begin transaction: %w", err)
-	}
-	defer func() {
-		if rollbackErr := tx.Rollback(); rollbackErr != nil && err == nil {
-			err = rollbackErr
-		}
-	}()
-	cardsImported := 0
+
+	var allCards []MTGCard
+	total := set.NumCards
 	page := 1
 	for {
-		cards, hasMore, totalCount, fetchErr := s.client.GetCardsForSet(ctx, set.SetCode, page)
-		if fetchErr != nil {
-			return cardsImported, fmt.Errorf("failed to fetch cards for set %s page %d: %w", set.SetCode, page, fetchErr)
+		cards, hasMore, totalCount, err := s.client.GetCardsForSet(ctx, set.SetCode, page)
+		if err != nil {
+			return 0, fmt.Errorf("failed to fetch cards for set %s page %d: %w", set.SetCode, page, err)
 		}
-		if page == 1 && totalCount > 0 {
-			_, _ = s.setService.UpsertSet(ctx, set.SetCode, set.SetCode, set.Name, totalCount, totalCount)
+		allCards = append(allCards, cards...)
+		if totalCount > 0 {
+			total = totalCount
 		}
-		for _, c := range cards {
-			if upsertErr := s.upsertCardTx(ctx, tx, c, setID); upsertErr != nil {
-				s.logger.Error("failed to upsert MTG card", "card_id", c.ID, "name", c.Name, "error", upsertErr)
-				continue
-			}
-			cardsImported++
-		}
-		s.logger.Info("imported MTG cards page", "set_code", set.SetCode, "page", page, "count", len(cards))
 		if !hasMore {
 			break
 		}
 		page++
 	}
-	if err = tx.Commit(); err != nil {
-		return cardsImported, fmt.Errorf("failed to commit set transaction for %s: %w", set.SetCode, err)
+	if total == 0 {
+		total = len(allCards)
 	}
-	if cardsImported == 0 {
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	setID, err := s.setService.UpsertSetTx(ctx, tx, s.mtgGameID, set.SetCode, set.SetCode, set.Name, total, total)
+	if err != nil {
+		return 0, fmt.Errorf("failed to upsert set %s: %w", set.SetCode, err)
+	}
+	for _, c := range allCards {
+		if err := s.upsertCardTx(ctx, tx, c, setID); err != nil {
+			return 0, fmt.Errorf("failed to upsert MTG card %s in set %s: %w", c.ID, set.SetCode, err)
+		}
+	}
+	if err = tx.Commit(); err != nil {
+		return 0, fmt.Errorf("failed to commit set transaction for %s: %w", set.SetCode, err)
+	}
+	if len(allCards) == 0 {
 		s.logger.Warn("MTG set import completed with zero cards", "set_code", set.SetCode)
 	}
-	if _, upsertErr := s.setService.UpsertSet(ctx, set.SetCode, set.SetCode, set.Name, cardsImported, cardsImported); upsertErr != nil {
-		s.logger.Warn("failed to update set totals after import", "set_code", set.SetCode, "error", upsertErr)
-	}
-	s.logger.Info("completed MTG set import", "set_code", set.SetCode, "total_cards", cardsImported)
-	return cardsImported, nil
+	s.logger.Info("completed MTG set import", "set_code", set.SetCode, "total_cards", len(allCards))
+	return len(allCards), nil
 }
 
 func (s *ImportService) upsertCardTx(ctx context.Context, tx *sql.Tx, c MTGCard, setID int64) error {
@@ -198,7 +196,7 @@ func (s *ImportService) ImportNewSets(ctx context.Context) error {
 		_ = s.importRunService.UpdateImportRun(ctx, runID, "failed", 0, 0, 1, fmt.Sprintf("failed to fetch sets: %v", err))
 		return fmt.Errorf("failed to fetch MTG sets: %w", err)
 	}
-	existing, err := s.setService.GetAllSetAPIIDs(ctx)
+	existing, err := s.setService.GetAllSetAPIIDs(ctx, s.mtgGameID)
 	if err != nil {
 		_ = s.importRunService.UpdateImportRun(ctx, runID, "failed", 0, 0, 1, fmt.Sprintf("failed to query existing sets: %v", err))
 		return fmt.Errorf("failed to query existing sets: %w", err)
@@ -257,7 +255,7 @@ func (s *ImportService) ImportSpecificSets(ctx context.Context, setCodes []strin
 }
 
 func (s *ImportService) DeleteSetByAPIID(ctx context.Context, setCode string) error {
-	dbSetID, err := s.setService.GetSetIDByAPIID(ctx, setCode)
+	dbSetID, err := s.setService.GetSetIDByAPIID(ctx, s.mtgGameID, setCode)
 	if err == sql.ErrNoRows {
 		s.logger.Debug("MTG set not in database, nothing to delete", "set_code", setCode)
 		return nil

@@ -46,10 +46,11 @@ type ImportState struct {
 	quantities map[int64]int
 	errMsg     string
 	cardSvc    cardservice.CardService
+	gameID     int64
 }
 
 // NewImportState creates a ready-to-use ImportState.
-func NewImportState(cardSvc cardservice.CardService, sm *StyleManager) ImportState {
+func NewImportState(cardSvc cardservice.CardService, gameID int64, sm *StyleManager) ImportState {
 	ti := textinput.New()
 	ti.Placeholder = "path/to/deck.csv"
 	ti.Width = 50
@@ -61,6 +62,7 @@ func NewImportState(cardSvc cardservice.CardService, sm *StyleManager) ImportSta
 		phase:     importPhaseInput,
 		pathInput: ti,
 		cardSvc:   cardSvc,
+		gameID:    gameID,
 	}
 }
 
@@ -97,13 +99,14 @@ func (s *ImportState) handleInputPhaseKey(key string) tea.Cmd {
 		}
 		s.phase = importPhaseWorking
 		cardSvc := s.cardSvc
+		gameID := s.gameID
 		return func() tea.Msg {
 			rows, err := export.FromCSV(path)
 			if err != nil {
 				return importReadyMsg{err: err}
 			}
 			lookup := func(setCode, number string) (int64, error) {
-				card, err := cardSvc.GetCardBySetCodeAndNumber(setCode, number)
+				card, err := cardSvc.GetCardByGameAndSetCodeAndNumber(gameID, setCode, number)
 				if err != nil {
 					return 0, err
 				}
@@ -181,7 +184,7 @@ func (s ImportState) Render(sm *StyleManager) string {
 	case importPhaseInput:
 		b.WriteString(sm.GetTitleStyle().Render("Import CSV") + "\n")
 		b.WriteString(sm.GetBlurredStyle().Render("File path: ") + s.pathInput.View() + "\n")
-		b.WriteString(sm.GetBlurredStyle().Render("Enter: Load • Esc: Cancel"))
+		b.WriteString(JoinHelpHints(RenderHelpHint("Enter", "Load"), RenderHelpHint("Esc", "Cancel")))
 
 	case importPhaseWorking:
 		b.WriteString(sm.GetBlurredStyle().Render(ImportIcon + " Reading CSV and matching cards..."))
@@ -189,7 +192,7 @@ func (s ImportState) Render(sm *StyleManager) string {
 	case importPhaseResult:
 		if s.errMsg != "" {
 			b.WriteString(sm.GetErrorStyle().Render(s.errMsg) + "\n")
-			b.WriteString(sm.GetBlurredStyle().Render("Esc: Close"))
+			b.WriteString(RenderHelpHint("Esc", "Close"))
 		} else {
 			b.WriteString(sm.GetTitleStyle().Render("Import Summary") + "\n")
 			b.WriteString(sm.GetNoStyle().Render(s.result.Summary()) + "\n")
@@ -208,9 +211,9 @@ func (s ImportState) Render(sm *StyleManager) string {
 				}
 			}
 			if s.result.Imported > 0 {
-				b.WriteString(sm.GetBlurredStyle().Render("Enter/Y: Apply • Esc/N: Cancel"))
+				b.WriteString(JoinHelpHints(RenderHelpHint("Enter/Y", "Apply"), RenderHelpHint("Esc/N", "Cancel")))
 			} else {
-				b.WriteString(sm.GetBlurredStyle().Render("No matching cards found. Esc: Close"))
+				b.WriteString(sm.GetBlurredStyle().Render("No matching cards found. ") + RenderHelpHint("Esc", "Close"))
 			}
 		}
 	}

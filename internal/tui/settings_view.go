@@ -8,6 +8,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/laiambryant/tui-cardman/internal/runtimecfg"
 )
@@ -35,7 +36,10 @@ type SettingsModel struct {
 	height         int
 	activeTab      int
 	columnCursor   int
+	themeCursor    int
 }
+
+const settingsTabCount = 3
 
 // NewSettingsModel creates a new settings model
 func NewSettingsModel(configManager *runtimecfg.Manager, styleManager *StyleManager) *SettingsModel {
@@ -58,6 +62,7 @@ func NewSettingsModel(configManager *runtimecfg.Manager, styleManager *StyleMana
 		actions:        actions,
 		input:          input,
 		cursor:         0,
+		themeCursor:    themeIndex(cfg.UI.Theme),
 	}
 	model.modal = NewModalModel(
 		"Save Changes?",
@@ -148,10 +153,10 @@ func (m SettingsModel) handleNormalKey(action, s string) (SettingsModel, tea.Cmd
 		m.initiateSave()
 		return m, nil
 	case s == "tab" || action == "nav_next_tab":
-		m.activeTab = (m.activeTab + 1) % 2
+		m.activeTab = (m.activeTab + 1) % settingsTabCount
 		return m, nil
 	case s == "shift+tab" || action == "nav_prev_tab":
-		m.activeTab = (m.activeTab + 1) % 2
+		m.activeTab = (m.activeTab + settingsTabCount - 1) % settingsTabCount
 		return m, nil
 	case action == "nav_up" || s == "k" || s == "up":
 		m.navigateUp()
@@ -173,27 +178,46 @@ func (m SettingsModel) handleNormalKey(action, s string) (SettingsModel, tea.Cmd
 }
 
 func (m *SettingsModel) navigateUp() {
-	if m.activeTab == 0 {
+	switch m.activeTab {
+	case 0:
 		if m.cursor > 0 {
 			m.cursor--
 		}
-	} else {
+	case 1:
 		if m.columnCursor > 0 {
 			m.columnCursor--
+		}
+	case 2:
+		if m.themeCursor > 0 {
+			m.themeCursor--
 		}
 	}
 }
 
 func (m *SettingsModel) navigateDown() {
-	if m.activeTab == 0 {
+	switch m.activeTab {
+	case 0:
 		if m.cursor < len(m.actions)-1 {
 			m.cursor++
 		}
-	} else {
+	case 1:
 		if m.columnCursor < len(m.tempConfig.UI.ColumnOrder)-1 {
 			m.columnCursor++
 		}
+	case 2:
+		if m.themeCursor < len(ThemeNames())-1 {
+			m.themeCursor++
+		}
 	}
+}
+
+func themeIndex(name string) int {
+	for i, n := range ThemeNames() {
+		if n == name {
+			return i
+		}
+	}
+	return 0
 }
 
 func (m *SettingsModel) stopEditing() {
@@ -203,15 +227,32 @@ func (m *SettingsModel) stopEditing() {
 }
 
 func (m *SettingsModel) handleSelectKey() {
-	if m.activeTab == 0 {
+	switch m.activeTab {
+	case 0:
 		if m.cursor < len(m.actions) {
 			m.editing = true
 			m.editingAction = m.actions[m.cursor]
 			m.errorMsg = ""
 		}
+	case 1:
+		m.toggleSelectedColumn()
+	case 2:
+		m.selectTheme()
+	}
+}
+
+func (m *SettingsModel) selectTheme() {
+	names := ThemeNames()
+	if m.themeCursor >= len(names) {
 		return
 	}
-	m.toggleSelectedColumn()
+	name := names[m.themeCursor]
+	if m.tempConfig.UI.Theme == name {
+		return
+	}
+	m.tempConfig.UI.Theme = name
+	m.styleManager.SetTheme(name)
+	m.hasChanges = true
 }
 
 func (m SettingsModel) View() string {
@@ -226,8 +267,8 @@ func (m SettingsModel) renderSettingsHeader() string {
 	if m.hasChanges {
 		title += " *"
 	}
-	b.WriteString(m.styleManager.GetTitleStyle().Render(title) + "\n")
-	b.WriteString(RenderTabBar(m.styleManager, []string{"Keybindings", "Columns"}, m.activeTab))
+	b.WriteString(RenderBreadcrumbs(m.styleManager, title) + "\n")
+	b.WriteString(RenderTabBar(m.styleManager, []string{"Keybindings", "Columns", "Theme"}, m.activeTab))
 	return b.String()
 }
 
@@ -241,10 +282,13 @@ func (m SettingsModel) renderSettingsBody(maxLines int) string {
 	if availableLines < 1 {
 		availableLines = 1
 	}
-	if m.activeTab == 0 {
+	switch m.activeTab {
+	case 0:
 		b.WriteString(m.renderKeybindingsSection(availableLines))
-	} else {
+	case 1:
 		b.WriteString(m.renderColumnsSection(availableLines))
+	case 2:
+		b.WriteString(m.renderThemeSection())
 	}
 	return b.String()
 }
@@ -312,7 +356,7 @@ func (m SettingsModel) renderKeybindingsSection(maxLines int) string {
 			b.WriteString(m.styleManager.GetSettingsSelectedStyle().Render("> "+actionDisplay+" "+keyDisplay) + "\n")
 		} else {
 			separator := m.styleManager.GetNoStyle().Render(" ")
-			b.WriteString(m.styleManager.GetBlurredStyle().Render("  "+actionDisplay) + separator + m.styleManager.GetNoStyle().Render(keyDisplay) + "\n")
+			b.WriteString(m.styleManager.GetBlurredStyle().Render("  "+actionDisplay) + separator + m.styleManager.GetSecondaryStyle().Render(keyDisplay) + "\n")
 		}
 	}
 	if len(m.actions) > maxVisible {
@@ -324,8 +368,11 @@ func (m SettingsModel) renderKeybindingsSection(maxLines int) string {
 func (m SettingsModel) buildHelpText() string {
 	hb := NewHelpBuilder(m.configManager)
 	selectLabel := "Edit"
-	if m.activeTab == 1 {
+	switch m.activeTab {
+	case 1:
 		selectLabel = "Toggle"
+	case 2:
+		selectLabel = "Preview"
 	}
 	parts := []string{
 		"Tab: Switch tab",
@@ -399,6 +446,48 @@ func (m SettingsModel) renderColumnsSection(maxLines int) string {
 	return b.String()
 }
 
+func (m SettingsModel) renderThemeSection() string {
+	var b strings.Builder
+	sm := m.styleManager
+	b.WriteString(sm.GetSecondaryStyle().Bold(true).Render("Theme") + sm.GetBlurredStyle().Render("  (Enter to preview, Ctrl+S to keep)") + "\n")
+	b.WriteString(sm.GetSubtleStyle().Render(strings.Repeat("─", 44)) + "\n")
+	for i, name := range ThemeNames() {
+		b.WriteString(m.renderThemeRow(i, name) + "\n")
+	}
+	return b.String()
+}
+
+func (m SettingsModel) renderThemeRow(index int, name string) string {
+	sm := m.styleManager
+	label := themeDisplayName(name)
+	marker := "  "
+	labelStyle := sm.GetBlurredStyle()
+	if index == m.themeCursor {
+		marker = sm.GetFocusedStyle().Bold(true).Render("❯ ")
+		labelStyle = sm.GetFocusedStyle().Bold(true)
+	}
+	active := ""
+	if m.tempConfig.UI.Theme == name {
+		active = "  " + RenderStatusBadge(sm, "success", "active")
+	}
+	return marker + labelStyle.Render(fmt.Sprintf("%-12s", label)) + renderThemeSwatches(name) + active
+}
+
+func renderThemeSwatches(name string) string {
+	var b strings.Builder
+	for _, color := range ThemeSwatchColors(name) {
+		b.WriteString(lipgloss.NewStyle().Foreground(color).Inline(true).Render("██ "))
+	}
+	return b.String()
+}
+
+func themeDisplayName(name string) string {
+	if name == "" {
+		return name
+	}
+	return strings.ToUpper(name[:1]) + name[1:]
+}
+
 func columnDisplayName(key string) string {
 	names := map[string]string{
 		"name":      "Name",
@@ -421,6 +510,7 @@ func copyConfig(cfg *runtimecfg.RuntimeConfig) *runtimecfg.RuntimeConfig {
 	cp := &runtimecfg.RuntimeConfig{
 		UI: runtimecfg.UIConfig{
 			CompactLists: cfg.UI.CompactLists,
+			Theme:        cfg.UI.Theme,
 		},
 	}
 	if cfg.Keybindings != nil {
@@ -458,4 +548,16 @@ func (m *SettingsModel) confirmSaveChanges() error {
 func (m *SettingsModel) cancelChanges() {
 	m.tempConfig = copyConfig(m.originalConfig)
 	m.hasChanges = false
+	m.restoreOriginalTheme()
+}
+
+func (m *SettingsModel) restoreOriginalTheme() {
+	theme := m.originalConfig.UI.Theme
+	if theme == "" {
+		theme = DefaultThemeName
+	}
+	if m.styleManager.ThemeName() != theme {
+		m.styleManager.SetTheme(theme)
+	}
+	m.themeCursor = themeIndex(theme)
 }

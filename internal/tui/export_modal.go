@@ -124,7 +124,11 @@ func (e ExportState) Render(sm *StyleManager) string {
 			s += sm.GetBlurredStyle().Render(" " + label + " ")
 		}
 	}
-	s += "\n" + sm.GetBlurredStyle().Render("←/→ Select • Enter Confirm • Esc Cancel")
+	s += "\n" + JoinHelpHints(
+		RenderHelpHint("←/→", "Select"),
+		RenderHelpHint("Enter", "Confirm"),
+		RenderHelpHint("Esc", "Cancel"),
+	)
 	return s
 }
 

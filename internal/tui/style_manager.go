@@ -9,19 +9,26 @@ import (
 var defaultStyleManager *StyleManager
 
 var (
-	focusedStyle lipgloss.Style
-	blurredStyle lipgloss.Style
-	noStyle      lipgloss.Style
-	helpStyle    lipgloss.Style
-	errorStyle   lipgloss.Style
-	titleStyle   lipgloss.Style
+	focusedStyle   lipgloss.Style
+	blurredStyle   lipgloss.Style
+	noStyle        lipgloss.Style
+	helpStyle      lipgloss.Style
+	errorStyle     lipgloss.Style
+	titleStyle     lipgloss.Style
+	subtleStyle    lipgloss.Style
+	secondaryStyle lipgloss.Style
+	keyHintStyle   lipgloss.Style
 )
 
 type colorScheme struct {
 	Focused                 lipgloss.Color
 	Blurred                 lipgloss.Color
 	Error                   lipgloss.Color
+	Success                 lipgloss.Color
+	Warning                 lipgloss.Color
 	Title                   lipgloss.Color
+	Secondary               lipgloss.Color
+	Subtle                  lipgloss.Color
 	Background              lipgloss.Color
 	Foreground              lipgloss.Color
 	TableSelectedForeground lipgloss.Color
@@ -37,31 +44,15 @@ const (
 	colorMintCream   lipgloss.Color = "#F0F7EE"
 )
 
-var defaultScheme = colorScheme{
-	Focused:                 colorMagenta,
-	Blurred:                 colorBananaCream,
-	Error:                   colorRed,
-	Title:                   colorPurple,
-	Background:              lipgloss.Color(""),
-	Foreground:              lipgloss.Color(""),
-	TableSelectedForeground: lipgloss.Color(""),
-	TableSelectedBackground: lipgloss.Color(""),
-	Disabled:                colorMintCream,
-}
-
 func init() {
 	defaultStyleManager = NewStyleManager()
-	focusedStyle = defaultStyleManager.GetFocusedStyle()
-	blurredStyle = defaultStyleManager.GetBlurredStyle()
-	noStyle = defaultStyleManager.GetNoStyle()
-	helpStyle = defaultStyleManager.GetHelpStyle()
-	errorStyle = defaultStyleManager.GetErrorStyle()
-	titleStyle = defaultStyleManager.GetTitleStyle()
+	refreshGlobalStyles(defaultStyleManager)
 }
 
 // StyleManager centralizes all TUI styling
 type StyleManager struct {
 	scheme       colorScheme
+	themeName    string
 	focusedStyle lipgloss.Style
 	blurredStyle lipgloss.Style
 	titleStyle   lipgloss.Style
@@ -70,11 +61,42 @@ type StyleManager struct {
 	noStyle      lipgloss.Style
 }
 
-// NewStyleManager creates a new style manager with the default color scheme
+// NewStyleManager creates a new style manager with the default theme
 func NewStyleManager() *StyleManager {
-	sm := &StyleManager{scheme: defaultScheme}
+	sm := &StyleManager{scheme: themes[DefaultThemeName], themeName: DefaultThemeName}
 	sm.initializeStyles()
 	return sm
+}
+
+// SetTheme switches the manager to a named theme and refreshes derived styles.
+// It returns false when the theme name is unknown.
+func (sm *StyleManager) SetTheme(name string) bool {
+	scheme, ok := themeByName(name)
+	if !ok {
+		return false
+	}
+	sm.scheme = scheme
+	sm.themeName = name
+	sm.initializeStyles()
+	refreshGlobalStyles(sm)
+	return true
+}
+
+// ThemeName returns the name of the currently active theme.
+func (sm *StyleManager) ThemeName() string {
+	return sm.themeName
+}
+
+func refreshGlobalStyles(sm *StyleManager) {
+	focusedStyle = sm.GetFocusedStyle()
+	blurredStyle = sm.GetBlurredStyle()
+	noStyle = sm.GetNoStyle()
+	helpStyle = sm.GetHelpStyle()
+	errorStyle = sm.GetErrorStyle()
+	titleStyle = sm.GetTitleStyle()
+	subtleStyle = sm.GetSubtleStyle()
+	secondaryStyle = sm.GetSecondaryStyle()
+	keyHintStyle = sm.GetKeyHintStyle()
 }
 
 func (sm *StyleManager) initializeStyles() {
@@ -125,9 +147,43 @@ func (sm *StyleManager) GetDisabledStyle() lipgloss.Style {
 	return sm.applyBGFG(lipgloss.NewStyle().Foreground(sm.scheme.Disabled).Strikethrough(true).Inline(true))
 }
 
+// GetSecondaryStyle returns the secondary accent style
+func (sm *StyleManager) GetSecondaryStyle() lipgloss.Style {
+	return sm.createForegroundStyle(sm.scheme.Secondary)
+}
+
+// GetSuccessStyle returns the style for success states
+func (sm *StyleManager) GetSuccessStyle() lipgloss.Style {
+	return sm.createForegroundStyle(sm.scheme.Success)
+}
+
+// GetWarningStyle returns the style for warning states
+func (sm *StyleManager) GetWarningStyle() lipgloss.Style {
+	return sm.createForegroundStyle(sm.scheme.Warning)
+}
+
+// GetSubtleStyle returns the style for low-emphasis chrome such as separators
+func (sm *StyleManager) GetSubtleStyle() lipgloss.Style {
+	return sm.createForegroundStyle(sm.scheme.Subtle)
+}
+
+// GetKeyHintStyle returns the style for keyboard shortcut hints
+func (sm *StyleManager) GetKeyHintStyle() lipgloss.Style {
+	return sm.createForegroundStyle(sm.scheme.Focused).Bold(true)
+}
+
+// GetBadgeStyle returns an inverted pill style for status badges
+func (sm *StyleManager) GetBadgeStyle(background lipgloss.Color) lipgloss.Style {
+	fg := sm.scheme.TableSelectedForeground
+	if fg == "" {
+		fg = lipgloss.Color("0")
+	}
+	return lipgloss.NewStyle().Foreground(fg).Background(background).Bold(true).Padding(0, 1).Inline(true)
+}
+
 // GetBoxStyle returns a styled box with optional focus
 func (sm *StyleManager) GetBoxStyle(focused bool) lipgloss.Style {
-	color := sm.scheme.Blurred
+	color := sm.scheme.Subtle
 	if focused {
 		color = sm.scheme.Focused
 	}
@@ -154,7 +210,7 @@ func (sm *StyleManager) GetModalStyle() lipgloss.Style {
 // GetTableStyles returns styled table configuration
 func (sm *StyleManager) GetTableStyles() table.Styles {
 	s := table.DefaultStyles()
-	s.Header = s.Header.BorderStyle(lipgloss.NormalBorder()).BorderForeground(sm.scheme.Blurred).BorderBottom(true).Bold(true).Align(lipgloss.Center)
+	s.Header = s.Header.BorderStyle(lipgloss.NormalBorder()).BorderForeground(sm.scheme.Subtle).Foreground(sm.scheme.Secondary).BorderBottom(true).Bold(true).Align(lipgloss.Center)
 	if sm.scheme.Background != "" {
 		s.Header = s.Header.Background(sm.scheme.Background).BorderBackground(sm.scheme.Background)
 	}
@@ -201,12 +257,12 @@ func (sm *StyleManager) getTableSelectionColors() (lipgloss.Color, lipgloss.Colo
 
 // GetTableBaseStyle returns the style for the table container
 func (sm *StyleManager) GetTableBaseStyle() lipgloss.Style {
-	return sm.applyBGFG(lipgloss.NewStyle().BorderStyle(lipgloss.NormalBorder()).BorderForeground(sm.scheme.Blurred))
+	return sm.applyBGFG(lipgloss.NewStyle().BorderStyle(lipgloss.RoundedBorder()).BorderForeground(sm.scheme.Subtle))
 }
 
 // GetPanelStyle returns a styled panel
 func (sm *StyleManager) GetPanelStyle() lipgloss.Style {
-	return sm.Box(sm.scheme.Blurred, 0, 0, 0, 2, 1)
+	return sm.Box(sm.scheme.Subtle, 0, 0, 0, 2, 1)
 }
 
 // GetTabStyle returns a styled tab

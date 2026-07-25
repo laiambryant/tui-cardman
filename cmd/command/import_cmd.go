@@ -1,15 +1,11 @@
 package command
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"strconv"
 
 	"github.com/spf13/cobra"
-
-	"github.com/laiambryant/tui-cardman/internal/config"
-	dbpkg "github.com/laiambryant/tui-cardman/internal/db"
 )
 
 var importCmd = &cobra.Command{
@@ -22,17 +18,16 @@ var importListSetsCmd = &cobra.Command{
 	Short: "List available sets for a game from the API",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		config.LoadConfig()
-		database, err := dbpkg.OpenDB(config.Cfg.DBDSN)
-		if err != nil {
-			return fmt.Errorf("open db: %w", err)
-		}
-		defer database.Close()
-		importer, err := buildImporterForGame(database, args[0])
+		runtime, err := newCommandRuntime(true, false)
 		if err != nil {
 			return err
 		}
-		gameSets, err := importer.FetchSets(context.Background())
+		defer runtime.Close()
+		importer, err := buildImporterForGame(runtime.db, args[0], runtime.config)
+		if err != nil {
+			return err
+		}
+		gameSets, err := importer.FetchSets(cmd.Context())
 		if err != nil {
 			return fmt.Errorf("fetch sets: %w", err)
 		}
@@ -50,19 +45,18 @@ var importGroupSetsCmd = &cobra.Command{
 	Short: "Import specific sets for a game",
 	Args:  cobra.MinimumNArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		config.LoadConfig()
-		database, err := dbpkg.OpenDB(config.Cfg.DBDSN)
+		runtime, err := newCommandRuntime(true, false)
 		if err != nil {
-			return fmt.Errorf("open db: %w", err)
+			return err
 		}
-		defer database.Close()
-		importer, err := buildImporterForGame(database, args[0])
+		defer runtime.Close()
+		importer, err := buildImporterForGame(runtime.db, args[0], runtime.config)
 		if err != nil {
 			return err
 		}
 		setIDs := args[1:]
 		fmt.Printf("Importing %d set(s) for %s...\n", len(setIDs), args[0])
-		if err := importer.ImportSpecific(context.Background(), setIDs); err != nil {
+		if err := importer.ImportSpecific(cmd.Context(), setIDs); err != nil {
 			return err
 		}
 		fmt.Println("Done.")
@@ -75,18 +69,17 @@ var importAllCmd = &cobra.Command{
 	Short: "Import all sets for a game",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		config.LoadConfig()
-		database, err := dbpkg.OpenDB(config.Cfg.DBDSN)
+		runtime, err := newCommandRuntime(true, false)
 		if err != nil {
-			return fmt.Errorf("open db: %w", err)
+			return err
 		}
-		defer database.Close()
-		importer, err := buildImporterForGame(database, args[0])
+		defer runtime.Close()
+		importer, err := buildImporterForGame(runtime.db, args[0], runtime.config)
 		if err != nil {
 			return err
 		}
 		fmt.Printf("Importing all sets for %s...\n", args[0])
-		if err := importer.ImportAll(context.Background()); err != nil {
+		if err := importer.ImportAll(cmd.Context()); err != nil {
 			return err
 		}
 		fmt.Println("Done.")
@@ -99,18 +92,17 @@ var importNewCmd = &cobra.Command{
 	Short: "Import only new sets for a game",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		config.LoadConfig()
-		database, err := dbpkg.OpenDB(config.Cfg.DBDSN)
+		runtime, err := newCommandRuntime(true, false)
 		if err != nil {
-			return fmt.Errorf("open db: %w", err)
+			return err
 		}
-		defer database.Close()
-		importer, err := buildImporterForGame(database, args[0])
+		defer runtime.Close()
+		importer, err := buildImporterForGame(runtime.db, args[0], runtime.config)
 		if err != nil {
 			return err
 		}
 		fmt.Printf("Importing new sets for %s...\n", args[0])
-		if err := importer.ImportNew(context.Background()); err != nil {
+		if err := importer.ImportNew(cmd.Context()); err != nil {
 			return err
 		}
 		fmt.Println("Done.")

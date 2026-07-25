@@ -3,6 +3,7 @@ package pokemontcg
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"log/slog"
 	"testing"
 
@@ -45,25 +46,37 @@ type mockSetService struct {
 	getAllAPIIDsFunc func(ctx context.Context) ([]string, error)
 }
 
-func (m *mockSetService) GetSetIDByAPIID(ctx context.Context, apiID string) (int64, error) {
+func (m *mockSetService) GetSetIDByAPIID(ctx context.Context, _ int64, apiID string) (int64, error) {
 	if m.getSetIDFunc != nil {
 		return m.getSetIDFunc(ctx, apiID)
 	}
 	return 1, nil
 }
 
-func (m *mockSetService) UpsertSet(ctx context.Context, apiID, code, name string, printedTotal, total int) (int64, error) {
+func (m *mockSetService) UpsertSet(ctx context.Context, _ int64, apiID, code, name string, printedTotal, total int) (int64, error) {
 	if m.upsertSetFunc != nil {
 		return m.upsertSetFunc(ctx, apiID, code, name, printedTotal, total)
 	}
 	return 1, nil
 }
 
-func (m *mockSetService) GetAllSetAPIIDs(ctx context.Context) ([]string, error) {
+func (m *mockSetService) UpsertSetTx(ctx context.Context, _ *sql.Tx, _ int64, apiID, code, name string, printedTotal, total int) (int64, error) {
+	return m.UpsertSet(ctx, 0, apiID, code, name, printedTotal, total)
+}
+
+func (m *mockSetService) GetAllSetAPIIDs(ctx context.Context, _ int64) ([]string, error) {
 	if m.getAllAPIIDsFunc != nil {
 		return m.getAllAPIIDsFunc(ctx)
 	}
 	return []string{}, nil
+}
+
+func (m *mockSetService) GetAllSetAPIIDsWithCounts(context.Context, int64) (map[string]int, error) {
+	return map[string]int{}, nil
+}
+
+func (m *mockSetService) SetHasUserCollections(context.Context, int64) (bool, error) {
+	return false, nil
 }
 
 type mockCardService struct {
@@ -81,6 +94,14 @@ func (m *mockCardService) GetCardsByGameID(gameID int64) ([]model.Card, error) {
 func (m *mockCardService) GetAllCards() ([]model.Card, error)                  { return nil, nil }
 func (m *mockCardService) GetCardIDByAPIID(ctx context.Context, apiID string) (int64, error) {
 	return 0, nil
+}
+
+func (m *mockCardService) GetCardBySetCodeAndNumber(setCode, number string) (*model.Card, error) {
+	return nil, nil
+}
+
+func (m *mockCardService) GetCardByGameAndSetCodeAndNumber(gameID int64, setCode, number string) (*model.Card, error) {
+	return nil, nil
 }
 
 type mockTCGPlayerPriceService struct {
@@ -169,7 +190,11 @@ func createTestImportService(db *sql.DB) *ImportService {
 	cardMarketService := prices.NewCardMarketPriceService(db)
 
 	pokemonCardService := pokemoncard.NewPokemonCardService(db)
-	return NewImportService(db, client, logger, importRunService, setService, cardService, tcgPlayerService, cardMarketService, pokemonCardService)
+	service, err := NewImportService(db, client, logger, importRunService, setService, cardService, tcgPlayerService, cardMarketService, pokemonCardService)
+	if err != nil {
+		panic(err)
+	}
+	return service
 }
 
 func TestNewImportService(t *testing.T) {
@@ -199,12 +224,75 @@ func TestNewImportService(t *testing.T) {
 		cardMarketService := prices.NewCardMarketPriceService(db)
 		pokemonCardService := pokemoncard.NewPokemonCardService(db)
 
-		service := NewImportService(db, client, logger, importRunService, setService, cardService, tcgPlayerService, cardMarketService, pokemonCardService)
+		service, err := NewImportService(db, client, logger, importRunService, setService, cardService, tcgPlayerService, cardMarketService, pokemonCardService)
 
+		require.NoError(t, err)
 		require.NotNil(t, service)
 		// pokemonGameID should be 1 (the ID from the migration)
 		assert.Equal(t, int64(1), service.pokemonGameID)
 	})
+
+	t.Run("returns an error when Pokemon game is missing", func(t *testing.T) {
+		db := testutil.SetupTestDB(t)
+		defer testutil.CleanupTestDB(t, db)
+
+		service, err := NewImportService(
+			db,
+			&mockClient{},
+			slog.Default(),
+			&mockImportRunService{},
+			&mockSetService{},
+			&mockCardService{},
+			prices.NewTCGPlayerPriceService(db),
+			prices.NewCardMarketPriceService(db),
+			nil,
+		)
+
+		require.Error(t, err)
+		assert.Nil(t, service)
+	})
+}
+
+func TestImportSetRollsBackSetWhenCardUpsertFails(t *testing.T) {
+	db := setupTestDBWithPokemon(t)
+	defer testutil.CleanupTestDB(t, db)
+
+	client := &mockClient{
+		getCardsForSetFunc: func(context.Context, string, int) (*PaginatedResponse, []Card, error) {
+			return &PaginatedResponse{HasMore: false}, []Card{{ID: "bad-card", Name: "Bad Card", Number: "1"}}, nil
+		},
+	}
+	cardService := &mockCardService{
+		upsertCardFunc: func(context.Context, *sql.Tx, string, int64, string, string, string, string, int64) (int64, error) {
+			return 0, errors.New("injected card failure")
+		},
+	}
+	service, err := NewImportService(
+		db,
+		client,
+		slog.Default(),
+		&mockImportRunService{},
+		sets.NewSetService(db),
+		cardService,
+		prices.NewTCGPlayerPriceService(db),
+		prices.NewCardMarketPriceService(db),
+		nil,
+	)
+	require.NoError(t, err)
+
+	imported, err := service.ImportSet(context.Background(), Set{
+		ID: "rollback-set", Name: "Rollback Set", PtcgoCode: "RB", PrintedTotal: 1, Total: 1,
+	})
+
+	require.Error(t, err)
+	assert.Zero(t, imported)
+	var count int
+	require.NoError(t, db.QueryRow(
+		"SELECT COUNT(*) FROM sets WHERE card_game_id = ? AND api_id = ?",
+		service.pokemonGameID,
+		"rollback-set",
+	).Scan(&count))
+	assert.Zero(t, count)
 }
 
 func TestImportService_GetExistingSetAPIIDs(t *testing.T) {
@@ -213,9 +301,9 @@ func TestImportService_GetExistingSetAPIIDs(t *testing.T) {
 		defer testutil.CleanupTestDB(t, db)
 
 		// Insert some sets
-		_, err := db.Exec("INSERT INTO sets (api_id, name, code, printed_total, total) VALUES ('base1', 'Base Set', 'BS', 102, 102)")
+		_, err := db.Exec("INSERT INTO sets (card_game_id, api_id, name, code, printed_total, total) VALUES (1, 'base1', 'Base Set', 'BS', 102, 102)")
 		require.NoError(t, err)
-		_, err = db.Exec("INSERT INTO sets (api_id, name, code, printed_total, total) VALUES ('fossil', 'Fossil', 'FO', 62, 62)")
+		_, err = db.Exec("INSERT INTO sets (card_game_id, api_id, name, code, printed_total, total) VALUES (1, 'fossil', 'Fossil', 'FO', 62, 62)")
 		require.NoError(t, err)
 
 		service := createTestImportService(db)
@@ -248,9 +336,9 @@ func TestImportService_FilterNewSets(t *testing.T) {
 		defer testutil.CleanupTestDB(t, db)
 
 		// Insert some existing sets
-		_, err := db.Exec("INSERT INTO sets (api_id, name, code, printed_total, total) VALUES ('base1', 'Base Set', 'BS', 102, 102)")
+		_, err := db.Exec("INSERT INTO sets (card_game_id, api_id, name, code, printed_total, total) VALUES (1, 'base1', 'Base Set', 'BS', 102, 102)")
 		require.NoError(t, err)
-		_, err = db.Exec("INSERT INTO sets (api_id, name, code, printed_total, total) VALUES ('fossil', 'Fossil', 'FO', 62, 62)")
+		_, err = db.Exec("INSERT INTO sets (card_game_id, api_id, name, code, printed_total, total) VALUES (1, 'fossil', 'Fossil', 'FO', 62, 62)")
 		require.NoError(t, err)
 
 		service := createTestImportService(db)
@@ -274,9 +362,9 @@ func TestImportService_FilterNewSets(t *testing.T) {
 		db := setupTestDBWithPokemon(t)
 		defer testutil.CleanupTestDB(t, db)
 
-		_, err := db.Exec("INSERT INTO sets (api_id, name, code, printed_total, total) VALUES ('base1', 'Base Set', 'BS', 102, 102)")
+		_, err := db.Exec("INSERT INTO sets (card_game_id, api_id, name, code, printed_total, total) VALUES (1, 'base1', 'Base Set', 'BS', 102, 102)")
 		require.NoError(t, err)
-		_, err = db.Exec("INSERT INTO sets (api_id, name, code, printed_total, total) VALUES ('base2', 'Base Set 2', 'B2', 130, 130)")
+		_, err = db.Exec("INSERT INTO sets (card_game_id, api_id, name, code, printed_total, total) VALUES (1, 'base2', 'Base Set 2', 'B2', 130, 130)")
 		require.NoError(t, err)
 
 		service := createTestImportService(db)

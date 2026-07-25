@@ -13,10 +13,11 @@ import (
 
 // SetService defines the interface for set-related operations
 type SetService interface {
-	GetSetIDByAPIID(ctx context.Context, apiID string) (int64, error)
-	UpsertSet(ctx context.Context, apiID, code, name string, printedTotal, total int) (int64, error)
-	GetAllSetAPIIDs(ctx context.Context) ([]string, error)
-	GetAllSetAPIIDsWithCounts(ctx context.Context) (map[string]int, error)
+	GetSetIDByAPIID(ctx context.Context, cardGameID int64, apiID string) (int64, error)
+	UpsertSet(ctx context.Context, cardGameID int64, apiID, code, name string, printedTotal, total int) (int64, error)
+	UpsertSetTx(ctx context.Context, tx *sql.Tx, cardGameID int64, apiID, code, name string, printedTotal, total int) (int64, error)
+	GetAllSetAPIIDs(ctx context.Context, cardGameID int64) ([]string, error)
+	GetAllSetAPIIDsWithCounts(ctx context.Context, cardGameID int64) (map[string]int, error)
 	SetHasUserCollections(ctx context.Context, setID int64) (bool, error)
 }
 
@@ -31,19 +32,19 @@ func NewSetService(db *sql.DB) SetService {
 }
 
 const (
-	selectSetIDQuery = `SELECT id FROM sets WHERE api_id = ?`
+	selectSetIDQuery = `SELECT id FROM sets WHERE card_game_id = ? AND api_id = ?`
 
-	insertSetQuery = `INSERT INTO sets (api_id, code, name, printed_total, total, 
+	insertSetQuery = `INSERT INTO sets (card_game_id, api_id, code, name, printed_total, total,
 				   updated_at)
-	    VALUES (?, ?, ?, ?, ?, ?)`
+	    VALUES (?, ?, ?, ?, ?, ?, ?)`
 
 	updateSetQuery = `UPDATE sets 
 	    SET code = ?, name = ?, printed_total = ?, total = ?,  updated_at = ?
 	    WHERE id = ?`
 
-	selectAllSetAPIIDsQuery = `SELECT api_id FROM sets`
+	selectAllSetAPIIDsQuery = `SELECT api_id FROM sets WHERE card_game_id = ?`
 
-	selectAllSetAPIIDsWithCountsQuery = `SELECT api_id, total FROM sets`
+	selectAllSetAPIIDsWithCountsQuery = `SELECT api_id, total FROM sets WHERE card_game_id = ?`
 
 	checkSetHasUserCollectionsQuery = `SELECT COUNT(*) > 0 FROM user_collections uc
 		JOIN cards c ON uc.card_id = c.id
@@ -51,10 +52,10 @@ const (
 )
 
 // GetSetIDByAPIID retrieves the database ID for a set by its API ID
-func (s *SetServiceImpl) GetSetIDByAPIID(ctx context.Context, apiID string) (int64, error) {
-	slog.Debug("query row", "query", logging.SanitizeQuery(selectSetIDQuery), "args", []any{apiID})
+func (s *SetServiceImpl) GetSetIDByAPIID(ctx context.Context, cardGameID int64, apiID string) (int64, error) {
+	slog.Debug("query row", "query", logging.SanitizeQuery(selectSetIDQuery), "args", []any{cardGameID, apiID})
 	var setID int64
-	err := s.db.QueryRowContext(ctx, selectSetIDQuery, apiID).Scan(&setID)
+	err := s.db.QueryRowContext(ctx, selectSetIDQuery, cardGameID, apiID).Scan(&setID)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			slog.Debug("set not found by api id", "api_id", apiID)
@@ -67,25 +68,39 @@ func (s *SetServiceImpl) GetSetIDByAPIID(ctx context.Context, apiID string) (int
 }
 
 // UpsertSet inserts or updates a set and returns its database ID
-func (s *SetServiceImpl) UpsertSet(ctx context.Context, apiID, code, name string, printedTotal, total int) (int64, error) {
+func (s *SetServiceImpl) UpsertSet(ctx context.Context, cardGameID int64, apiID, code, name string, printedTotal, total int) (setID int64, err error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		slog.Error("failed to begin transaction for upsert set", "api_id", apiID, "error", err)
 		return 0, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer func() {
-		if rollbackErr := tx.Rollback(); rollbackErr != nil && err == nil {
-			err = rollbackErr
+		if rollbackErr := tx.Rollback(); rollbackErr != nil && rollbackErr != sql.ErrTxDone && err == nil {
+			err = fmt.Errorf("rollback set upsert: %w", rollbackErr)
 		}
 	}()
 
-	slog.Debug("query row (tx)", "query", logging.SanitizeQuery(selectSetIDQuery), "args", []any{apiID})
+	setID, err = s.UpsertSetTx(ctx, tx, cardGameID, apiID, code, name, printedTotal, total)
+	if err != nil {
+		return 0, err
+	}
+
+	if err = tx.Commit(); err != nil {
+		slog.Error("failed to commit transaction for upsert set", "card_game_id", cardGameID, "api_id", apiID, "id", setID, "error", err)
+		return 0, fmt.Errorf("failed to commit transaction for set %s: %w", apiID, err)
+	}
+	return setID, nil
+}
+
+// UpsertSetTx inserts or updates a set using the caller's transaction.
+func (s *SetServiceImpl) UpsertSetTx(ctx context.Context, tx *sql.Tx, cardGameID int64, apiID, code, name string, printedTotal, total int) (int64, error) {
+	slog.Debug("query row (tx)", "query", logging.SanitizeQuery(selectSetIDQuery), "args", []any{cardGameID, apiID})
 	var setID int64
-	err = tx.QueryRowContext(ctx, selectSetIDQuery, apiID).Scan(&setID)
+	err := tx.QueryRowContext(ctx, selectSetIDQuery, cardGameID, apiID).Scan(&setID)
 	if err == sql.ErrNoRows {
-		slog.Debug("exec (tx)", "query", logging.SanitizeQuery(insertSetQuery), "args", []any{apiID, code, name, printedTotal, total, time.Now()})
+		slog.Debug("exec (tx)", "query", logging.SanitizeQuery(insertSetQuery), "args", []any{cardGameID, apiID, code, name, printedTotal, total, time.Now()})
 		result, err := tx.ExecContext(ctx, insertSetQuery,
-			apiID, code, name, printedTotal, total,
+			cardGameID, apiID, code, name, printedTotal, total,
 			time.Now())
 		if err != nil {
 			slog.Error("failed to insert set", "api_id", apiID, "error", err)
@@ -110,17 +125,13 @@ func (s *SetServiceImpl) UpsertSet(ctx context.Context, apiID, code, name string
 		}
 	}
 
-	if err := tx.Commit(); err != nil {
-		slog.Error("failed to commit transaction for upsert set", "api_id", apiID, "id", setID, "error", err)
-		return 0, fmt.Errorf("failed to commit transaction for set %s: %w", apiID, err)
-	}
 	return setID, nil
 }
 
 // GetAllSetAPIIDs retrieves all set API IDs from the database
-func (s *SetServiceImpl) GetAllSetAPIIDs(ctx context.Context) ([]string, error) {
-	slog.Debug("query", "query", logging.SanitizeQuery(selectAllSetAPIIDsQuery), "args", []any{})
-	rows, err := s.db.QueryContext(ctx, selectAllSetAPIIDsQuery)
+func (s *SetServiceImpl) GetAllSetAPIIDs(ctx context.Context, cardGameID int64) ([]string, error) {
+	slog.Debug("query", "query", logging.SanitizeQuery(selectAllSetAPIIDsQuery), "args", []any{cardGameID})
+	rows, err := s.db.QueryContext(ctx, selectAllSetAPIIDsQuery, cardGameID)
 	if err != nil {
 		slog.Error("failed to query existing sets", "error", err)
 		return nil, fmt.Errorf("failed to query existing sets: %w", err)
@@ -146,9 +157,9 @@ func (s *SetServiceImpl) GetAllSetAPIIDs(ctx context.Context) ([]string, error) 
 }
 
 // GetAllSetAPIIDsWithCounts retrieves all set API IDs with their card counts from the database
-func (s *SetServiceImpl) GetAllSetAPIIDsWithCounts(ctx context.Context) (map[string]int, error) {
-	slog.Debug("query", "query", logging.SanitizeQuery(selectAllSetAPIIDsWithCountsQuery), "args", []any{})
-	rows, err := s.db.QueryContext(ctx, selectAllSetAPIIDsWithCountsQuery)
+func (s *SetServiceImpl) GetAllSetAPIIDsWithCounts(ctx context.Context, cardGameID int64) (map[string]int, error) {
+	slog.Debug("query", "query", logging.SanitizeQuery(selectAllSetAPIIDsWithCountsQuery), "args", []any{cardGameID})
+	rows, err := s.db.QueryContext(ctx, selectAllSetAPIIDsWithCountsQuery, cardGameID)
 	if err != nil {
 		slog.Error("failed to query set api ids with counts", "error", err)
 		return nil, fmt.Errorf("failed to query set api ids with counts: %w", err)

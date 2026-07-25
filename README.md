@@ -12,7 +12,7 @@ A terminal UI for managing your trading card collection. Track cards, build deck
 ## Features
 
 - **Collection management** — track cards you own with quantities
-- **Deck builder** — build and validate 60-card Pokemon TCG decks (enforces 4-copy and basic energy rules)
+- **Deck builder** — build decks for each supported game
 - **Lists / wishlists** — maintain custom card lists with color labels
 - **Card import** — import all Pokemon TCG sets and cards from the TCGDex API
 - **Price tracking** — TCGPlayer and CardMarket price snapshots
@@ -35,7 +35,7 @@ sudo mv cardman /usr/local/bin/
 
 ### Build from source
 
-Requires Go 1.24+ and GCC (for CGO/SQLite).
+Requires Go 1.25+ and GCC (for CGO/SQLite).
 
 ```bash
 git clone https://github.com/laiambryant/tui-cardman.git
@@ -59,7 +59,7 @@ docker run -it -v cardman_data:/app/data cardman serve
 ```bash
 # 1. Configure
 cp .env.example .env
-# Edit .env — set DATABASE_DSN and optionally API_KEY
+# Edit .env — set DB_DSN and optionally API_KEY
 
 # 2. Run migrations
 ./cardman migrate
@@ -79,31 +79,27 @@ Copy `.env.example` to `.env` and edit as needed:
 cp .env.example .env
 ```
 
-| Variable        | Description                                      | Default         |
-|-----------------|--------------------------------------------------|-----------------|
-| `DATABASE_DSN`  | Path to SQLite database file                     | `cardman.db`    |
-| `DB_DRIVER`     | Database driver (always `sqlite3`)               | `sqlite3`       |
-| `LOG_LEVEL`     | Logging verbosity (`DEBUG`, `INFO`, `WARN`, `ERROR`) | `INFO`      |
-| `SSH_MODE`      | Enable SSH server mode (`true`/`false`)          | `false`         |
-| `PORT`          | SSH server port                                  | `2222`          |
-| `SSH_HOST_KEY`  | Path to SSH host key file                        | —               |
-| `API_KEY`       | Pokemon TCG API key (optional, increases limits) | —               |
+| Variable        | Description                                      | Default                         |
+|-----------------|--------------------------------------------------|---------------------------------|
+| `DB_DSN`        | SQLite DSN                                       | `file:cardman.db?_fk=1`         |
+| `LOG_LEVEL`     | Logging verbosity (`DEBUG`, `INFO`, `WARN`, `ERROR`) | `INFO`                     |
+| `SSH_PORT`      | SSH server port                                  | `2222`                          |
+| `SSH_HOST_KEY`  | Path to SSH host key file                        | `~/.ssh/cardman_host_key`       |
+| `API_KEY`       | Pokemon TCG API key (optional, increases limits) | —                               |
 
 ## SSH Server Mode
 
 Run cardman as a shared SSH server so multiple users can access their collections remotely:
 
 ```bash
-# Generate a host key (first time only)
-ssh-keygen -t ed25519 -f host_key -N ""
-
 # Set in .env:
-# SSH_MODE=true
-# PORT=2222
+# SSH_PORT=2222
 # SSH_HOST_KEY=./host_key
 
 ./cardman serve-ssh
 ```
+
+If `SSH_HOST_KEY` does not exist, `serve-ssh` will generate an ED25519 host key automatically.
 
 Users connect with: `ssh -p 2222 username@your-server`
 
@@ -151,6 +147,8 @@ Only imports sets not already in your database. Run weekly via cron to pick up n
 
 ## Available Commands
 
+Primary commands:
+
 ```
 cardman migrate          Run database migrations
 cardman import-full      Import all Pokemon TCG data
@@ -159,6 +157,30 @@ cardman import-sets      Import one or more specific sets by ID
 cardman list-sets        List available sets from the API
 cardman serve            Launch the TUI (local mode)
 cardman serve-ssh        Start SSH server (multi-user mode)
+```
+
+Grouped CLI commands:
+
+```text
+cardman cards list <game>
+cardman cards info <game> <set-code> <number>
+cardman collection list <game>
+cardman collection add <game> <set-code> <number> <quantity>
+cardman collection remove <game> <set-code> <number> <quantity>
+cardman collection import <game> <csv-file>
+cardman collection export <game>
+cardman lists list <game>
+cardman lists create <game> <name>
+cardman lists show <list-id>
+cardman lists add-card <list-id> <set-code> <number> <quantity>
+cardman decks list <game>
+cardman decks create <game> <name>
+cardman decks show <deck-id>
+cardman decks add-card <deck-id> <set-code> <number> <quantity>
+cardman import list-sets <game>
+cardman import sets <game> <set-id...>
+cardman import all <game>
+cardman import new <game>
 ```
 
 ```

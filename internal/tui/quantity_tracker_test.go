@@ -103,15 +103,6 @@ func TestTotalCards(t *testing.T) {
 	assert.Equal(t, 7, qt.totalCards())
 }
 
-func TestSnapshot(t *testing.T) {
-	qt := newQuantityTracker()
-	qt.load(map[int64]int{1: 2, 2: 3})
-	qt.increment(1)
-	snap := qt.snapshot()
-	assert.Equal(t, 3, snap[1])
-	assert.Equal(t, 3, snap[2])
-}
-
 func TestApplyImport(t *testing.T) {
 	qt := newQuantityTracker()
 	qt.applyImport(map[int64]int{1: 2, 2: 1})

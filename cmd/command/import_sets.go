@@ -1,13 +1,10 @@
 package command
 
 import (
-	"context"
 	"fmt"
 	"strings"
 
 	"github.com/spf13/cobra"
-
-	"github.com/laiambryant/tui-cardman/internal/config"
 )
 
 const (
@@ -34,14 +31,13 @@ var importSetsCmd = &cobra.Command{
 	Long:  longMessageImportSets,
 	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		config.LoadConfig()
-		ctx := context.Background()
+		ctx := cmd.Context()
 
 		deps, err := buildImportService()
 		if err != nil {
 			return err
 		}
-		defer deps.database.Close()
+		defer deps.Close()
 
 		setIDs := args
 		deps.logger.Info("Starting import of specific sets", "sets", strings.Join(setIDs, ", "))

@@ -25,7 +25,7 @@ var cardsListCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer deps.db.Close()
+		defer deps.Close()
 		game, err := resolveGame(deps.gameSvc, args[0])
 		if err != nil {
 			return err
@@ -63,10 +63,17 @@ var cardsInfoCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer deps.db.Close()
-		c, err := deps.cardSvc.GetCardBySetCodeAndNumber(args[1], args[2])
+		defer deps.Close()
+		game, err := resolveGame(deps.gameSvc, args[0])
 		if err != nil {
 			return err
+		}
+		c, err := deps.cardSvc.GetCardByGameAndSetCodeAndNumber(game.ID, args[1], args[2])
+		if err != nil {
+			return err
+		}
+		if c == nil {
+			return fmt.Errorf("card not found for game %q: %s %s", game.Name, args[1], args[2])
 		}
 		if asJSON, _ := cmd.Flags().GetBool("json"); asJSON {
 			return json.NewEncoder(os.Stdout).Encode(c)

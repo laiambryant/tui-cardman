@@ -61,7 +61,7 @@ func TestHelpBuilder_Build_NilConfig(t *testing.T) {
 		KeyItem{"quit", "ctrl+c", "Quit"},
 		KeyItem{"select", "enter", "Select"},
 	)
-	assert.Equal(t, "ctrl+c: Quit | enter: Select", result)
+	assert.Equal(t, "ctrl+c Quit · enter Select", result)
 }
 
 func TestHelpBuilder_Build_Empty(t *testing.T) {
@@ -73,13 +73,13 @@ func TestHelpBuilder_Build_Empty(t *testing.T) {
 func TestHelpBuilder_Build_SingleItem(t *testing.T) {
 	hb := NewHelpBuilder(nil)
 	result := hb.Build(KeyItem{"quit", "ctrl+c", "Quit"})
-	assert.Equal(t, "ctrl+c: Quit", result)
+	assert.Equal(t, "ctrl+c Quit", result)
 }
 
 func TestHelpBuilder_Pair_NilConfig(t *testing.T) {
 	hb := NewHelpBuilder(nil)
 	result := hb.Pair("page_next", "Ctrl+N", "page_prev", "Ctrl+P", "Page")
-	assert.Equal(t, "Ctrl+N / Ctrl+P: Page", result)
+	assert.Equal(t, "Ctrl+N/Ctrl+P Page", result)
 }
 
 func TestCardToDataMap_WithSet(t *testing.T) {
@@ -249,54 +249,6 @@ func TestCalcTableHeight_ZeroAvailable(t *testing.T) {
 
 func TestCalcTableHeight_SmallAvailable(t *testing.T) {
 	assert.Equal(t, 10, CalcTableHeight(5, 2, 10))
-}
-
-func TestFilterCardsByQuerySubstring_EmptyQuery(t *testing.T) {
-	cards := makeCards("Pikachu", "Charizard")
-	result := filterCardsByQuerySubstring(cards, "")
-	assert.Equal(t, cards, result)
-}
-
-func TestFilterCardsByQuerySubstring_MatchName(t *testing.T) {
-	cards := makeCards("Pikachu", "Charizard", "Bulbasaur")
-	result := filterCardsByQuerySubstring(cards, "pika")
-	assert.Len(t, result, 1)
-	assert.Equal(t, "Pikachu", result[0].Name)
-}
-
-func TestFilterCardsByQuerySubstring_CaseInsensitive(t *testing.T) {
-	cards := makeCards("Pikachu")
-	result := filterCardsByQuerySubstring(cards, "PIKACHU")
-	assert.Len(t, result, 1)
-}
-
-func TestFilterCardsByQuerySubstring_MatchRarity(t *testing.T) {
-	cards := []model.Card{
-		{Name: "Pikachu", Rarity: "Common"},
-		{Name: "Charizard", Rarity: "Rare Holo"},
-	}
-	result := filterCardsByQuerySubstring(cards, "rare")
-	assert.Len(t, result, 1)
-	assert.Equal(t, "Charizard", result[0].Name)
-}
-
-func TestFilterCardsByQuerySubstring_NoMatch(t *testing.T) {
-	cards := makeCards("Pikachu", "Charizard")
-	result := filterCardsByQuerySubstring(cards, "zzzzz")
-	assert.Empty(t, result)
-}
-
-func TestFilterCardsByQuery_EmptyQuery(t *testing.T) {
-	cards := makeCards("Pikachu", "Charizard")
-	result := filterCardsByQuery(cards, "")
-	assert.Equal(t, cards, result)
-}
-
-func TestFilterCardsByQuery_FindsCard(t *testing.T) {
-	cards := makeCards("Pikachu", "Charizard", "Bulbasaur")
-	result := filterCardsByQuery(cards, "Charizard")
-	assert.NotEmpty(t, result)
-	assert.Equal(t, "Charizard", result[0].Name)
 }
 
 func TestBuildCardExportRows_Basic(t *testing.T) {

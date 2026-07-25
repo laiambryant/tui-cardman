@@ -20,7 +20,7 @@ func (m *Model) initLocalUserSetupInputs() {
 }
 
 func (m Model) localUserSetupView() string {
-	header := titleStyle.Render("Welcome to CardMan!")
+	header := RenderBreadcrumbs(m.styleManager, "Welcome")
 	body := m.renderLocalUserSetupBody()
 	footer := m.renderLocalUserSetupFooter()
 	return renderFramedView(header, body, footer, m.width, m.height, m.styleManager)
@@ -51,9 +51,13 @@ func (m Model) renderLocalUserSetupFooter() string {
 
 func (m Model) buildLocalSetupHelpText() string {
 	hb := NewHelpBuilder(m.configManager)
-	return hb.Build(KeyItem{"settings", "F1", "Settings"}) + " • " + hb.Pair("nav_up", "↑", "nav_down", "↓", "Navigate") + " • " + hb.Build(
-		KeyItem{"select", "Enter", "Submit"},
-		KeyItem{"quit", "Ctrl+C", "Quit"},
+	return JoinHelpHints(
+		hb.Build(KeyItem{"settings", "F1", "Settings"}),
+		hb.Pair("nav_up", "↑", "nav_down", "↓", "Navigate"),
+		hb.Build(
+			KeyItem{"select", "Enter", "Submit"},
+			KeyItem{"quit", "Ctrl+C", "Quit"},
+		),
 	)
 }
 
@@ -86,6 +90,7 @@ func (m *Model) initLocalConfigManager() {
 		fmt.Printf("Warning: failed to initialize config manager, will fallback to default configuration: %v\n", cfgErr)
 	} else {
 		m.configManager = configManager
+		m.applyConfiguredTheme()
 	}
 }
 

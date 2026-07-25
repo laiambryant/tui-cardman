@@ -1,891 +1,1284 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CARDMAN — Terminal Card Manager</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=VT323&family=IBM+Plex+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>cardman — terminal card collection manager</title>
+<meta name="description" content="A terminal UI for managing trading card collections. Pokémon, Magic: The Gathering, Yu-Gi-Oh! and One Piece — one binary, one SQLite file." />
+<meta name="theme-color" content="#0d0a06" />
+<meta name="color-scheme" content="dark" />
+<meta property="og:title" content="cardman — your binder lives in the terminal" />
+<meta property="og:description" content="Track cards, build decks, keep lists and watch prices across four games — locally, from one terminal UI." />
+<meta property="og:type" content="website" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='8' fill='%230d0a06'/%3E%3Cpath d='M15 13h34v38H15z' fill='%23ffb648'/%3E%3Cpath d='M21 19h22v26H21z' fill='%23120e09'/%3E%3Cpath d='M25 25h14v4H25zm0 8h10v4H25z' fill='%23ffd23f'/%3E%3C/svg%3E" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=Martian+Mono:wght@300;400;600;800&family=Spline+Sans+Mono:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-    :root {
-      --bg:         #090909;
-      --bg2:        #0d0d0d;
-      --panel:      #0f0f0f;
-      --green:      #DF57BC;
-      --green-dim:  #8B3576;
-      --green-glow: rgba(223,87,188,0.12);
-      --orange:     #ff5f38;
-      --orange-dim: #7a2b16;
-      --cyan:       #00d4ff;
-      --text:       #c0c0c0;
-      --dim:        #484848;
-      --dimmer:     #1e1e1e;
-      --border:     #1a1a1a;
-    }
+  :root {
+    --ink:        #0d0a06;
+    --ink-2:      #120e09;
+    --panel:      #16110b;
+    --panel-2:    #1c150d;
+    --line:       #2a2114;
+    --line-soft:  #211a10;
+    --amber:      #ffb648;
+    --amber-hot:  #ffd23f;
+    --amber-dim:  #8a6325;
+    --amber-glow: rgba(255,182,72,0.14);
+    --cream:      #e9dcc3;
+    --fog:        #9d8e72;
+    --mist:       #5d5240;
+    --ok:         #9ece6a;
+    --poke:       #ffd23f;
+    --mtg:        #ff7a45;
+    --ygo:        #b9a0ff;
+    --op:         #ff5d6c;
+    --mono:       'Spline Sans Mono', ui-monospace, 'Courier New', monospace;
+    --tech:       'Martian Mono', ui-monospace, monospace;
+    --pixel:      'Silkscreen', monospace;
+  }
 
-    html { scroll-behavior: smooth; }
+  html { scroll-behavior: smooth; scroll-padding-top: 72px; overflow-x: clip; }
 
-    body {
-      background: var(--bg);
-      color: var(--text);
-      font-family: 'IBM Plex Mono', 'Courier New', monospace;
-      font-size: 14px;
-      line-height: 1.7;
-      min-height: 100vh;
-      overflow-x: hidden;
-    }
+  body {
+    background: var(--ink);
+    color: var(--cream);
+    font-family: var(--mono);
+    font-size: 15px;
+    line-height: 1.75;
+    overflow-x: hidden;
+  }
 
-    /* CRT scanline overlay */
-    body::before {
-      content: '';
-      position: fixed;
-      inset: 0;
-      background: repeating-linear-gradient(
-        0deg,
-        transparent,
-        transparent 3px,
-        rgba(0,0,0,0.07) 3px,
-        rgba(0,0,0,0.07) 4px
-      );
-      pointer-events: none;
-      z-index: 9998;
-    }
+  a, button { -webkit-tap-highlight-color: transparent; }
 
-    /* Subtle background grid */
-    body::after {
-      content: '';
-      position: fixed;
-      inset: 0;
-      background-image:
-        linear-gradient(rgba(223,87,188,0.018) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(223,87,188,0.018) 1px, transparent 1px);
-      background-size: 44px 44px;
-      pointer-events: none;
-      z-index: 0;
-    }
+  :focus-visible {
+    outline: 2px solid var(--amber-hot);
+    outline-offset: 4px;
+  }
 
-    .page { position: relative; z-index: 1; }
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
 
-    ::selection { background: rgba(223,87,188,0.18); }
+  .skip-link {
+    position: fixed;
+    top: 8px;
+    left: 12px;
+    z-index: 10000;
+    padding: 8px 12px;
+    background: var(--amber);
+    color: var(--ink);
+    font-family: var(--tech);
+    font-size: 10px;
+    font-weight: 800;
+    text-decoration: none;
+    transform: translateY(-160%);
+    transition: transform 0.15s;
+  }
+  .skip-link:focus { transform: none; }
 
-    /* ── Nav ── */
-    nav {
-      position: fixed;
-      top: 0; left: 0; right: 0;
-      z-index: 100;
-      background: rgba(9,9,9,0.96);
-      border-bottom: 1px solid var(--border);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 0 2rem;
-      height: 44px;
-      backdrop-filter: blur(12px);
-    }
+  /* atmosphere: dot matrix + amber vignette + grain */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image: radial-gradient(rgba(255,182,72,0.05) 1px, transparent 1px);
+    background-size: 26px 26px;
+    pointer-events: none;
+    z-index: 0;
+  }
+  body::after {
+    content: '';
+    position: fixed; inset: 0;
+    background:
+      radial-gradient(ellipse 80% 50% at 50% -10%, rgba(255,182,72,0.07), transparent 60%),
+      radial-gradient(ellipse 60% 40% at 90% 110%, rgba(255,93,108,0.04), transparent 60%);
+    pointer-events: none;
+    z-index: 0;
+  }
 
-    .nav-brand {
-      font-family: 'VT323', monospace;
-      font-size: 26px;
-      color: var(--green);
-      text-decoration: none;
-      letter-spacing: 0.12em;
-      text-shadow: 0 0 8px var(--green);
-    }
+  .grain {
+    position: fixed; inset: -100%;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 240 240' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+    opacity: 0.05;
+    pointer-events: none;
+    z-index: 9999;
+    animation: grain-shift 0.9s steps(4) infinite;
+  }
 
+  @keyframes grain-shift {
+    0% { transform: translate(0,0); } 25% { transform: translate(-2%,3%); }
+    50% { transform: translate(3%,-2%); } 75% { transform: translate(-3%,-3%); }
+    100% { transform: translate(2%,2%); }
+  }
+
+  ::selection { background: rgba(255,182,72,0.25); color: #fff; }
+
+  .page { position: relative; z-index: 1; }
+
+  .scroll-progress {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 500;
+    width: 100%;
+    height: 2px;
+    transform: scaleX(0);
+    transform-origin: left;
+    background: linear-gradient(90deg, var(--amber), var(--amber-hot), var(--op));
+    box-shadow: 0 0 14px rgba(255,182,72,0.65);
+    pointer-events: none;
+  }
+
+  /* ── status-bar nav (tmux style) ─────────────────────── */
+  nav {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 200;
+    height: 46px;
+    display: flex; align-items: stretch;
+    background: rgba(13,10,6,0.92);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--line);
+    font-family: var(--tech);
+    font-size: 10px;
+  }
+
+  .nav-brand {
+    display: flex; align-items: center; gap: 10px;
+    padding: 0 18px;
+    background: var(--amber);
+    color: var(--ink);
+    text-decoration: none;
+    font-family: var(--pixel);
+    font-size: 14px;
+    letter-spacing: 0.04em;
+    clip-path: polygon(0 0, 100% 0, calc(100% - 14px) 100%, 0 100%);
+    padding-right: 30px;
+  }
+
+  .nav-links {
+    display: flex; align-items: center; list-style: none;
+    margin-left: auto; padding-right: 8px;
+  }
+
+  .nav-links a {
+    display: flex; align-items: center; height: 46px;
+    padding: 0 14px;
+    color: var(--fog);
+    text-decoration: none;
+    letter-spacing: 0.12em;
+    text-transform: lowercase;
+    transition: color 0.15s, background 0.15s;
+  }
+  .nav-links a:hover { color: var(--amber-hot); background: rgba(255,182,72,0.06); }
+  .nav-links a .k { color: var(--amber-dim); margin-right: 5px; }
+  .nav-links a[aria-current="true"] { color: var(--amber-hot); background: rgba(255,182,72,0.07); }
+
+  .nav-toggle {
+    display: none;
+    width: 46px;
+    border: 0;
+    border-left: 1px solid var(--line);
+    background: transparent;
+    color: var(--amber);
+    font: 700 10px/1 var(--tech);
+    letter-spacing: 0.08em;
+    cursor: pointer;
+  }
+
+  .nav-ver {
+    display: flex; align-items: center;
+    padding: 0 18px;
+    color: var(--ink);
+    background: var(--amber-dim);
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    clip-path: polygon(14px 0, 100% 0, 100% 100%, 0 100%);
+  }
+
+  /* ── hero ────────────────────────────────────────────── */
+  #top {
+    min-height: 100vh;
+    display: grid;
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+    gap: 4rem;
+    align-items: center;
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 110px 2rem 4rem;
+    position: relative;
+  }
+
+  #top::before {
+    content: '';
+    position: absolute;
+    z-index: -1;
+    width: min(42vw, 520px);
+    aspect-ratio: 1;
+    right: -8%;
+    top: 15%;
+    border: 1px solid rgba(255,182,72,0.08);
+    background:
+      linear-gradient(90deg, transparent 49.8%, rgba(255,182,72,0.06) 50%, transparent 50.2%),
+      linear-gradient(transparent 49.8%, rgba(255,182,72,0.06) 50%, transparent 50.2%);
+    transform: rotate(12deg);
+    box-shadow: inset 0 0 90px rgba(255,182,72,0.025);
+    pointer-events: none;
+  }
+
+  .hero-left { animation: rise 0.7s cubic-bezier(0.2,0.7,0.2,1) both; }
+
+  .hero-tag {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-family: var(--tech); font-size: 9px; font-weight: 600;
+    letter-spacing: 0.3em; text-transform: uppercase;
+    color: var(--amber);
+    border: 1px solid var(--line);
+    background: var(--panel);
+    padding: 6px 12px;
+    margin-bottom: 1.8rem;
+  }
+  .hero-tag::before {
+    content: ''; width: 6px; height: 6px;
+    background: var(--ok); border-radius: 50%;
+    box-shadow: 0 0 8px var(--ok);
+    animation: pulse 2.4s ease-in-out infinite;
+  }
+
+  h1.hero-name {
+    font-family: var(--pixel);
+    font-weight: 700;
+    font-size: clamp(1.8rem, 8.2vw, 5.6rem);
+    line-height: 0.95;
+    color: var(--cream);
+    letter-spacing: -0.01em;
+    text-shadow: 4px 4px 0 rgba(255,182,72,0.18);
+  }
+  h1.hero-name em {
+    font-style: normal;
+    color: var(--amber);
+    text-shadow: 4px 4px 0 rgba(255,182,72,0.12), 0 0 34px rgba(255,182,72,0.35);
+  }
+
+  .hero-sub {
+    margin: 1.6rem 0 0;
+    font-size: 15px;
+    color: var(--fog);
+    max-width: 46ch;
+  }
+  .hero-sub b { color: var(--cream); font-weight: 600; }
+
+  .hero-games {
+    display: flex; flex-wrap: wrap; gap: 8px;
+    margin-top: 1.6rem;
+    font-family: var(--tech); font-size: 9px; font-weight: 600;
+    letter-spacing: 0.18em; text-transform: uppercase;
+  }
+  .chip { padding: 5px 11px; border: 1px solid var(--line); background: var(--panel); }
+  .chip-poke { color: var(--poke); border-color: rgba(255,210,63,0.3); }
+  .chip-mtg  { color: var(--mtg);  border-color: rgba(255,122,69,0.3); }
+  .chip-ygo  { color: var(--ygo);  border-color: rgba(185,160,255,0.3); }
+  .chip-op   { color: var(--op);   border-color: rgba(255,93,108,0.3); }
+
+  .hero-cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 2.4rem; }
+
+  .hero-stats {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    max-width: 540px;
+    margin-top: 2.4rem;
+    border: 1px solid var(--line);
+    background: rgba(18,14,9,0.7);
+  }
+  .stat {
+    min-width: 0;
+    padding: 0.75rem 0.9rem;
+    border-right: 1px solid var(--line);
+  }
+  .stat:last-child { border-right: 0; }
+  .stat strong {
+    display: block;
+    color: var(--amber);
+    font: 700 17px/1.2 var(--pixel);
+  }
+  .stat span {
+    display: block;
+    margin-top: 4px;
+    color: var(--mist);
+    font: 600 8px/1.4 var(--tech);
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+  }
+
+  .btn {
+    font-family: var(--tech); font-size: 10px; font-weight: 600;
+    letter-spacing: 0.22em; text-transform: uppercase;
+    text-decoration: none;
+    padding: 13px 26px;
+    position: relative;
+    transition: transform 0.12s, box-shadow 0.12s;
+  }
+  .btn-solid {
+    background: var(--amber); color: var(--ink);
+    box-shadow: 4px 4px 0 var(--amber-dim);
+  }
+  .btn-solid:hover { transform: translate(-2px,-2px); box-shadow: 6px 6px 0 var(--amber-dim); }
+  .btn-solid:active { transform: translate(2px,2px); box-shadow: 1px 1px 0 var(--amber-dim); }
+  .btn-line {
+    color: var(--cream); border: 1px solid var(--line);
+    background: var(--panel);
+  }
+  .btn-line:hover { border-color: var(--amber-dim); color: var(--amber-hot); }
+
+  /* ── terminal window ─────────────────────────────────── */
+  .term {
+    background: #0a0805;
+    border: 1px solid var(--line);
+    box-shadow: 0 24px 70px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,182,72,0.04);
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+  }
+  .term-bar {
+    display: flex; align-items: center; gap: 7px;
+    padding: 9px 14px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--line);
+  }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--line); }
+  .dot.lit { background: var(--amber-dim); box-shadow: 0 0 6px var(--amber-dim); }
+  .term-title {
+    font-family: var(--tech); font-size: 9px; letter-spacing: 0.18em;
+    text-transform: lowercase; color: var(--mist); margin-left: 8px;
+  }
+  .term-action {
+    margin-left: auto;
+    border: 1px solid var(--line);
+    background: var(--ink);
+    color: var(--fog);
+    padding: 4px 8px;
+    font: 600 8px/1 var(--tech);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s, background 0.15s;
+  }
+  .term-action:hover { border-color: var(--amber-dim); color: var(--amber-hot); background: var(--panel-2); }
+  .term pre {
+    padding: 1.1rem 1.3rem;
+    font-family: var(--mono); font-size: 12.5px; line-height: 1.95;
+    overflow-x: auto;
+    color: var(--fog);
+  }
+  .term .p   { color: var(--amber); font-weight: 600; }
+  .term .c   { color: var(--cream); }
+  .term .dim { color: var(--mist); }
+  .term .ok  { color: var(--ok); }
+  .term .v   { color: var(--ygo); }
+
+  .cursor {
+    display: inline-block; width: 8px; height: 15px;
+    background: var(--amber); vertical-align: text-bottom;
+    animation: blink 1.1s step-end infinite;
+    box-shadow: 0 0 8px rgba(255,182,72,0.6);
+  }
+
+  .hero-right { animation: rise 0.7s cubic-bezier(0.2,0.7,0.2,1) 0.15s both; }
+
+  .hero-right .term { transform: rotate(0.6deg); }
+  .hero-right .term::after {
+    content: 'LOCAL FIRST';
+    position: absolute;
+    right: 0;
+    bottom: -18px;
+    padding: 5px 9px;
+    border: 1px solid var(--amber-dim);
+    background: var(--ink);
+    color: var(--amber);
+    font: 700 8px/1 var(--tech);
+    letter-spacing: 0.18em;
+    transform: rotate(-2deg);
+  }
+  .hero-right .term { position: relative; }
+
+  /* typed lines */
+  .tline { opacity: 0; animation: type-in 0.01s both; }
+  .tline:nth-child(1)  { animation-delay: 0.8s; }
+  .tline:nth-child(2)  { animation-delay: 1.5s; }
+  .tline:nth-child(3)  { animation-delay: 2.0s; }
+  .tline:nth-child(4)  { animation-delay: 2.6s; }
+  .tline:nth-child(5)  { animation-delay: 3.1s; }
+  .tline:nth-child(6)  { animation-delay: 3.5s; }
+  .tline:nth-child(7)  { animation-delay: 4.0s; }
+  .tline:nth-child(8)  { animation-delay: 4.4s; }
+  .tline:nth-child(9)  { animation-delay: 4.8s; }
+  @keyframes type-in { to { opacity: 1; } }
+
+  /* ── section scaffolding ─────────────────────────────── */
+  .band { border-top: 1px solid var(--line-soft); position: relative; }
+  .band::before {
+    content: '';
+    position: absolute;
+    top: -1px;
+    left: max(1rem, calc((100% - 1180px) / 2));
+    width: 72px;
+    height: 1px;
+    background: var(--amber);
+    box-shadow: 0 0 12px rgba(255,182,72,0.35);
+  }
+
+  section { max-width: 1180px; margin: 0 auto; padding: 6rem 2rem; }
+
+  .sec-head { display: flex; align-items: baseline; gap: 1.4rem; margin-bottom: 0.7rem; }
+
+  .sec-num {
+    font-family: var(--pixel); font-size: 13px; color: var(--amber);
+    background: var(--panel); border: 1px solid var(--line);
+    padding: 4px 10px;
+  }
+
+  h2 {
+    font-family: var(--pixel); font-weight: 700;
+    font-size: clamp(1.7rem, 3.4vw, 2.6rem);
+    color: var(--cream);
+    letter-spacing: 0.01em;
+  }
+  h2 em { font-style: normal; color: var(--amber); }
+
+  .sec-lede { color: var(--fog); max-width: 64ch; font-size: 14px; margin-bottom: 2.6rem; }
+  .sec-lede code, p code, li code {
+    font-family: var(--mono); font-size: 0.88em;
+    color: var(--amber-hot); background: var(--panel);
+    border: 1px solid var(--line); padding: 1px 6px;
+  }
+
+  .reveal { opacity: 0; transform: translateY(26px); transition: opacity 0.65s ease, transform 0.65s cubic-bezier(0.2,0.7,0.2,1); }
+  .reveal.in { opacity: 1; transform: none; }
+
+  /* ── game cards (holo) ───────────────────────────────── */
+  .deck {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1.4rem;
+    perspective: 1200px;
+  }
+
+  .gcard {
+    --hue: var(--amber);
+    position: relative;
+    background: linear-gradient(165deg, var(--panel-2), var(--panel) 55%);
+    border: 1px solid var(--line);
+    padding: 1.6rem 1.4rem 1.4rem;
+    min-height: 300px;
+    display: flex; flex-direction: column;
+    transition: transform 0.25s cubic-bezier(0.2,0.7,0.2,1), border-color 0.25s, box-shadow 0.25s;
+    transform-style: preserve-3d;
+    overflow: hidden;
+  }
+  .gcard::after {
+    content: '';
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 18px;
+    height: 18px;
+    border-top: 1px solid color-mix(in srgb, var(--hue) 55%, transparent);
+    border-right: 1px solid color-mix(in srgb, var(--hue) 55%, transparent);
+  }
+  .gcard:nth-child(even) { transform: translateY(14px); }
+  .gcard::before {
+    content: '';
+    position: absolute; inset: 0;
+    background: linear-gradient(115deg, transparent 30%, color-mix(in srgb, var(--hue) 22%, transparent) 47%, rgba(255,255,255,0.12) 50%, color-mix(in srgb, var(--hue) 22%, transparent) 53%, transparent 70%);
+    transform: translateX(-120%);
+    transition: transform 0.7s ease;
+    pointer-events: none;
+  }
+  .gcard:hover {
+    transform: translateY(-6px) rotateX(3deg);
+    border-color: color-mix(in srgb, var(--hue) 45%, var(--line));
+    box-shadow: 0 18px 44px rgba(0,0,0,0.5), 0 0 30px color-mix(in srgb, var(--hue) 14%, transparent);
+  }
+  .gcard:nth-child(even):hover { transform: translateY(8px) rotateX(3deg); }
+  .gcard:hover::before { transform: translateX(120%); }
+
+  .gcard-rarity {
+    font-family: var(--pixel); font-size: 10px;
+    color: var(--hue);
+    letter-spacing: 0.12em;
+    margin-bottom: 1rem;
+  }
+  .gcard-art {
+    font-family: var(--mono); font-size: 11px; line-height: 1.35;
+    color: color-mix(in srgb, var(--hue) 75%, var(--cream));
+    white-space: pre;
+    margin-bottom: 1.1rem;
+    text-shadow: 0 0 14px color-mix(in srgb, var(--hue) 35%, transparent);
+  }
+  .gcard h3 {
+    font-family: var(--tech); font-size: 13px; font-weight: 800;
+    letter-spacing: 0.04em; color: var(--cream);
+    margin-bottom: 0.4rem;
+  }
+  .gcard p { font-size: 12.5px; color: var(--fog); line-height: 1.7; }
+  .gcard-src {
+    margin-top: auto; padding-top: 1rem;
+    font-family: var(--tech); font-size: 8.5px; font-weight: 600;
+    letter-spacing: 0.2em; text-transform: uppercase;
+    color: var(--mist);
+  }
+  .gcard-src b { color: var(--hue); font-weight: 600; }
+
+  .g-poke { --hue: var(--poke); }
+  .g-mtg  { --hue: var(--mtg); }
+  .g-ygo  { --hue: var(--ygo); }
+  .g-op   { --hue: var(--op); }
+
+  /* ── TUI showcase ────────────────────────────────────── */
+  .tui-wrap {
+    display: grid;
+    grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+    gap: 3rem;
+    align-items: start;
+  }
+  .tui-wrap > *, .deck > *, .modes > *, .cli-grid > * { min-width: 0; }
+
+  .tui { font-size: 12px; }
+  .tui pre { font-size: 12px; line-height: 1.8; }
+  .tui .tab        { color: var(--mist); }
+  .tui .tab-on     { color: var(--ink); background: var(--amber); font-weight: 600; padding: 0 4px; }
+  .tui .hdr        { color: var(--amber); font-weight: 600; }
+  .tui .row-sel    { color: var(--ink); background: var(--amber-dim); display: inline; }
+  .tui .border     { color: #3a2f1d; }
+  .tui .foot       { color: var(--mist); }
+  .tui .foot .kb   { color: var(--amber); }
+
+  .feat-stack { display: flex; flex-direction: column; gap: 1px; background: var(--line-soft); border: 1px solid var(--line-soft); }
+  .feat {
+    background: var(--ink-2);
+    padding: 1.1rem 1.3rem;
+    display: grid; grid-template-columns: 38px 1fr; gap: 0.9rem;
+    transition: background 0.2s;
+  }
+  .feat:hover { background: var(--panel); }
+  .feat-key {
+    font-family: var(--tech); font-size: 9px; font-weight: 600;
+    color: var(--amber); border: 1px solid var(--line);
+    height: 26px; display: flex; align-items: center; justify-content: center;
+    background: var(--panel);
+  }
+  .feat h3 { font-family: var(--tech); font-size: 11px; font-weight: 800; letter-spacing: 0.06em; color: var(--cream); margin-bottom: 2px; }
+  .feat p { font-size: 12.5px; color: var(--fog); line-height: 1.65; }
+
+  /* ── tracking trio ───────────────────────────────────── */
+  .trio { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.4rem; }
+  .panel {
+    background: var(--panel); border: 1px solid var(--line);
+    padding: 1.6rem;
+    position: relative;
+    overflow: hidden;
+  }
+  .panel::after {
+    content: '';
+    position: absolute;
+    inset: auto -20% -55% 35%;
+    height: 100%;
+    background: radial-gradient(ellipse, rgba(255,182,72,0.055), transparent 68%);
+    pointer-events: none;
+  }
+  .panel-label {
+    font-family: var(--tech); font-size: 9px; font-weight: 600;
+    letter-spacing: 0.26em; text-transform: uppercase;
+    color: var(--amber); margin-bottom: 1.1rem;
+    padding-bottom: 0.7rem; border-bottom: 1px solid var(--line-soft);
+  }
+  .panel p { font-size: 12px; color: var(--fog); line-height: 1.75; }
+  .panel pre {
+    font-family: var(--mono); font-size: 12px; line-height: 1.7;
+    color: var(--fog); margin-top: 1rem; overflow-x: auto;
+  }
+  .panel pre .a { color: var(--amber); }
+  .panel pre .g { color: var(--ok); }
+
+  .bar { display: flex; align-items: center; gap: 10px; margin-top: 0.55rem; font-size: 11px; color: var(--fog); }
+  .bar-track { flex: 1; height: 8px; background: var(--ink); border: 1px solid var(--line); position: relative; }
+  .bar-fill { position: absolute; inset: 1px auto 1px 1px; background: repeating-linear-gradient(90deg, var(--amber) 0 5px, transparent 5px 7px); width: 0; transition: width 1.1s cubic-bezier(0.2,0.7,0.2,1) 0.2s; }
+  .in .bar-fill { width: var(--w); }
+  .bar-pct { font-family: var(--tech); font-size: 9px; color: var(--amber); min-width: 32px; text-align: right; }
+
+  /* ── modes ───────────────────────────────────────────── */
+  .modes { display: grid; grid-template-columns: 1fr 1fr; gap: 1.4rem; }
+  .mode { border: 1px solid var(--line); background: var(--panel); }
+  .mode-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 1.1rem 1.5rem; border-bottom: 1px solid var(--line);
+  }
+  .mode-head h3 { font-family: var(--pixel); font-size: 15px; color: var(--cream); }
+  .mode-badge {
+    font-family: var(--tech); font-size: 8.5px; font-weight: 600;
+    letter-spacing: 0.2em; text-transform: uppercase;
+    padding: 4px 10px;
+  }
+  .mode-badge.solo  { color: var(--ink); background: var(--amber); }
+  .mode-badge.multi { color: var(--ink); background: var(--ygo); }
+  .mode-body { padding: 1.4rem 1.5rem; }
+  .mode-body > p { font-size: 12.5px; color: var(--fog); margin-bottom: 1.1rem; }
+  .mode ul { list-style: none; margin-top: 1.1rem; }
+  .mode li {
+    font-size: 12px; color: var(--fog);
+    padding: 0.45rem 0 0.45rem 1.4rem;
+    position: relative;
+    border-bottom: 1px dashed var(--line-soft);
+  }
+  .mode li:last-child { border-bottom: none; }
+  .mode li::before { content: '▸'; position: absolute; left: 0; color: var(--amber-dim); }
+
+  /* ── CLI reference ───────────────────────────────────── */
+  .cli-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.4rem; align-items: start; }
+  .cli-table { border: 1px solid var(--line); background: var(--panel); }
+  .cli-table-head {
+    font-family: var(--tech); font-size: 9px; font-weight: 600;
+    letter-spacing: 0.26em; text-transform: uppercase; color: var(--amber);
+    padding: 0.9rem 1.3rem; border-bottom: 1px solid var(--line);
+    background: var(--panel-2);
+  }
+  .cli-row {
+    display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+    gap: 1rem; padding: 0.6rem 1.3rem;
+    border-bottom: 1px solid var(--line-soft);
+    font-size: 12px;
+    transition: background 0.15s;
+  }
+  .cli-row:hover { background: rgba(255,182,72,0.04); }
+  .cli-row:last-child { border-bottom: none; }
+  .cli-row code { font-family: var(--mono); color: var(--amber-hot); background: none; border: none; padding: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cli-row span { color: var(--fog); }
+  .cli-note { font-size: 12px; color: var(--fog); margin-top: 1rem; }
+  .cli-note code { color: var(--fog); }
+
+  /* ── config ──────────────────────────────────────────── */
+  .env { max-width: 760px; }
+  .env-row { display: grid; grid-template-columns: 170px 1fr; border-bottom: 1px solid var(--line-soft); }
+  .env-row:hover { background: rgba(255,182,72,0.03); }
+  .env-key {
+    font-family: var(--mono); font-size: 12.5px; font-weight: 600;
+    color: var(--amber-hot); padding: 0.85rem 1rem 0.85rem 0;
+  }
+  .env-val { padding: 0.85rem 0; font-size: 12px; color: var(--fog); }
+  .env-val code { font-size: 11.5px; }
+  .env-def { color: var(--mist); font-size: 11px; }
+
+  /* ── footer ──────────────────────────────────────────── */
+  footer {
+    border-top: 1px solid var(--line);
+    padding: 4rem 2rem 5rem;
+    text-align: center;
+  }
+  .foot-logo {
+    font-family: var(--pixel); font-weight: 700; font-size: 2rem;
+    color: var(--amber);
+    text-shadow: 3px 3px 0 rgba(255,182,72,0.15);
+    display: block; margin-bottom: 1.2rem;
+  }
+  footer p { font-size: 12px; color: var(--fog); }
+  footer a { color: var(--fog); text-decoration: none; border-bottom: 1px dotted var(--mist); transition: color 0.15s; }
+  footer a:hover { color: var(--amber-hot); }
+  .foot-keys {
+    display: inline-flex; gap: 6px; margin-top: 1.6rem;
+    font-family: var(--tech); font-size: 10px; color: var(--fog);
+  }
+  .foot-keys span { border: 1px solid var(--line); padding: 3px 8px; background: var(--panel); }
+
+  /* ── animations ──────────────────────────────────────── */
+  @keyframes rise { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: none; } }
+  @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+    .tline { opacity: 1; }
+    .grain { display: none; }
+  }
+
+  /* ── responsive ──────────────────────────────────────── */
+  @media (max-width: 1160px) {
+    .nav-links a { padding-inline: 9px; }
+    .nav-ver { padding-inline: 12px; }
+  }
+  @media (max-width: 1020px) {
+    #top { grid-template-columns: minmax(0, 1fr); padding-top: 90px; gap: 3rem; min-height: 0; }
+    .hero-left { max-width: 760px; }
+    h1.hero-name { font-size: clamp(2.5rem, 9vw, 5.5rem); }
+    .hero-right { width: min(100%, 760px); }
+    .deck { grid-template-columns: 1fr 1fr; }
+    .tui-wrap, .cli-grid, .modes { grid-template-columns: minmax(0, 1fr); }
+    .trio { grid-template-columns: minmax(0, 1fr); }
+  }
+
+  @media (max-width: 780px) {
+    nav { height: 50px; }
+    .nav-brand { min-width: 152px; }
+    .nav-toggle { display: block; margin-left: auto; }
+    .nav-ver { display: none; }
     .nav-links {
-      display: flex;
-      gap: 2.5rem;
-      list-style: none;
-    }
-
-    .nav-links a {
-      color: var(--dim);
-      text-decoration: none;
-      font-size: 11px;
-      letter-spacing: 0.14em;
-      text-transform: uppercase;
-      font-weight: 500;
-      transition: color 0.15s;
-    }
-
-    .nav-links a:hover { color: var(--green); }
-
-    /* ── Hero ── */
-    #hero {
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      text-align: center;
-      padding: 6rem 2rem 5rem;
-      position: relative;
-      overflow: hidden;
-    }
-
-    .hero-spade {
       position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -58%);
-      font-size: 13px;
-      line-height: 1.5;
-      color: rgba(223,87,188,0.025);
-      pointer-events: none;
-      white-space: pre;
-      letter-spacing: 0.35em;
-      user-select: none;
-      font-family: 'IBM Plex Mono', monospace;
-    }
-
-    .hero-eyebrow {
-      font-size: 10px;
-      letter-spacing: 0.5em;
-      color: var(--green-dim);
-      text-transform: uppercase;
-      font-weight: 600;
-      margin-bottom: 1.6rem;
-      animation: fadeUp 0.55s ease both;
-    }
-
-    .hero-title {
-      font-family: 'VT323', monospace;
-      font-size: clamp(5.5rem, 16vw, 11rem);
-      color: var(--green);
-      letter-spacing: 0.1em;
-      line-height: 1;
-      margin-bottom: 0.25em;
-      text-shadow:
-        0 0 12px var(--green),
-        0 0 35px var(--green),
-        0 0 70px rgba(223,87,188,0.35);
-      animation: fadeUp 0.55s ease 0.08s both, glow-pulse 5s ease-in-out 0.8s infinite;
-    }
-
-    .hero-sub {
-      font-size: 12px;
-      color: var(--dim);
-      letter-spacing: 0.25em;
-      text-transform: uppercase;
-      margin-bottom: 3.2rem;
-      animation: fadeUp 0.55s ease 0.18s both;
-    }
-
-    #hero .term {
-      max-width: 600px;
-      width: 100%;
-      animation: fadeUp 0.55s ease 0.3s both;
-    }
-
-    .hero-cta {
-      display: flex;
-      gap: 1rem;
-      justify-content: center;
-      margin-top: 2.4rem;
-      animation: fadeUp 0.55s ease 0.44s both;
-    }
-
-    .btn {
-      display: inline-block;
-      font-family: 'IBM Plex Mono', monospace;
-      font-size: 11px;
-      letter-spacing: 0.22em;
-      text-transform: uppercase;
-      text-decoration: none;
-      padding: 10px 28px;
-      border: 1px solid var(--green);
-      color: var(--green);
-      background: transparent;
-      cursor: pointer;
-      transition: background 0.15s, box-shadow 0.15s;
-      position: relative;
-    }
-
-    .btn::after {
-      content: '';
-      position: absolute;
-      top: 3px; left: 3px; right: -3px; bottom: -3px;
-      border: 1px solid var(--green-dim);
+      top: 50px;
+      left: 0;
+      right: 0;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      padding: 8px;
+      margin: 0;
+      border-bottom: 1px solid var(--line);
+      background: var(--ink);
+      backdrop-filter: blur(14px);
+      box-shadow: 0 18px 40px rgba(0,0,0,0.45);
+      transform: translateY(-125%);
+      visibility: hidden;
       opacity: 0;
-      transition: opacity 0.15s;
+      transition: transform 0.2s ease, opacity 0.2s ease, visibility 0.2s;
     }
-
-    .btn:hover {
-      background: var(--green-glow);
-      box-shadow: 0 0 24px rgba(223,87,188,0.18);
+    nav.menu-open .nav-links {
+      transform: none;
+      visibility: visible;
+      opacity: 1;
     }
-
-    .btn:hover::after { opacity: 1; }
-
-    .btn-ghost {
-      border-color: var(--dimmer);
-      color: var(--dim);
-    }
-
-    .btn-ghost::after { border-color: transparent; }
-
-    .btn-ghost:hover {
-      background: rgba(255,255,255,0.02);
-      box-shadow: none;
-      border-color: var(--dim);
-      color: var(--text);
-    }
-
-    .scroll-hint {
-      position: absolute;
-      bottom: 2.2rem;
-      left: 50%;
-      transform: translateX(-50%);
-      font-size: 10px;
-      color: var(--dimmer);
-      letter-spacing: 0.4em;
-      text-transform: uppercase;
-      animation: bob 2.2s ease-in-out infinite;
-    }
-
-    /* ── Section wrappers ── */
-    .section-wrap {
-      position: relative;
-      border-top: 1px solid var(--border);
-    }
-
-    .section-wrap::before {
-      content: attr(data-num);
-      position: absolute;
-      top: -0.05em;
-      right: 1.5rem;
-      font-family: 'VT323', monospace;
-      font-size: clamp(6rem, 13vw, 10rem);
-      color: rgba(223,87,188,0.028);
-      pointer-events: none;
-      line-height: 1;
-      user-select: none;
-    }
-
-    section {
-      max-width: 920px;
-      margin: 0 auto;
-      padding: 5rem 2rem;
-      position: relative;
-    }
-
-    .sec-label {
-      font-size: 10px;
-      letter-spacing: 0.45em;
-      color: var(--green-dim);
-      text-transform: uppercase;
-      font-weight: 600;
-      margin-bottom: 0.4rem;
-    }
-
-    .sec-title {
-      font-family: 'VT323', monospace;
-      font-size: clamp(2.8rem, 5vw, 4rem);
-      color: var(--text);
-      letter-spacing: 0.06em;
-      line-height: 1;
-      margin-bottom: 0.6rem;
-    }
-
-    .sec-title span { color: var(--green); }
-
-    .sec-accent {
-      width: 36px;
-      height: 2px;
-      background: var(--green);
-      box-shadow: 0 0 8px var(--green);
-      margin-bottom: 2rem;
-    }
-
-    p {
-      color: #777;
-      font-size: 13px;
-      margin-bottom: 1rem;
-      line-height: 1.9;
-    }
-
-    p:last-child { margin-bottom: 0; }
-
-    /* ── Terminal ── */
-    .term {
-      background: #070707;
-      border: 1px solid var(--border);
-    }
-
-    .term-bar {
+    .nav-links li:last-child { grid-column: 1 / -1; }
+    .nav-links a,
+    .nav-links a:not(.always) {
       display: flex;
-      align-items: center;
-      gap: 6px;
-      padding: 8px 14px;
-      background: var(--dimmer);
-      border-bottom: 1px solid var(--border);
+      min-height: 46px;
+      border: 1px solid transparent;
+      padding-inline: 12px;
     }
-
-    .dot {
-      width: 9px;
-      height: 9px;
-      border-radius: 50%;
+    .nav-links a:hover,
+    .nav-links a:focus-visible {
+      border-color: var(--line);
+      outline-offset: -2px;
     }
+  }
 
-    .dot-r { background: #2e1212; }
-    .dot-y { background: #2a260e; }
-    .dot-g { background: var(--green-dim); box-shadow: 0 0 5px var(--green-dim); }
+  @media (max-width: 620px) {
+    body { font-size: 14px; line-height: 1.7; }
+    section { padding: 4.3rem 1rem; }
+    #top { padding: 86px 1rem 4rem; gap: 2.5rem; }
+    #top::before { width: 82vw; right: -38%; top: 14%; }
+    h1.hero-name { font-size: clamp(2.15rem, 12.5vw, 4rem); line-height: 1.02; }
+    .hero-sub { font-size: 13.5px; }
+    .deck { grid-template-columns: minmax(0, 1fr); }
+    .hero-tag { max-width: 100%; letter-spacing: 0.12em; font-size: 8px; }
+    .hero-games { gap: 6px; }
+    .chip { padding: 4px 8px; font-size: 8px; letter-spacing: 0.1em; }
+    .hero-cta { display: grid; grid-template-columns: 1fr 1fr; }
+    .btn { display: flex; min-height: 46px; align-items: center; justify-content: center; padding-inline: 12px; text-align: center; }
+    .hero-stats { margin-top: 2rem; }
+    .stat { padding: 0.7rem 0.55rem; }
+    .stat strong { font-size: 14px; }
+    .stat span { font-size: 7px; letter-spacing: 0.08em; }
+    .hero-right .term { transform: none; }
+    .hero-right .term::after { right: 6px; bottom: -14px; }
+    .term pre { padding: 1rem; font-size: 12px; line-height: 1.8; }
+    .tui pre { font-size: 12px; }
+    .term-title { max-width: 48vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .sec-head { align-items: flex-start; gap: 0.8rem; }
+    .sec-num { margin-top: 3px; font-size: 10px; }
+    h2 { font-size: clamp(1.4rem, 8vw, 2rem); line-height: 1.2; }
+    .sec-lede { font-size: 12.5px; margin-bottom: 2rem; }
+    .gcard:nth-child(even) { transform: none; }
+    .gcard { min-height: 260px; padding: 1.35rem; }
+    .tui-wrap { gap: 1.5rem; }
+    .feat { padding: 1rem; grid-template-columns: 32px 1fr; gap: 0.75rem; }
+    .panel { padding: 1.2rem; }
+    .bar { gap: 7px; }
+    .mode-head { padding: 1rem; gap: 0.8rem; }
+    .mode-head h3 { font-size: 12px; }
+    .mode-body { padding: 1rem; }
+    .env-row { grid-template-columns: 1fr; }
+    .env-key { padding-bottom: 0; }
+    .env-val { padding-top: 0.2rem; }
+    .cli-row { grid-template-columns: minmax(0, 1fr); gap: 0.1rem; padding: 0.75rem 1rem; }
+    .cli-row code { white-space: normal; overflow-wrap: anywhere; }
+    .env-val, .env-def { overflow-wrap: anywhere; }
+    footer { padding: 3.5rem 1rem 4rem; }
+    footer p { overflow-wrap: anywhere; }
+    .foot-keys { flex-wrap: wrap; justify-content: center; }
+  }
 
-    .term-title {
-      font-size: 10px;
-      color: var(--dim);
-      margin-left: 6px;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      font-weight: 400;
-    }
+  @media (max-width: 380px) {
+    .nav-brand { min-width: 0; padding-left: 14px; padding-right: 24px; }
+    .hero-cta { grid-template-columns: 1fr; }
+    .hero-stats { grid-template-columns: 1fr; }
+    .stat { display: flex; align-items: center; gap: 10px; border-right: 0; border-bottom: 1px solid var(--line); }
+    .stat:last-child { border-bottom: 0; }
+    .stat span { margin-top: 0; }
+    .mode-head { align-items: flex-start; flex-direction: column; }
+  }
 
-    .term code {
-      display: block;
-      font-family: 'IBM Plex Mono', 'Courier New', monospace;
-      font-size: 12px;
-      line-height: 2;
-      white-space: pre;
-      padding: 1rem 1.4rem;
-      color: #777;
-    }
-
-    .term .prompt { color: var(--green); font-weight: 600; }
-    .term .cmd    { color: var(--text); }
-    .term .cmt    { color: var(--dim); }
-    .term .ok     { color: var(--green); }
-    .term .key    { color: var(--cyan); }
-
-    .blink-cursor {
-      color: var(--green);
-      animation: blink 1.1s step-end infinite;
-    }
-
-    /* ── Grid panels ── */
-    .grid-2 {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 1px;
-      background: var(--border);
-      border: 1px solid var(--border);
-      margin-top: 2.5rem;
-    }
-
-    .panel {
-      background: var(--panel);
-      padding: 2rem;
-      transition: background 0.2s;
-    }
-
-    .panel:hover { background: #141414; }
-
-    .panel-title {
-      font-size: 10px;
-      letter-spacing: 0.32em;
-      color: var(--green);
-      text-transform: uppercase;
-      font-weight: 600;
-      margin-bottom: 1.2rem;
-      padding-bottom: 0.8rem;
-      border-bottom: 1px solid var(--border);
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-    }
-
-    .panel-title::before {
-      content: '▶';
-      color: var(--green-dim);
-      font-size: 8px;
-    }
-
-    /* ── Feature list ── */
-    .feat-list { list-style: none; }
-
-    .feat-list li {
-      display: flex;
-      gap: 0.9rem;
-      align-items: flex-start;
-      padding: 0.5rem 0;
-      font-size: 12px;
-      color: #666;
-      border-bottom: 1px solid var(--border);
-      transition: color 0.15s;
-    }
-
-    .feat-list li:last-child { border-bottom: none; }
-    .feat-list li:hover { color: var(--text); }
-
-    .feat-list .icon        { color: var(--green-dim); flex-shrink: 0; margin-top: 2px; }
-    .feat-list .icon-orange { color: var(--orange);    flex-shrink: 0; margin-top: 2px; }
-    .feat-list .icon-cyan   { color: var(--cyan);      flex-shrink: 0; margin-top: 2px; }
-
-    /* ── Mode grid (how it works) ── */
-    .mode-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 1px;
-      background: var(--border);
-      border: 1px solid var(--border);
-      margin-top: 2.5rem;
-    }
-
-    .mode-panel {
-      background: var(--panel);
-      padding: 2rem;
-      transition: background 0.2s;
-    }
-
-    .mode-panel:hover { background: #141414; }
-
-    /* ── Config block ── */
-    .config-block {
-      margin-top: 2.5rem;
-      border: 1px solid var(--border);
-      border-left: 3px solid var(--cyan);
-    }
-
-    .config-block .term { border: none; }
-
-    /* ── Badge ── */
-    .badge {
-      display: inline-block;
-      font-size: 9px;
-      letter-spacing: 0.22em;
-      text-transform: uppercase;
-      color: var(--orange);
-      border: 1px solid var(--orange-dim);
-      padding: 2px 9px;
-      margin-bottom: 1rem;
-    }
-
-    .badge-cyan {
-      color: var(--cyan);
-      border-color: rgba(0,212,255,0.25);
-    }
-
-    /* ── Inline code ── */
-    code.inline {
-      background: var(--dimmer);
-      border: 1px solid var(--border);
-      padding: 0 5px;
-      font-size: 11px;
-      color: var(--cyan);
-      font-family: inherit;
-    }
-
-    /* ── Rule box ── */
-    .rule-box {
-      border: 1px solid var(--border);
-      border-left: 3px solid var(--orange);
-      padding: 1.1rem 1.4rem;
-      margin-top: 1.8rem;
-      font-size: 12px;
-      color: #666;
-      line-height: 2.1;
-    }
-
-    .rule-box strong { color: var(--orange); }
-
-    /* ── Footer ── */
-    footer {
-      border-top: 1px solid var(--border);
-      padding: 3rem 2rem;
-      text-align: center;
-      font-size: 11px;
-      color: var(--dim);
-      letter-spacing: 0.1em;
-    }
-
-    .footer-logo {
-      font-family: 'VT323', monospace;
-      font-size: 2.4rem;
-      color: var(--green);
-      text-shadow: 0 0 10px var(--green);
-      display: block;
-      margin-bottom: 1rem;
-      letter-spacing: 0.18em;
-    }
-
-    footer p { color: var(--dim); font-size: 11px; margin-bottom: 0.5rem; }
-    footer a { color: var(--green-dim); text-decoration: none; transition: color 0.15s; }
-    footer a:hover { color: var(--green); }
-
-    /* ── Animations ── */
-    @keyframes fadeUp {
-      from { opacity: 0; transform: translateY(18px); }
-      to   { opacity: 1; transform: translateY(0); }
-    }
-
-    @keyframes glow-pulse {
-      0%, 100% {
-        text-shadow:
-          0 0 12px var(--green),
-          0 0 35px var(--green),
-          0 0 70px rgba(223,87,188,0.35);
-      }
-      50% {
-        text-shadow:
-          0 0 18px var(--green),
-          0 0 50px var(--green),
-          0 0 100px rgba(223,87,188,0.25),
-          0 0 140px rgba(223,87,188,0.1);
-      }
-    }
-
-    @keyframes blink {
-      0%, 100% { opacity: 1; }
-      50%       { opacity: 0; }
-    }
-
-    @keyframes bob {
-      0%, 100% { transform: translateX(-50%) translateY(0); }
-      50%       { transform: translateX(-50%) translateY(7px); }
-    }
-
-    /* ── Responsive ── */
-    @media (max-width: 660px) {
-      .grid-2, .mode-grid { grid-template-columns: 1fr; }
-      .nav-links { gap: 1.2rem; }
-      .nav-links a { font-size: 10px; }
-      .hero-eyebrow { letter-spacing: 0.3em; }
-    }
-  </style>
+  @media (hover: none) {
+    .gcard:hover,
+    .gcard:nth-child(even):hover { transform: none; }
+  }
+</style>
 </head>
 <body>
+<a class="skip-link" href="#main-content">Skip to content</a>
+<div class="scroll-progress" aria-hidden="true"></div>
+<div class="grain" aria-hidden="true"></div>
 
-<!-- ── Nav ────────────────────────────────────────────── -->
-<nav>
-  <a class="nav-brand" href="#hero">CARDMAN</a>
-  <ul class="nav-links">
-    <li><a href="#how-it-works">how it works</a></li>
-    <li><a href="#collection">collection</a></li>
-    <li><a href="#lists">lists</a></li>
-    <li><a href="#decks">decks</a></li>
+<nav aria-label="Primary navigation">
+  <a class="nav-brand" href="#top">CARDMAN<span style="font-family:var(--tech);font-size:8px;font-weight:600;opacity:0.7;">_</span></a>
+  <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="primary-links"><span aria-hidden="true">[=]</span><span class="sr-only">Menu</span></button>
+  <ul class="nav-links" id="primary-links">
+    <li><a href="#games"><span class="k">1</span>games</a></li>
+    <li><a href="#tui"><span class="k">2</span>the tui</a></li>
+    <li><a href="#tracking"><span class="k">3</span>tracking</a></li>
+    <li><a href="#modes"><span class="k">4</span>modes</a></li>
+    <li><a href="#cli"><span class="k">5</span>cli</a></li>
+    <li><a href="#config"><span class="k">6</span>config</a></li>
+    <li><a class="always" href="https://github.com/laiambryant/tui-cardman" target="_blank" rel="noopener"><span class="k">g</span>github</a></li>
   </ul>
+  <div class="nav-ver">v0.2.0</div>
 </nav>
 
-<div class="page">
+<main class="page" id="main-content">
 
-<!-- ── Hero ─────────────────────────────────────────────── -->
-<section id="hero">
-
-  <pre class="hero-spade" aria-hidden="true">
-        · · · · · · · · · · ·
-      · · · · · · · · · · · · ·
-    · · · · ·     ·     · · · · ·
-  · · · · · ·   · · ·   · · · · · ·
-  · · · · · · · · · · · · · · · · ·
-  · · · · · · · · · · · · · · · · ·
-  · · · · · · · · · · · · · · · · ·
-    · · · · · · · · · · · · · · ·
-      · · · · · · · · · · · · ·
-        · · · · · · · · · · ·
-          · · · · · · · · ·
-            · · · · · · ·
-              · · · · ·
-            · · · · · · ·
-          · · ·     · · ·
-        · · · ·     · · · ·
-        · · · · · · · · · ·
-  </pre>
-
-  <div class="hero-eyebrow">open source · self-hosted · terminal-native</div>
-  <h1 class="hero-title">CARDMAN</h1>
-  <p class="hero-sub">Terminal UI Card Collection Manager</p>
-
-  <div class="term">
-    <div class="term-bar">
-      <span class="dot dot-r"></span>
-      <span class="dot dot-y"></span>
-      <span class="dot dot-g"></span>
-      <span class="term-title">install</span>
+<!-- ════ hero ════ -->
+<section id="top">
+  <div class="hero-left">
+    <div class="hero-tag">terminal-native · self-hosted · open source</div>
+    <h1 class="hero-name">YOUR BINDER<br>LIVES IN THE<br><em>TERMINAL</em></h1>
+    <p class="hero-sub">
+      <b>cardman</b> is a TUI for managing trading card collections across
+      <b>four games</b>. Track what you own, build decks, keep wishlists,
+      watch prices — one Go binary, one SQLite file, zero cloud.
+    </p>
+    <div class="hero-games">
+      <span class="chip chip-poke">Pokémon TCG</span>
+      <span class="chip chip-mtg">Magic: The Gathering</span>
+      <span class="chip chip-ygo">Yu-Gi-Oh!</span>
+      <span class="chip chip-op">One Piece</span>
     </div>
-    <code>
-<span class="cmt"># download latest tagged binary (linux amd64)</span>
-<span class="prompt">$</span> <span class="cmd">VERSION=v0.2.0</span>
-<span class="prompt">$</span> <span class="cmd">curl -L &quot;https://github.com/laiambryant/tui-cardman/releases/download/${VERSION}/cardman_${VERSION}_linux-amd64.tar.gz&quot; | tar xz</span>
-<span class="prompt">$</span> <span class="cmd">sudo mv cardman /usr/local/bin/</span>
-
-<span class="cmt"># initialise and launch</span>
-<span class="prompt">$</span> <span class="cmd">cardman migrate &amp;&amp; cardman import-full</span>
-<span class="prompt">$</span> <span class="cmd">cardman serve</span>
-<span class="ok">✓ cardman is running</span><span class="blink-cursor"> █</span>
-    </code>
+    <div class="hero-cta">
+      <a class="btn btn-solid" href="https://github.com/laiambryant/tui-cardman/releases" target="_blank" rel="noopener">Get the binary</a>
+      <a class="btn btn-line" href="https://github.com/laiambryant/tui-cardman" target="_blank" rel="noopener">Source ↗</a>
+    </div>
+    <div class="hero-stats" aria-label="Project highlights">
+      <div class="stat"><strong>01</strong><span>portable binary</span></div>
+      <div class="stat"><strong>04</strong><span>card games</span></div>
+      <div class="stat"><strong>00</strong><span>cloud required</span></div>
+    </div>
   </div>
 
-  <div class="hero-cta">
-    <a class="btn" href="https://github.com/laiambryant/tui-cardman/releases" target="_blank" rel="noopener">Download</a>
-    <a class="btn btn-ghost" href="https://github.com/laiambryant/tui-cardman" target="_blank" rel="noopener">GitHub →</a>
+  <div class="hero-right">
+    <div class="term" aria-label="Quick-start terminal example">
+      <div class="term-bar">
+        <span class="dot"></span><span class="dot"></span><span class="dot lit"></span>
+        <span class="term-title">zsh — quick start</span>
+        <button class="term-action" type="button" data-copy="VERSION=v0.2.0&#10;curl -L &quot;https://github.com/laiambryant/tui-cardman/releases/download/${VERSION}/cardman_${VERSION}_linux-amd64.tar.gz&quot; | tar xz&#10;sudo mv cardman /usr/local/bin/&#10;cardman migrate&#10;cardman import-full&#10;cardman serve">copy</button>
+      </div>
+      <pre><span class="tline"><span class="dim"># grab a release (linux/macos · amd64/arm64)</span></span>
+<span class="tline"><span class="p">$</span> <span class="c">VERSION=v0.2.0</span></span>
+<span class="tline"><span class="p">$</span> <span class="c">curl -L "https://github.com/laiambryant/tui-cardman/releases/download/${VERSION}/cardman_${VERSION}_linux-amd64.tar.gz" | tar xz</span></span>
+<span class="tline"><span class="p">$</span> <span class="c">sudo mv cardman /usr/local/bin/</span></span>
+<span class="tline"><span class="dim"># set up the database, pull card data, launch</span></span>
+<span class="tline"><span class="p">$</span> <span class="c">cardman migrate</span></span>
+<span class="tline"><span class="ok">migrations applied</span></span>
+<span class="tline"><span class="p">$</span> <span class="c">cardman import-full</span></span>
+<span class="tline"><span class="p">$</span> <span class="c">cardman serve</span> <span class="cursor"></span></span></pre>
+    </div>
   </div>
-
-  <div class="scroll-hint">▼ scroll</div>
 </section>
 
-<!-- ── How It Works ──────────────────────────────────────── -->
-<div class="section-wrap" data-num="01">
-<section id="how-it-works">
-  <div class="sec-label">// 01</div>
-  <div class="sec-title">How It <span>Works</span></div>
-  <div class="sec-accent"></div>
-
-  <p>
-    Fully self-hosted card collection manager that runs entirely in your terminal.
-    No accounts, no cloud, no browser required — just a single binary and a SQLite file.
-    Pick the mode that fits your setup.
+<!-- ════ games ════ -->
+<div class="band" id="games">
+<section>
+  <div class="sec-head reveal"><span class="sec-num">01</span><h2>FOUR GAMES, <em>ONE BINARY</em></h2></div>
+  <p class="sec-lede reveal">
+    Every game gets its own tab in the TUI and its own importer. Card and set data
+    is pulled from each game's public API and stored locally — after the import,
+    everything works offline.
   </p>
 
-  <div class="mode-grid">
-    <div class="mode-panel">
-      <div class="panel-title">Local Mode</div>
-      <span class="badge">single user</span>
-      <p>
-        Run cardman directly on your machine. Your collection lives in a local
-        <code class="inline">cardman.db</code> SQLite file. No network, no dependencies.
-      </p>
-      <div class="term" style="margin-top:1.2rem;">
-        <div class="term-bar">
-          <span class="dot dot-r"></span>
-          <span class="dot dot-y"></span>
-          <span class="dot dot-g"></span>
-          <span class="term-title">local mode</span>
-        </div>
-        <code><span class="prompt">$</span> <span class="cmd">cardman serve</span></code>
-      </div>
-      <ul class="feat-list" style="margin-top:1.6rem;">
-        <li><span class="icon">○</span> Single-user setup, zero config</li>
-        <li><span class="icon">○</span> Keybindings stored locally</li>
-        <li><span class="icon">○</span> Works completely offline</li>
-        <li><span class="icon">○</span> Data in a portable <code class="inline">.db</code> file</li>
-      </ul>
+  <div class="deck">
+    <div class="gcard g-poke reveal">
+      <div class="gcard-rarity">★ BASE SET</div>
+      <div class="gcard-art"> ╭─────╮
+ │ ⚡ ◓ │
+ │ HP60 │
+ ╰─────╯</div>
+      <h3>Pokémon TCG</h3>
+      <p>Sets, cards, attacks, abilities, weaknesses — plus TCGPlayer and CardMarket pricing on every card.</p>
+      <div class="gcard-src">data <b>TCGDex API</b></div>
     </div>
 
-    <div class="mode-panel">
-      <div class="panel-title">SSH Server Mode</div>
-      <span class="badge badge-cyan">multi user</span>
-      <p>
-        Deploy cardman as a shared SSH server. Each user authenticates with their
-        own username and gets an isolated collection — all on the same host.
-      </p>
-      <div class="term" style="margin-top:1.2rem;">
-        <div class="term-bar">
-          <span class="dot dot-r"></span>
-          <span class="dot dot-y"></span>
-          <span class="dot dot-g"></span>
-          <span class="term-title">ssh mode</span>
-        </div>
-        <code>
-<span class="cmt"># on the server</span>
-<span class="prompt">$</span> <span class="cmd">cardman serve-ssh</span>
+    <div class="gcard g-mtg reveal">
+      <div class="gcard-rarity">★ MYTHIC</div>
+      <div class="gcard-art"> ╭─────╮
+ │ ◉ 3R │
+ │ 4/4  │
+ ╰─────╯</div>
+      <h3>Magic: The Gathering</h3>
+      <p>Full card detail: mana cost, color identity, types, power/toughness, loyalty and format legalities.</p>
+      <div class="gcard-src">data <b>MTG SDK</b></div>
+    </div>
 
-<span class="cmt"># from any client</span>
-<span class="prompt">$</span> <span class="cmd">ssh -p 2222 username@your-server</span>
-        </code>
-      </div>
-      <ul class="feat-list" style="margin-top:1.6rem;">
-        <li><span class="icon">○</span> Multiple independent users</li>
-        <li><span class="icon">○</span> Per-user keybinding config in DB</li>
-        <li><span class="icon">○</span> Docker-ready for easy deployment</li>
-        <li><span class="icon">○</span> Ed25519 host key authentication</li>
-      </ul>
+    <div class="gcard g-ygo reveal">
+      <div class="gcard-rarity">★ ULTRA RARE</div>
+      <div class="gcard-art"> ╭─────╮
+ │ ☆ 7  │
+ │ 2500 │
+ ╰─────╯</div>
+      <h3>Yu-Gi-Oh!</h3>
+      <p>Monsters, spells and traps with ATK/DEF, levels, attributes, link markers and per-set rarities.</p>
+      <div class="gcard-src">data <b>YGOPRODeck</b></div>
+    </div>
+
+    <div class="gcard g-op reveal">
+      <div class="gcard-rarity">★ SEC RARE</div>
+      <div class="gcard-art"> ╭─────╮
+ │ ☠ C4 │
+ │ 5000 │
+ ╰─────╯</div>
+      <h3>One Piece TCG</h3>
+      <p>Booster sets and starter decks with cost, power, counters, colors and card types.</p>
+      <div class="gcard-src">data <b>OPTCG API</b></div>
     </div>
   </div>
-
-  <div class="config-block">
-    <div class="term-bar">
-      <span class="dot dot-r"></span>
-      <span class="dot dot-y"></span>
-      <span class="dot dot-g"></span>
-      <span class="term-title">.env configuration</span>
-    </div>
-    <div class="term">
-      <code>
-<span class="key">DATABASE_DSN</span>   <span class="cmd">=  cardman.db     </span>   <span class="cmt"># path to sqlite file</span>
-<span class="key">LOG_LEVEL    </span>   <span class="cmd">=  INFO           </span>   <span class="cmt"># DEBUG | INFO | WARN | ERROR</span>
-<span class="key">SSH_MODE     </span>   <span class="cmd">=  false          </span>   <span class="cmt"># true to enable ssh server</span>
-<span class="key">PORT         </span>   <span class="cmd">=  2222           </span>   <span class="cmt"># ssh listen port</span>
-<span class="key">SSH_HOST_KEY </span>   <span class="cmd">=  ./host_key     </span>   <span class="cmt"># ed25519 key path</span>
-<span class="key">API_KEY      </span>   <span class="cmd">=                 </span>   <span class="cmt"># tcgdex api key (optional)</span>
-      </code>
-    </div>
-  </div>
-
 </section>
 </div>
 
-<!-- ── Collection ─────────────────────────────────────────── -->
-<div class="section-wrap" data-num="02">
-<section id="collection">
-  <div class="sec-label">// 02</div>
-  <div class="sec-title">Collec<span>tion</span></div>
-  <div class="sec-accent"></div>
-
-  <p>
-    Your collection is the foundation of cardman. Track every card you own,
-    see how complete each set is, monitor its total market value over time,
-    and export in formats your other tools understand.
+<!-- ════ the tui ════ -->
+<div class="band" id="tui">
+<section>
+  <div class="sec-head reveal"><span class="sec-num">02</span><h2>BUILT FOR <em>KEYBOARDS</em></h2></div>
+  <p class="sec-lede reveal">
+    The interface is a <a href="https://github.com/charmbracelet/bubbletea" target="_blank" rel="noopener" style="color:var(--amber-hot);">Bubble&nbsp;Tea</a> app:
+    game tabs, fuzzy search, paginated tables and a footer that always tells you
+    what your keys do. Every shortcut below is the default — and every one of them is rebindable.
   </p>
 
-  <div class="grid-2">
-    <div class="panel">
-      <div class="panel-title">Features</div>
-      <ul class="feat-list">
-        <li><span class="icon">★</span> Track owned cards with per-card quantities</li>
-        <li><span class="icon">★</span> Browse by set with completion percentage</li>
-        <li><span class="icon">★</span> TCGPlayer &amp; CardMarket price snapshots</li>
-        <li><span class="icon">★</span> Total collection value with history chart</li>
-        <li><span class="icon">★</span> Search across the full card database</li>
-        <li><span class="icon">★</span> Full and incremental import from TCGDex API</li>
-        <li><span class="icon">★</span> Import specific sets by ID</li>
-      </ul>
+  <div class="tui-wrap">
+    <div class="term tui reveal">
+      <div class="term-bar">
+        <span class="dot"></span><span class="dot"></span><span class="dot lit"></span>
+        <span class="term-title">cardman — collection</span>
+      </div>
+      <pre><span class="border">┌──────────────────────────────────────────────────┐</span>
+ <span class="tab-on"> Pokémon </span><span class="tab">  Magic   Yu-Gi-Oh!   One Piece </span>
+<span class="border">├──────────────────────────────────────────────────┤</span>
+ <span class="dim">Search:</span> <span class="c">char</span><span class="cursor"></span><span class="dim">                       42 matches</span>
+<span class="border">├──────────────────────────────────────────────────┤</span>
+ <span class="hdr">Name            Expansion    Rarity      #   Qty</span>
+ <span class="row-sel"> Charizard       Base Set     Holo Rare   4    2 </span>
+ Charizard ex    Obsidian…    Double R…  125   1
+ Charmander      Base Set     Common     46    4
+ Charmeleon      Base Set     Uncommon   24    3
+<span class="border">├──────────────────────────────────────────────────┤</span>
+ <span class="foot"><span class="kb">Tab</span> panel <span class="border">│</span> <span class="kb">n</span> new <span class="border">│</span> <span class="kb">e</span> edit <span class="border">│</span> <span class="kb">Ctrl+N/P</span> page <span class="border">│</span> <span class="kb">q</span> quit</span>
+<span class="border">└──────────────────────────────────────────────────┘</span></pre>
     </div>
 
-    <div class="panel">
-      <div class="panel-title">Export &amp; Import</div>
-      <ul class="feat-list">
-        <li><span class="icon icon-cyan">↓</span> <strong style="color:var(--text)">CSV</strong> &nbsp;—&nbsp; spreadsheet-compatible</li>
-        <li><span class="icon icon-cyan">↓</span> <strong style="color:var(--text)">Text</strong> &nbsp;—&nbsp; human-readable table</li>
-        <li><span class="icon icon-cyan">↓</span> <strong style="color:var(--text)">PTCGO</strong> &nbsp;—&nbsp; Pokemon TCG Online import</li>
-      </ul>
-      <div class="term" style="margin-top:1.6rem;">
-        <div class="term-bar">
-          <span class="dot dot-r"></span>
-          <span class="dot dot-y"></span>
-          <span class="dot dot-g"></span>
-          <span class="term-title">import commands</span>
-        </div>
-        <code>
-<span class="prompt">$</span> <span class="cmd">cardman import-full</span>
-<span class="prompt">$</span> <span class="cmd">cardman import-updates</span>
-<span class="prompt">$</span> <span class="cmd">cardman import-sets base1</span>
-        </code>
+    <div class="feat-stack reveal">
+      <div class="feat">
+        <div class="feat-key">/</div>
+        <div><h3>FUZZY SEARCH</h3><p>Filter cards and collections as you type, with cached results across the full local database.</p></div>
+      </div>
+      <div class="feat">
+        <div class="feat-key">^N</div>
+        <div><h3>PAGINATION</h3><p>Big sets stay fast — results come in pages of 50, with Ctrl+N / Ctrl+P to move through them.</p></div>
+      </div>
+      <div class="feat">
+        <div class="feat-key">⌨</div>
+        <div><h3>REBINDABLE KEYS</h3><p>Every action — create, edit, delete, import, export, paging, queueing — can be rebound in the settings view. Persisted to <code>.cardman.json</code>.</p></div>
+      </div>
+      <div class="feat">
+        <div class="feat-key">▥</div>
+        <div><h3>CONFIGURABLE COLUMNS</h3><p>Toggle table columns (expansion, rarity, number, quantity) from the settings view to fit your terminal width.</p></div>
+      </div>
+      <div class="feat">
+        <div class="feat-key">^G</div>
+        <div><h3>IMPORT QUEUE</h3><p>Queue multiple sets for import inside the TUI (Ctrl+A to add, Ctrl+G to start) and watch progress live.</p></div>
       </div>
     </div>
   </div>
-
 </section>
 </div>
 
-<!-- ── Lists ──────────────────────────────────────────────── -->
-<div class="section-wrap" data-num="03">
-<section id="lists">
-  <div class="sec-label">// 03</div>
-  <div class="sec-title">Li<span>sts</span></div>
-  <div class="sec-accent"></div>
-
-  <p>
-    Flexible card groupings you define yourself. Use them as wishlists,
-    trade binders, want lists, or any custom grouping. Each list is named,
-    optionally described, and tagged with a color label so you can tell them apart at a glance.
+<!-- ════ tracking ════ -->
+<div class="band" id="tracking">
+<section>
+  <div class="sec-head reveal"><span class="sec-num">03</span><h2>KNOW WHAT <em>YOU OWN</em></h2></div>
+  <p class="sec-lede reveal">
+    The collection is the core: per-card quantities, set completion, market value
+    over time, and clean ways to get data in and out.
   </p>
 
-  <div class="grid-2">
-    <div class="panel">
-      <div class="panel-title">What You Can Do</div>
-      <ul class="feat-list">
-        <li><span class="icon">○</span> Create unlimited named lists</li>
-        <li><span class="icon">○</span> Assign a color label to each list</li>
-        <li><span class="icon">○</span> Add cards with individual quantities</li>
-        <li><span class="icon">○</span> Update or remove cards in bulk</li>
-        <li><span class="icon">○</span> Delete entire lists when done</li>
-        <li><span class="icon">○</span> See which lists contain a given card</li>
-      </ul>
+  <div class="trio">
+    <div class="panel reveal">
+      <div class="panel-label">Set Completion</div>
+      <p>Browse any expansion and see exactly how far along you are.</p>
+      <div class="bar"><span style="min-width:84px;">Base Set</span><div class="bar-track"><div class="bar-fill" style="--w:88%;"></div></div><span class="bar-pct">88%</span></div>
+      <div class="bar"><span style="min-width:84px;">Jungle</span><div class="bar-track"><div class="bar-fill" style="--w:64%;"></div></div><span class="bar-pct">64%</span></div>
+      <div class="bar"><span style="min-width:84px;">Fossil</span><div class="bar-track"><div class="bar-fill" style="--w:37%;"></div></div><span class="bar-pct">37%</span></div>
     </div>
 
-    <div class="panel">
-      <div class="panel-title">Example Use Cases</div>
-      <ul class="feat-list">
-        <li><span class="icon icon-orange">◆</span> Wishlist &mdash; cards you want to acquire</li>
-        <li><span class="icon icon-orange">◆</span> Trade binder &mdash; cards available to trade</li>
-        <li><span class="icon icon-orange">◆</span> Set target &mdash; cards missing from a set</li>
-        <li><span class="icon icon-orange">◆</span> Duplicates &mdash; extras to sell or trade away</li>
-        <li><span class="icon icon-orange">◆</span> Gift list &mdash; cards you're buying for others</li>
-      </ul>
+    <div class="panel reveal">
+      <div class="panel-label">Value Over Time</div>
+      <p>TCGPlayer &amp; CardMarket price snapshots roll up into a collection value chart, drawn right in the terminal.</p>
+      <pre><span class="a">  $812 ┤        ╭──
+       │     ╭──╯
+       │  ╭──╯
+  $640 ┼──╯</span>
+       <span class="g">└┬───┬───┬──</span>
+        <span class="g">jan feb mar</span></pre>
+    </div>
+
+    <div class="panel reveal">
+      <div class="panel-label">In &amp; Out</div>
+      <p>Import an existing collection from CSV. Export to CSV for spreadsheets, plain text for humans, or PTCGO list format for Pokémon decks.</p>
+      <pre><span class="a">$</span> cardman collection import pokemon my_cards.csv
+<span class="a">$</span> cardman collection export pokemon</pre>
     </div>
   </div>
 
+  <div style="margin-top:1.4rem;" class="panel reveal">
+    <div class="panel-label">Decks &amp; Lists</div>
+    <p style="max-width:72ch;">
+      Build decks per game from your collection. Lists are free-form groupings with color labels:
+      wishlists, trade binders, set targets, whatever you need.
+    </p>
+  </div>
 </section>
 </div>
 
-<!-- ── Decks ──────────────────────────────────────────────── -->
-<div class="section-wrap" data-num="04">
-<section id="decks">
-  <div class="sec-label">// 04</div>
-  <div class="sec-title">De<span>cks</span></div>
-  <div class="sec-accent"></div>
-
-  <p>
-    Construct and validate 60-card Pokemon TCG decks without leaving your terminal.
-    Add cards, adjust quantities, and get immediate validation feedback before you sleeve up.
+<!-- ════ modes ════ -->
+<div class="band" id="modes">
+<section>
+  <div class="sec-head reveal"><span class="sec-num">04</span><h2>SOLO OR <em>SHARED</em></h2></div>
+  <p class="sec-lede reveal">
+    Run it on your laptop, or put it on a server and let the whole playgroup
+    ssh into their own collections.
   </p>
 
-  <div class="grid-2">
-    <div class="panel">
-      <div class="panel-title">Deck Features</div>
-      <ul class="feat-list">
-        <li><span class="icon">★</span> Create multiple named decks per format</li>
-        <li><span class="icon">★</span> Add any card from your imported database</li>
-        <li><span class="icon">★</span> Adjust card counts with live feedback</li>
-        <li><span class="icon">★</span> Real-time deck validation on save</li>
-        <li><span class="icon">★</span> Rename or delete decks at any time</li>
-      </ul>
-
-      <div class="rule-box">
-        <strong>Validation rules enforced:</strong><br /><br />
-        — Deck must contain exactly <strong>60 cards</strong><br />
-        — No more than <strong>4 copies</strong> of any non-energy card<br />
-        — Basic energy cards are <strong>exempt</strong> from the copy limit
+  <div class="modes">
+    <div class="mode reveal">
+      <div class="mode-head"><h3>LOCAL</h3><span class="mode-badge solo">single user</span></div>
+      <div class="mode-body">
+        <p>Everything in one portable <code>cardman.db</code> SQLite file in your working directory. No login prompt, no network needed after import.</p>
+        <div class="term"><div class="term-bar"><span class="dot"></span><span class="dot"></span><span class="dot lit"></span><span class="term-title">local</span></div>
+        <pre><span class="p">$</span> <span class="c">cardman serve</span></pre></div>
+        <ul>
+          <li>Zero-config first run with a local user</li>
+          <li>Works completely offline once data is imported</li>
+          <li>Back up your collection by copying one file</li>
+        </ul>
       </div>
     </div>
 
-    <div class="panel">
-      <div class="panel-title">Deck Workflow</div>
-      <div class="term">
-        <div class="term-bar">
-          <span class="dot dot-r"></span>
-          <span class="dot dot-y"></span>
-          <span class="dot dot-g"></span>
-          <span class="term-title">deck builder</span>
-        </div>
-        <code>
-<span class="cmt"># create a new deck</span>
-<span class="cmd">  name   : Charizard Ex</span>
-<span class="cmd">  format : Standard</span>
+    <div class="mode reveal">
+      <div class="mode-head"><h3>SSH SERVER</h3><span class="mode-badge multi">multi user</span></div>
+      <div class="mode-body">
+        <p>A built-in SSH server (powered by <a href="https://github.com/charmbracelet/wish" target="_blank" rel="noopener" style="color:var(--amber-hot);">Wish</a>) serves the same TUI to remote clients, each with their own account.</p>
+        <div class="term"><div class="term-bar"><span class="dot"></span><span class="dot"></span><span class="dot lit"></span><span class="term-title">ssh</span></div>
+        <pre><span class="dim"># on the server</span>
+<span class="p">$</span> <span class="c">cardman serve-ssh</span>
 
-<span class="cmt"># add cards</span>
-<span class="cmd">  4x Charizard ex</span>
-<span class="cmd">  4x Pidgeot ex</span>
-<span class="cmd">  2x Moltres ex</span>
-<span class="cmd">  ...</span>
-
-<span class="cmt"># validate on save</span>
-<span class="ok">  ✓ 60 cards</span>
-<span class="ok">  ✓ no copy limit violations</span>
-<span class="ok">  ✓ deck is legal</span><span class="blink-cursor"> █</span>
-        </code>
+<span class="dim"># from anywhere</span>
+<span class="p">$</span> <span class="c">ssh -p 2222 you@your-server</span></pre></div>
+        <ul>
+          <li>Email + bcrypt-hashed password accounts</li>
+          <li>ED25519 host key generated on first run</li>
+          <li>Docker &amp; docker-compose files included</li>
+        </ul>
       </div>
     </div>
   </div>
-
 </section>
 </div>
 
-<!-- ── Footer ─────────────────────────────────────────────── -->
+<!-- ════ cli ════ -->
+<div class="band" id="cli">
+<section>
+  <div class="sec-head reveal"><span class="sec-num">05</span><h2>THE WHOLE <em>CLI</em></h2></div>
+  <p class="sec-lede reveal">
+    The TUI is the front door, but everything is scriptable. Where you see
+    <code>&lt;game&gt;</code>, pass <code>pokemon</code>, <code>mtg</code>,
+    <code>yugioh</code> or <code>onepiece</code>.
+  </p>
+
+  <div class="cli-grid">
+    <div class="cli-table reveal">
+      <div class="cli-table-head">core</div>
+      <div class="cli-row"><code>cardman migrate</code><span>apply database migrations</span></div>
+      <div class="cli-row"><code>cardman serve</code><span>launch the TUI</span></div>
+      <div class="cli-row"><code>cardman serve-ssh</code><span>start the SSH server</span></div>
+      <div class="cli-row"><code>cardman import-full</code><span>import all Pokémon sets &amp; cards</span></div>
+      <div class="cli-row"><code>cardman import-updates</code><span>import only sets you don't have</span></div>
+      <div class="cli-row"><code>cardman import-sets &lt;id…&gt;</code><span>import specific sets</span></div>
+      <div class="cli-row"><code>cardman list-sets</code><span>list sets available from the API</span></div>
+    </div>
+
+    <div class="cli-table reveal">
+      <div class="cli-table-head">grouped · any game</div>
+      <div class="cli-row"><code>cardman import all &lt;game&gt;</code><span>full import for a game</span></div>
+      <div class="cli-row"><code>cardman import new &lt;game&gt;</code><span>incremental import</span></div>
+      <div class="cli-row"><code>cardman cards list &lt;game&gt;</code><span>browse the card database</span></div>
+      <div class="cli-row"><code>cardman collection add &lt;game&gt; …</code><span>add cards to your collection</span></div>
+      <div class="cli-row"><code>cardman lists create &lt;game&gt; &lt;name&gt;</code><span>create a custom list</span></div>
+      <div class="cli-row"><code>cardman decks create &lt;game&gt; &lt;name&gt;</code><span>create a deck</span></div>
+    </div>
+  </div>
+  <p class="cli-note reveal">Run <code>cardman --help</code> or <code>cardman &lt;command&gt; --help</code> for the full reference, including <code>collection import/export</code>, <code>lists add-card</code> and <code>decks add-card</code>.</p>
+</section>
+</div>
+
+<!-- ════ config ════ -->
+<div class="band" id="config">
+<section>
+  <div class="sec-head reveal"><span class="sec-num">06</span><h2>CONFIG IS A <em>.ENV FILE</em></h2></div>
+  <p class="sec-lede reveal">
+    Six environment variables, all optional — sensible defaults cover the local
+    single-user case. Drop a <code>.env</code> next to the binary or export them in your shell.
+  </p>
+
+  <div class="env reveal">
+    <div class="env-row">
+      <div class="env-key">DB_DSN</div>
+      <div class="env-val">SQLite DSN for the database <span class="env-def">· default <code>file:cardman.db?_fk=1</code></span></div>
+    </div>
+    <div class="env-row">
+      <div class="env-key">LOG_LEVEL</div>
+      <div class="env-val">log verbosity — <code>DEBUG</code>, <code>INFO</code>, <code>WARN</code> or <code>ERROR</code> <span class="env-def">· default <code>INFO</code></span></div>
+    </div>
+    <div class="env-row">
+      <div class="env-key">SSH_PORT</div>
+      <div class="env-val">listen port for <code>serve-ssh</code> <span class="env-def">· default <code>2222</code></span></div>
+    </div>
+    <div class="env-row">
+      <div class="env-key">SSH_HOST_KEY</div>
+      <div class="env-val">path to the ED25519 host key (generated if missing) <span class="env-def">· default <code>~/.ssh/cardman_host_key</code></span></div>
+    </div>
+    <div class="env-row">
+      <div class="env-key">API_KEY</div>
+      <div class="env-val">Pokémon TCG API key — optional, raises rate limits on import <span class="env-def">· default empty</span></div>
+    </div>
+    <div class="env-row">
+      <div class="env-key">CARDMAN_CONFIG</div>
+      <div class="env-val">path to the local keybinding and theme config <span class="env-def">· default <code>.cardman.json</code></span></div>
+    </div>
+  </div>
+
+  <p class="cli-note reveal" style="margin-top:1.6rem;">
+    Building from source? You'll need Go 1.25+ and a C compiler — SQLite support uses CGO:
+    <code>CGO_ENABLED=1 go build -o cardman ./cmd</code>
+  </p>
+</section>
+</div>
+
+<!-- ════ footer ════ -->
 <footer>
-  <span class="footer-logo">CARDMAN</span>
+  <span class="foot-logo">CARDMAN</span>
   <p>
-    MIT License &nbsp;·&nbsp;
+    MIT licensed ·
     <a href="https://github.com/laiambryant/tui-cardman" target="_blank" rel="noopener">github.com/laiambryant/tui-cardman</a>
   </p>
-  <p style="margin-top:0.4rem; color:var(--dimmer);">
-    built with &nbsp;<a href="https://github.com/charmbracelet/bubbletea" target="_blank" rel="noopener">bubbletea</a>
-    &nbsp;·&nbsp; sqlite &nbsp;·&nbsp; go
-  </p>
+  <p style="margin-top:0.5rem;">go · bubble tea · sqlite</p>
+  <div class="foot-keys" aria-hidden="true">
+    <span>q quit</span><span>? help</span><span>/ search</span><span>Tab switch</span>
+  </div>
 </footer>
 
-</div>
+</main>
+
+<script>
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const revealItems = document.querySelectorAll('.reveal, .panel');
+
+  if ('IntersectionObserver' in window && !reducedMotion) {
+    const revealObserver = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('in');
+          revealObserver.unobserve(entry.target);
+        }
+      }
+    }, { threshold: 0.12, rootMargin: '0px 0px -32px 0px' });
+    revealItems.forEach((element) => revealObserver.observe(element));
+  } else {
+    revealItems.forEach((element) => element.classList.add('in'));
+  }
+
+  const nav = document.querySelector('nav');
+  const menuButton = document.querySelector('.nav-toggle');
+  const menuLinks = document.querySelectorAll('.nav-links a');
+
+  const closeMenu = () => {
+    nav.classList.remove('menu-open');
+    menuButton.setAttribute('aria-expanded', 'false');
+  };
+
+  menuButton.addEventListener('click', () => {
+    const open = nav.classList.toggle('menu-open');
+    menuButton.setAttribute('aria-expanded', String(open));
+  });
+  menuLinks.forEach((link) => link.addEventListener('click', closeMenu));
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') closeMenu();
+  });
+
+  const progress = document.querySelector('.scroll-progress');
+  const updateProgress = () => {
+    const scrollable = document.documentElement.scrollHeight - window.innerHeight;
+    const ratio = scrollable > 0 ? window.scrollY / scrollable : 0;
+    progress.style.transform = `scaleX(${Math.min(1, Math.max(0, ratio))})`;
+  };
+  updateProgress();
+  window.addEventListener('scroll', updateProgress, { passive: true });
+
+  const sectionLinks = new Map(
+    [...menuLinks]
+      .filter((link) => link.hash)
+      .map((link) => [link.hash.slice(1), link])
+  );
+  if ('IntersectionObserver' in window) {
+    const sectionObserver = new IntersectionObserver((entries) => {
+      const visible = entries
+        .filter((entry) => entry.isIntersecting)
+        .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+      if (!visible) return;
+      sectionLinks.forEach((link, id) => {
+        if (id === visible.target.id) link.setAttribute('aria-current', 'true');
+        else link.removeAttribute('aria-current');
+      });
+    }, { rootMargin: '-20% 0px -65% 0px', threshold: [0, 0.25, 0.6] });
+    sectionLinks.forEach((_, id) => {
+      const section = document.getElementById(id);
+      if (section) sectionObserver.observe(section);
+    });
+  }
+
+  document.querySelectorAll('[data-copy]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const original = button.textContent;
+      try {
+        await navigator.clipboard.writeText(button.dataset.copy);
+        button.textContent = 'copied';
+      } catch {
+        button.textContent = 'select';
+      }
+      window.setTimeout(() => { button.textContent = original; }, 1600);
+    });
+  });
+</script>
 </body>
 </html>

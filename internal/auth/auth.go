@@ -2,7 +2,9 @@
 package auth
 
 import (
+	"errors"
 	"fmt"
+	"log/slog"
 	"regexp"
 	"unicode"
 
@@ -94,7 +96,10 @@ func (s *Service) Register(req RegisterRequest) (*User, error) {
 	// Check if user already exists
 	_, err := s.db.GetUserByEmail(req.Email)
 	if err == nil {
-		return nil, fmt.Errorf("user with this email already exists")
+		return nil, ErrUserExists
+	}
+	if !errors.Is(err, ErrUserNotFound) {
+		return nil, fmt.Errorf("failed to check for existing user: %w", err)
 	}
 
 	// Hash password
@@ -133,7 +138,7 @@ func (s *Service) Login(req LoginRequest) (*User, error) {
 	// Update last login
 	if err := s.db.UpdateLastLogin(user.ID); err != nil {
 		// Log error but don't fail login
-		fmt.Printf("Failed to update last login: %v\n", err)
+		slog.Warn("failed to update last login", "user_id", user.ID, "error", err)
 	}
 
 	return user, nil

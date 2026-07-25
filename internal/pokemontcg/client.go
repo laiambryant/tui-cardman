@@ -63,9 +63,10 @@ func (c *rateLimitedHTTPClient) Do(req *http.Request) (*http.Response, error) {
 
 // PaginatedResponse represents a paginated API response
 type PaginatedResponse struct {
-	Page       int `json:"page"`
-	PageSize   int `json:"pageSize"`
-	TotalCount int `json:"totalCount"`
+	Page       int  `json:"page"`
+	PageSize   int  `json:"pageSize"`
+	TotalCount int  `json:"totalCount"`
+	HasMore    bool `json:"hasMore"`
 }
 
 // GetSets fetches all Pokemon TCG sets
@@ -92,17 +93,20 @@ func (c *Client) GetCardsForSet(ctx context.Context, setID string, page int) (*P
 	}
 	cards := make([]Card, 0, len(tcgdexCards))
 	for _, tcgdexCard := range tcgdexCards {
+		if ctx.Err() != nil {
+			return nil, nil, ctx.Err()
+		}
 		fullCard, err := c.sdk.Card.Get(ctx, tcgdexCard.ID)
 		if err != nil {
-			continue
+			return nil, nil, fmt.Errorf("fetch card %s details for set %s: %w", tcgdexCard.ID, setID, err)
 		}
 		cards = append(cards, mapTCGDexCardToCard(fullCard))
 	}
-	// Build pagination response
 	paginatedResp := &PaginatedResponse{
 		Page:       page,
 		PageSize:   MaxPageSize,
 		TotalCount: len(cards),
+		HasMore:    len(tcgdexCards) == MaxPageSize,
 	}
 	return paginatedResp, cards, nil
 }

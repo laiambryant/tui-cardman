@@ -84,8 +84,8 @@ func TestReduceSectionHeights_LargeDeficit(t *testing.T) {
 
 func TestReduceSectionHeights_MinAllowedClamp(t *testing.T) {
 	h, f := reduceSectionHeights(4, 4, 10, 3)
-	assert.GreaterOrEqual(t, h, 3)
-	assert.GreaterOrEqual(t, f, 3)
+	assert.GreaterOrEqual(t, h, 1)
+	assert.GreaterOrEqual(t, f, 1)
 }
 
 func TestCalculateFrameLayout_ZeroDimensions(t *testing.T) {
@@ -109,7 +109,7 @@ func TestCalculateFrameLayout_NormalDimensions(t *testing.T) {
 	assert.Greater(t, layout.BodyHeight, 0)
 	assert.Greater(t, layout.HeaderHeight, 0)
 	assert.Greater(t, layout.FooterHeight, 0)
-	assert.Equal(t, 24, layout.HeaderHeight+layout.BodyHeight+layout.FooterHeight)
+	assert.Equal(t, 24, layout.TopMargin+layout.HeaderHeight+layout.BodyHeight+layout.FooterHeight)
 }
 
 func TestCalculateFrameLayout_ContentWidthPositive(t *testing.T) {

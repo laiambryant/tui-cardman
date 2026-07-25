@@ -1,13 +1,11 @@
 package command
 
 import (
-	"context"
 	"fmt"
 	"log/slog"
 
 	"github.com/spf13/cobra"
 
-	"github.com/laiambryant/tui-cardman/internal/config"
 	"github.com/laiambryant/tui-cardman/internal/pokemontcg"
 
 	"github.com/charmbracelet/bubbles/table"
@@ -68,15 +66,18 @@ var listSetsCmd = &cobra.Command{
 	Short: shortMessageListSets,
 	Long:  longMessageListSets,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		config.LoadConfig()
-		ctx := context.Background()
+		runtime, err := newCommandRuntime(false, false)
+		if err != nil {
+			return err
+		}
+		defer runtime.Close()
 
-		apiKey := config.GetAPIKey()
+		apiKey := runtime.config.GetAPIKey()
 		client := pokemontcg.NewClient(apiKey)
 		logger := slog.Default()
 
 		logger.Info("Fetching sets from API...")
-		sets, err := client.GetSets(ctx)
+		sets, err := client.GetSets(cmd.Context())
 		if err != nil {
 			return fmt.Errorf("failed to fetch sets: %w", err)
 		}

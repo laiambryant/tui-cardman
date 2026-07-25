@@ -30,21 +30,6 @@ func generateBenchCards(n int) []model.Card {
 
 var benchCardCounts = []int{100, 1000, 5000, 17000}
 
-// BenchmarkSubstringSearch benchmarks the old substring filter.
-func BenchmarkSubstringSearch(b *testing.B) {
-	queries := []string{"pika", "charz", "ultra"}
-	for _, count := range benchCardCounts {
-		cards := generateBenchCards(count)
-		for _, q := range queries {
-			b.Run(fmt.Sprintf("cards=%d/q=%s", count, q), func(b *testing.B) {
-				for range b.N {
-					_ = filterCardsByQuerySubstring(cards, q)
-				}
-			})
-		}
-	}
-}
-
 // BenchmarkFuzzySearch benchmarks the new fuzzy search.
 func BenchmarkFuzzySearch(b *testing.B) {
 	queries := []string{"pika", "charz", "ultra"}

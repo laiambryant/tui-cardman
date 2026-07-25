@@ -1,7 +1,6 @@
 package command
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"strconv"
@@ -26,7 +25,7 @@ var collectionListCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer deps.db.Close()
+		defer deps.Close()
 		game, err := resolveGame(deps.gameSvc, args[0])
 		if err != nil {
 			return err
@@ -56,6 +55,7 @@ var collectionAddCmd = &cobra.Command{
 	Short: "Add cards to your collection",
 	Args:  cobra.ExactArgs(4),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		ctx := cmd.Context()
 		qty, err := strconv.Atoi(args[3])
 		if err != nil {
 			return fmt.Errorf("invalid quantity: %s", args[3])
@@ -64,16 +64,23 @@ var collectionAddCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer deps.db.Close()
-		c, err := deps.cardSvc.GetCardBySetCodeAndNumber(args[1], args[2])
+		defer deps.Close()
+		game, err := resolveGame(deps.gameSvc, args[0])
+		if err != nil {
+			return err
+		}
+		c, err := deps.cardSvc.GetCardByGameAndSetCodeAndNumber(game.ID, args[1], args[2])
 		if err != nil {
 			return fmt.Errorf("card not found: %w", err)
+		}
+		if c == nil {
+			return fmt.Errorf("card not found for game %q: %s %s", game.Name, args[1], args[2])
 		}
 		existing, err := deps.collSvc.GetCardQuantity(deps.userID, c.ID)
 		if err != nil {
 			return err
 		}
-		if err := deps.collSvc.UpsertCollectionBatch(context.Background(), deps.userID, map[int64]int{c.ID: existing + qty}); err != nil {
+		if err := deps.collSvc.UpsertCollectionBatch(ctx, deps.userID, map[int64]int{c.ID: existing + qty}); err != nil {
 			return err
 		}
 		fmt.Printf("Added %d × %s to collection (total: %d)\n", qty, c.Name, existing+qty)
@@ -86,6 +93,7 @@ var collectionRemoveCmd = &cobra.Command{
 	Short: "Remove cards from your collection",
 	Args:  cobra.ExactArgs(4),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		ctx := cmd.Context()
 		qty, err := strconv.Atoi(args[3])
 		if err != nil {
 			return fmt.Errorf("invalid quantity: %s", args[3])
@@ -94,10 +102,17 @@ var collectionRemoveCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer deps.db.Close()
-		c, err := deps.cardSvc.GetCardBySetCodeAndNumber(args[1], args[2])
+		defer deps.Close()
+		game, err := resolveGame(deps.gameSvc, args[0])
+		if err != nil {
+			return err
+		}
+		c, err := deps.cardSvc.GetCardByGameAndSetCodeAndNumber(game.ID, args[1], args[2])
 		if err != nil {
 			return fmt.Errorf("card not found: %w", err)
+		}
+		if c == nil {
+			return fmt.Errorf("card not found for game %q: %s %s", game.Name, args[1], args[2])
 		}
 		existing, err := deps.collSvc.GetCardQuantity(deps.userID, c.ID)
 		if err != nil {
@@ -107,7 +122,7 @@ var collectionRemoveCmd = &cobra.Command{
 		if newQty < 0 {
 			newQty = 0
 		}
-		if err := deps.collSvc.UpsertCollectionBatch(context.Background(), deps.userID, map[int64]int{c.ID: newQty}); err != nil {
+		if err := deps.collSvc.UpsertCollectionBatch(ctx, deps.userID, map[int64]int{c.ID: newQty}); err != nil {
 			return err
 		}
 		fmt.Printf("Removed %d × %s from collection (total: %d)\n", qty, c.Name, newQty)
@@ -120,18 +135,23 @@ var collectionImportCmd = &cobra.Command{
 	Short: "Import collection from a CSV file",
 	Args:  cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		ctx := cmd.Context()
 		deps, err := buildCLIDeps()
 		if err != nil {
 			return err
 		}
-		defer deps.db.Close()
+		defer deps.Close()
+		game, err := resolveGame(deps.gameSvc, args[0])
+		if err != nil {
+			return err
+		}
 		rows, err := export.FromCSV(args[1])
 		if err != nil {
 			return err
 		}
 		lookup := func(setCode, number string) (int64, error) {
-			c, err := deps.cardSvc.GetCardBySetCodeAndNumber(setCode, number)
-			if err != nil {
+			c, err := deps.cardSvc.GetCardByGameAndSetCodeAndNumber(game.ID, setCode, number)
+			if err != nil || c == nil {
 				return 0, nil
 			}
 			return c.ID, nil
@@ -140,7 +160,7 @@ var collectionImportCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		if err := deps.collSvc.UpsertCollectionBatch(context.Background(), deps.userID, quantities); err != nil {
+		if err := deps.collSvc.UpsertCollectionBatch(ctx, deps.userID, quantities); err != nil {
 			return err
 		}
 		fmt.Println(result.Summary())
@@ -159,7 +179,7 @@ var collectionExportCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer deps.db.Close()
+		defer deps.Close()
 		game, err := resolveGame(deps.gameSvc, args[0])
 		if err != nil {
 			return err

@@ -1,7 +1,6 @@
 package command
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"strconv"
@@ -25,7 +24,7 @@ var listsListCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer deps.db.Close()
+		defer deps.Close()
 		game, err := resolveGame(deps.gameSvc, args[0])
 		if err != nil {
 			return err
@@ -48,18 +47,19 @@ var listsCreateCmd = &cobra.Command{
 	Short: "Create a new list",
 	Args:  cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		ctx := cmd.Context()
 		desc, _ := cmd.Flags().GetString("description")
 		color, _ := cmd.Flags().GetString("color")
 		deps, err := buildCLIDeps()
 		if err != nil {
 			return err
 		}
-		defer deps.db.Close()
+		defer deps.Close()
 		game, err := resolveGame(deps.gameSvc, args[0])
 		if err != nil {
 			return err
 		}
-		l, err := deps.listSvc.CreateList(context.Background(), deps.userID, game.ID, args[1], desc, color)
+		l, err := deps.listSvc.CreateList(ctx, deps.userID, game.ID, args[1], desc, color)
 		if err != nil {
 			return err
 		}
@@ -73,6 +73,7 @@ var listsDeleteCmd = &cobra.Command{
 	Short: "Delete a list",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		ctx := cmd.Context()
 		listID, err := strconv.ParseInt(args[0], 10, 64)
 		if err != nil {
 			return fmt.Errorf("invalid list ID: %s", args[0])
@@ -81,8 +82,8 @@ var listsDeleteCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer deps.db.Close()
-		if err := deps.listSvc.DeleteList(context.Background(), listID); err != nil {
+		defer deps.Close()
+		if err := deps.listSvc.DeleteList(ctx, listID); err != nil {
 			return err
 		}
 		fmt.Printf("Deleted list %d\n", listID)
@@ -103,7 +104,7 @@ var listsShowCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer deps.db.Close()
+		defer deps.Close()
 		l, err := deps.listSvc.GetListByID(listID)
 		if err != nil {
 			return err
@@ -144,6 +145,7 @@ var listsAddCardCmd = &cobra.Command{
 	Short: "Add a card to a list",
 	Args:  cobra.ExactArgs(4),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		ctx := cmd.Context()
 		listID, err := strconv.ParseInt(args[0], 10, 64)
 		if err != nil {
 			return fmt.Errorf("invalid list ID: %s", args[0])
@@ -156,12 +158,19 @@ var listsAddCardCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer deps.db.Close()
-		c, err := deps.cardSvc.GetCardBySetCodeAndNumber(args[1], args[2])
+		defer deps.Close()
+		l, err := deps.listSvc.GetListByID(listID)
+		if err != nil {
+			return err
+		}
+		c, err := deps.cardSvc.GetCardByGameAndSetCodeAndNumber(l.CardGameID, args[1], args[2])
 		if err != nil {
 			return fmt.Errorf("card not found: %w", err)
 		}
-		if err := deps.listSvc.UpsertListCardBatch(context.Background(), listID, map[int64]int{c.ID: qty}); err != nil {
+		if c == nil {
+			return fmt.Errorf("card not found for list game: %s %s", args[1], args[2])
+		}
+		if err := deps.listSvc.UpsertListCardBatch(ctx, listID, map[int64]int{c.ID: qty}); err != nil {
 			return err
 		}
 		fmt.Printf("Added %d × %s to list\n", qty, c.Name)
@@ -174,6 +183,7 @@ var listsRemoveCardCmd = &cobra.Command{
 	Short: "Remove a card from a list",
 	Args:  cobra.ExactArgs(3),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		ctx := cmd.Context()
 		listID, err := strconv.ParseInt(args[0], 10, 64)
 		if err != nil {
 			return fmt.Errorf("invalid list ID: %s", args[0])
@@ -182,12 +192,19 @@ var listsRemoveCardCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer deps.db.Close()
-		c, err := deps.cardSvc.GetCardBySetCodeAndNumber(args[1], args[2])
+		defer deps.Close()
+		l, err := deps.listSvc.GetListByID(listID)
+		if err != nil {
+			return err
+		}
+		c, err := deps.cardSvc.GetCardByGameAndSetCodeAndNumber(l.CardGameID, args[1], args[2])
 		if err != nil {
 			return fmt.Errorf("card not found: %w", err)
 		}
-		if err := deps.listSvc.UpsertListCardBatch(context.Background(), listID, map[int64]int{c.ID: 0}); err != nil {
+		if c == nil {
+			return fmt.Errorf("card not found for list game: %s %s", args[1], args[2])
+		}
+		if err := deps.listSvc.UpsertListCardBatch(ctx, listID, map[int64]int{c.ID: 0}); err != nil {
 			return err
 		}
 		fmt.Printf("Removed %s from list\n", c.Name)
@@ -210,7 +227,7 @@ var listsExportCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer deps.db.Close()
+		defer deps.Close()
 		l, err := deps.listSvc.GetListByID(listID)
 		if err != nil {
 			return err

@@ -140,10 +140,13 @@ func (m *CardDetailModel) renderWideView(renderer CardDetailRenderer) string {
 	sm := m.styleManager
 
 	// Header: card name
-	header := sm.GetTitleStyle().Render(m.card.Name)
+	header := RenderBreadcrumbs(sm, "Card Detail", m.card.Name)
 
 	// Footer: help text
-	footer := sm.GetBlurredStyle().Render("Esc: Close • ↑/↓: Scroll")
+	footer := JoinHelpHints(
+		RenderHelpHint("Esc", "Close"),
+		RenderHelpHint("↑/↓", "Scroll"),
+	)
 
 	// Compute layout
 	layout := calculateFrameLayout(lipgloss.Height(header), lipgloss.Height(footer), m.width, m.height)
@@ -202,28 +205,32 @@ func (m *CardDetailModel) renderModalView() string {
 
 func (m *CardDetailModel) renderContent(width int) string {
 	var b strings.Builder
-	ts := m.styleManager.GetTitleStyle()
-	ns := m.styleManager.GetNoStyle()
-	bs := m.styleManager.GetBlurredStyle()
-	b.WriteString(ts.Render(m.card.Name) + "\n")
-	b.WriteString(strings.Repeat("─", min(width, len(m.card.Name)+4)) + "\n")
+	sm := m.styleManager
+	ts := sm.GetSecondaryStyle().Bold(true)
+	ns := sm.GetNoStyle()
+	bs := sm.GetBlurredStyle()
+	field := func(label, value string) string {
+		return bs.Render(fmt.Sprintf("%-8s", label)) + ns.Render(value) + "\n"
+	}
+	b.WriteString(sm.GetTitleStyle().Bold(true).Render(m.card.Name) + "\n")
+	b.WriteString(sm.GetSubtleStyle().Render(strings.Repeat("─", min(width, len(m.card.Name)+4))) + "\n")
 	setName := "Unknown"
 	if m.card.Set != nil {
 		setName = m.card.Set.Name
 	}
-	b.WriteString(ns.Render(fmt.Sprintf("Set:    %s", setName)) + "\n")
-	b.WriteString(ns.Render(fmt.Sprintf("Number: %s", m.card.Number)) + "\n")
-	b.WriteString(ns.Render(fmt.Sprintf("Rarity: %s", m.card.Rarity)) + "\n")
+	b.WriteString(field("Set", setName))
+	b.WriteString(field("Number", m.card.Number))
+	b.WriteString(bs.Render(fmt.Sprintf("%-8s", "Rarity")) + renderRarityText(sm, m.card.Rarity) + "\n")
 	if m.card.Artist != "" {
-		b.WriteString(ns.Render(fmt.Sprintf("Artist: %s", m.card.Artist)) + "\n")
+		b.WriteString(field("Artist", m.card.Artist))
 	}
-	b.WriteString(ns.Render(fmt.Sprintf("Owned:  %d", m.ownedQuantity)) + "\n")
+	b.WriteString(field("Owned", fmt.Sprintf("%d", m.ownedQuantity)))
 	b.WriteString("\n")
 	if len(m.tcgPrices) > 0 {
 		b.WriteString(ts.Render("TCGPlayer Prices") + "\n")
 		for _, p := range m.tcgPrices {
 			if p.Market > 0 {
-				b.WriteString(ns.Render(fmt.Sprintf("  %-15s $%.2f (low $%.2f / high $%.2f)", p.PriceType, p.Market, p.Low, p.High)) + "\n")
+				b.WriteString(bs.Render(fmt.Sprintf("  %-15s ", p.PriceType)) + sm.GetSuccessStyle().Render(fmt.Sprintf("$%.2f", p.Market)) + bs.Render(fmt.Sprintf(" (low $%.2f / high $%.2f)", p.Low, p.High)) + "\n")
 			}
 		}
 		b.WriteString("\n")
@@ -231,10 +238,10 @@ func (m *CardDetailModel) renderContent(width int) string {
 	if m.cardMarketPrice != nil && (m.cardMarketPrice.AvgPrice > 0 || m.cardMarketPrice.TrendPrice > 0) {
 		b.WriteString(ts.Render("CardMarket Prices") + "\n")
 		if m.cardMarketPrice.AvgPrice > 0 {
-			b.WriteString(ns.Render(fmt.Sprintf("  Average: $%.2f", m.cardMarketPrice.AvgPrice)) + "\n")
+			b.WriteString(bs.Render("  Average  ") + sm.GetSuccessStyle().Render(fmt.Sprintf("$%.2f", m.cardMarketPrice.AvgPrice)) + "\n")
 		}
 		if m.cardMarketPrice.TrendPrice > 0 {
-			b.WriteString(ns.Render(fmt.Sprintf("  Trend:   $%.2f", m.cardMarketPrice.TrendPrice)) + "\n")
+			b.WriteString(bs.Render("  Trend    ") + sm.GetSuccessStyle().Render(fmt.Sprintf("$%.2f", m.cardMarketPrice.TrendPrice)) + "\n")
 		}
 		b.WriteString("\n")
 	}
@@ -247,6 +254,32 @@ func (m *CardDetailModel) renderContent(width int) string {
 			b.WriteString(ns.Render(fmt.Sprintf("  %s %s", ListSymbol, l.Name)) + "\n")
 		}
 	}
-	b.WriteString("\n" + bs.Render("Esc: Close • ↑/↓: Scroll"))
+	b.WriteString("\n" + JoinHelpHints(RenderHelpHint("Esc", "Close"), RenderHelpHint("↑/↓", "Scroll")))
 	return b.String()
+}
+
+// renderRarityText renders a rarity name tinted with its rarity color.
+func renderRarityText(sm *StyleManager, rarity string) string {
+	if rarity == "" {
+		return sm.GetBlurredStyle().Render("—")
+	}
+	color, ok := rarityColors[rarity]
+	if !ok {
+		return sm.GetNoStyle().Render(rarity)
+	}
+	return sm.applyBGFG(lipgloss.NewStyle().Foreground(color).Inline(true)).Render(rarityIconFor(rarity) + " " + rarity)
+}
+
+func rarityIconFor(rarity string) string {
+	lower := strings.ToLower(rarity)
+	switch {
+	case strings.Contains(lower, "ultra") || strings.Contains(lower, "secret") || strings.Contains(lower, "hyper"):
+		return UltraRareIcon
+	case strings.Contains(lower, "rare"):
+		return RareIcon
+	case strings.Contains(lower, "uncommon"):
+		return UncommonIcon
+	default:
+		return CommonIcon
+	}
 }
