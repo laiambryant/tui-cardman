@@ -2,6 +2,7 @@ package command
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -70,7 +71,7 @@ var serveSSHCmd = &cobra.Command{
 			fmt.Printf("SSH server starting on port %d\n", runtime.config.SSHPort)
 			fmt.Printf("Host key: %s\n", hostKeyPath)
 			fmt.Println("Press Ctrl+C to stop")
-			if err = s.ListenAndServe(); err != nil {
+			if err := s.ListenAndServe(); err != nil && !errors.Is(err, ssh.ErrServerClosed) {
 				slog.Error("SSH server error", "error", err)
 			}
 		}()

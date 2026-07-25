@@ -7,15 +7,6 @@ import (
 )
 
 const (
-	headerHeight     = 4
-	footerHeight     = 1
-	smallScreen      = 130
-	paneTitleHeight  = 1
-	defaultPaneWidth = 30
-	focusedPaneWidth = 50
-)
-
-const (
 	SuccessIcon    = "✓"
 	FailureIcon    = "✗"
 	PendingIcon    = "○"

@@ -33,7 +33,22 @@ func (h *HelpBuilder) resolveKey(action, defaultKey string) string {
 
 func (h *HelpBuilder) formatKeyItem(item KeyItem) string {
 	key := h.resolveKey(item.Action, item.DefaultKey)
-	return fmt.Sprintf("%s: %s", key, item.Description)
+	return keyHintStyle.Render(key) + helpStyle.Render(" "+item.Description)
+}
+
+func helpSeparator() string {
+	return subtleStyle.Render(" · ")
+}
+
+// RenderHelpHint styles a literal key/description pair for footers that do not
+// go through configurable actions.
+func RenderHelpHint(key, description string) string {
+	return keyHintStyle.Render(key) + helpStyle.Render(" "+description)
+}
+
+// JoinHelpHints joins pre-rendered footer hints with the standard separator.
+func JoinHelpHints(hints ...string) string {
+	return strings.Join(hints, helpSeparator())
 }
 
 // KeyItem represents a single key binding in help text
@@ -46,7 +61,7 @@ type KeyItem struct {
 func (h *HelpBuilder) Pair(action1, default1, action2, default2, description string) string {
 	k1 := h.resolveKey(action1, default1)
 	k2 := h.resolveKey(action2, default2)
-	return fmt.Sprintf("%s / %s: %s", k1, k2, description)
+	return keyHintStyle.Render(k1) + subtleStyle.Render("/") + keyHintStyle.Render(k2) + helpStyle.Render(" "+description)
 }
 
 // Build constructs help text from a list of key items
@@ -55,7 +70,7 @@ func (h *HelpBuilder) Build(items ...KeyItem) string {
 	for _, item := range items {
 		parts = append(parts, h.formatKeyItem(item))
 	}
-	return strings.Join(parts, " | ")
+	return strings.Join(parts, helpSeparator())
 }
 
 // isModifierKey returns true for non-printable / modifier key combos that should
@@ -281,7 +296,7 @@ func MatchActionOrDefault(cfg *runtimecfg.Manager, keyString, fallback string) s
 	return fallback
 }
 
-func RenderProgressBar(percent float64, width int, sm *StyleManager) string {
+func progressBarCells(percent float64, width int) (int, int, float64) {
 	if percent < 0 {
 		percent = 0
 	}
@@ -291,20 +306,28 @@ func RenderProgressBar(percent float64, width int, sm *StyleManager) string {
 	if width < 5 {
 		width = 5
 	}
-	barWidth := width - 5
-	if barWidth < 1 {
-		barWidth = 1
-	}
-	filled := int(percent / 100.0 * float64(barWidth))
-	if filled > barWidth {
-		filled = barWidth
-	}
-	empty := barWidth - filled
-	return strings.Repeat("█", filled) + strings.Repeat("░", empty) + fmt.Sprintf(" %3.0f%%", percent)
+	barWidth := max(width-5, 1)
+	filled := min(int(percent/100.0*float64(barWidth)), barWidth)
+	return filled, barWidth - filled, percent
+}
+
+func RenderProgressBar(percent float64, width int, sm *StyleManager) string {
+	filled, empty, pct := progressBarCells(percent, width)
+	sm = mstyle(sm)
+	return sm.GetFocusedStyle().Render(strings.Repeat("█", filled)) +
+		sm.GetSubtleStyle().Render(strings.Repeat("░", empty)) +
+		sm.GetBlurredStyle().Render(fmt.Sprintf(" %3.0f%%", pct))
+}
+
+// RenderPlainProgressBar renders a progress bar without ANSI styling, for use
+// inside bubbles table cells whose truncation is not ANSI-aware.
+func RenderPlainProgressBar(percent float64, width int) string {
+	filled, empty, pct := progressBarCells(percent, width)
+	return strings.Repeat("█", filled) + strings.Repeat("░", empty) + fmt.Sprintf(" %3.0f%%", pct)
 }
 
 func RenderPanel(sm *StyleManager, content string, width, height int, focused bool, padX, padY int) string {
-	borderColor := sm.scheme.Blurred
+	borderColor := sm.scheme.Subtle
 	if focused {
 		borderColor = sm.scheme.Focused
 	}
@@ -314,16 +337,111 @@ func RenderPanel(sm *StyleManager, content string, width, height int, focused bo
 	return sm.Box(borderColor, innerWidth, innerHeight, 0, padX, padY).Render(content)
 }
 
+// RenderTitledPanel draws a rounded panel with the title embedded in the top
+// border, e.g. "╭─ Title ─────╮".
+func RenderTitledPanel(sm *StyleManager, title, content string, width, height int, focused bool, padX, padY int) string {
+	borderColor := sm.scheme.Subtle
+	titleColor := sm.scheme.Blurred
+	if focused {
+		borderColor = sm.scheme.Focused
+		titleColor = sm.scheme.Focused
+	}
+	innerWidth := max(width-2-padX*2, 1)
+	innerHeight := max(height-2-padY*2, 1)
+	boxStyle := sm.applyBGFG(lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderTop(false).
+		BorderForeground(borderColor).
+		Padding(padY, padX).
+		Width(innerWidth).
+		Height(innerHeight))
+	box := boxStyle.Render(content)
+	top := renderTitledTopBorder(sm, title, lipgloss.Width(box), borderColor, titleColor)
+	return top + "\n" + box
+}
+
+// renderTitledFlexPanel is RenderTitledPanel without a fixed height; the panel
+// grows with its content.
+func renderTitledFlexPanel(sm *StyleManager, title, content string, width int, focused bool, padX, padY int) string {
+	borderColor := sm.scheme.Subtle
+	titleColor := sm.scheme.Blurred
+	if focused {
+		borderColor = sm.scheme.Focused
+		titleColor = sm.scheme.Focused
+	}
+	innerWidth := max(width-2-padX*2, 1)
+	boxStyle := sm.applyBGFG(lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderTop(false).
+		BorderForeground(borderColor).
+		Padding(padY, padX).
+		Width(innerWidth))
+	box := boxStyle.Render(content)
+	top := renderTitledTopBorder(sm, title, lipgloss.Width(box), borderColor, titleColor)
+	return top + "\n" + box
+}
+
+func renderTitledTopBorder(sm *StyleManager, title string, width int, borderColor, titleColor lipgloss.Color) string {
+	borderStyle := sm.applyBGFG(lipgloss.NewStyle().Foreground(borderColor).Inline(true))
+	titleStyle := sm.applyBGFG(lipgloss.NewStyle().Foreground(titleColor).Bold(true).Inline(true))
+	maxTitle := max(width-6, 1)
+	title = Truncate(title, maxTitle)
+	filler := max(width-lipgloss.Width(title)-5, 0)
+	return borderStyle.Render("╭─ ") + titleStyle.Render(title) + borderStyle.Render(" "+strings.Repeat("─", filler)+"╮")
+}
+
 func RenderTabBar(sm *StyleManager, tabs []string, activeIndex int) string {
 	var rendered []string
 	for i, tab := range tabs {
 		if i == activeIndex {
-			rendered = append(rendered, sm.GetTitleStyle().Inline(true).Render("[ "+tab+" ]"))
+			rendered = append(rendered, sm.GetBadgeStyle(sm.scheme.Focused).Render(tab))
 		} else {
-			rendered = append(rendered, sm.GetBlurredStyle().Inline(true).Render("  "+tab+"  "))
+			rendered = append(rendered, sm.GetBlurredStyle().Inline(true).Render(" "+tab+" "))
 		}
 	}
 	return strings.Join(rendered, sm.GetNoStyle().Render(" "))
+}
+
+// RenderBrand renders the application wordmark used in headers.
+func RenderBrand(sm *StyleManager) string {
+	return sm.GetFocusedStyle().Bold(true).Render("◢ ") + sm.GetTitleStyle().Render("CARDMAN")
+}
+
+// RenderBreadcrumbs renders the brand followed by context crumbs, the last one
+// emphasized: "◢ CARDMAN › Pokémon › Decks".
+func RenderBreadcrumbs(sm *StyleManager, crumbs ...string) string {
+	parts := []string{RenderBrand(sm)}
+	for i, crumb := range crumbs {
+		style := sm.GetBlurredStyle()
+		if i == len(crumbs)-1 {
+			style = sm.GetSecondaryStyle().Bold(true)
+		}
+		parts = append(parts, style.Render(crumb))
+	}
+	return strings.Join(parts, sm.GetSubtleStyle().Render(" › "))
+}
+
+// renderSearchPrompt renders a search input with a leading glyph and a
+// trailing status hint (e.g. pagination info).
+func renderSearchPrompt(sm *StyleManager, inputView, status string) string {
+	return sm.GetSecondaryStyle().Bold(true).Render("⌕ ") + sm.GetNoStyle().Render(inputView) + " " + sm.GetBlurredStyle().Render(status)
+}
+
+// RenderStatusBadge renders an inverted pill badge for a semantic status kind:
+// "success", "error", "warning" or "info".
+func RenderStatusBadge(sm *StyleManager, kind, label string) string {
+	color := sm.scheme.Focused
+	switch kind {
+	case "success":
+		color = sm.scheme.Success
+	case "error":
+		color = sm.scheme.Error
+	case "warning":
+		color = sm.scheme.Warning
+	case "info":
+		color = sm.scheme.Secondary
+	}
+	return sm.GetBadgeStyle(color).Render(label)
 }
 
 func RenderFramedWithModal(header, footer string, bodyFn func(availableHeight int) string, width, height int, sm *StyleManager, modal *ModalModel) string {
@@ -369,7 +487,8 @@ func RenderButtonItem(sm *StyleManager, label string, isSelected bool, maxWidth 
 		Width(btnWidth).
 		Align(lipgloss.Center).
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(sm.scheme.Blurred).
+		BorderForeground(sm.scheme.Subtle).
+		Foreground(sm.scheme.Blurred).
 		Padding(0, 1)).Render(label) + "\n"
 }
 
@@ -390,33 +509,6 @@ func RenderConditionalLabel(isFocused bool, label string) string {
 		return focusedStyle.Render(label)
 	}
 	return blurredStyle.Render(label)
-}
-
-// filterCardsByQuerySubstring filters a card slice by substring match (kept for benchmarks).
-func filterCardsByQuerySubstring(cards []model.Card, query string) []model.Card {
-	if query == "" {
-		return cards
-	}
-	q := strings.ToLower(query)
-	var filtered []model.Card
-	for _, c := range cards {
-		if strings.Contains(strings.ToLower(c.Name), q) ||
-			strings.Contains(strings.ToLower(c.Number), q) ||
-			strings.Contains(strings.ToLower(c.Rarity), q) {
-			filtered = append(filtered, c)
-		}
-	}
-	return filtered
-}
-
-// filterCardsByQuery filters a card slice using fuzzy matching on name, number, and rarity.
-// Returns the original slice unchanged when query is empty.
-func filterCardsByQuery(cards []model.Card, query string) []model.Card {
-	if query == "" {
-		return cards
-	}
-	results := fuzzySearchCards(cards, query)
-	return fuzzyResultsToCards(results)
 }
 
 func renderSplitCardPanel(sm *StyleManager, topContent string, topFocused bool, bottomContent string, bottomFocused bool, width, topHeight, bottomHeight int) string {
@@ -453,8 +545,12 @@ func buildCardExportRows(cards []model.Card, dbQtys, tempDeltas map[int64]int) [
 
 func (m Model) buildAuthViewHelpText() string {
 	hb := NewHelpBuilder(m.configManager)
-	return hb.Build(KeyItem{"settings", "F1", "Settings"}) + " • " + hb.Pair("nav_prev_tab", "Shift+Tab", "nav_next_tab", "Tab", "Navigate") + " • " + hb.Build(
-		KeyItem{"select", "Enter", "Submit"},
-		KeyItem{"quit", "Ctrl+C", "Quit"},
+	return JoinHelpHints(
+		hb.Build(KeyItem{"settings", "F1", "Settings"}),
+		hb.Pair("nav_prev_tab", "Shift+Tab", "nav_next_tab", "Tab", "Navigate"),
+		hb.Build(
+			KeyItem{"select", "Enter", "Submit"},
+			KeyItem{"quit", "Ctrl+C", "Quit"},
+		),
 	)
 }

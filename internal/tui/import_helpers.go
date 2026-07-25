@@ -18,9 +18,9 @@ func getCursorPrefix(isCursor bool) string {
 
 func getSetStatusIcon(isImported bool) string {
 	if isImported {
-		return "[x]"
+		return SuccessIcon
 	}
-	return "[ ]"
+	return PendingIcon
 }
 
 func calculatePaginationRange(cursor, totalItems, itemsPerPage int) (int, int) {
@@ -72,30 +72,6 @@ func splitImportPanelWidths(contentWidth int) (int, int) {
 	return left, right
 }
 
-func (m ImportModel) renderImportPanel(width, height int, isFocused bool) string {
-	var b strings.Builder
-
-	b.WriteString(m.styleManager.GetTitleStyle().Render("Import") + "\n")
-
-	if m.isLoading {
-		b.WriteString(m.styleManager.GetFocusedStyle().Render(m.loadingMsg))
-	} else if len(m.filteredSets) == 0 {
-		b.WriteString(m.styleManager.GetBlurredStyle().Render("No sets loaded") + "\n")
-	} else {
-		// Single-column layout: sets list then actions
-		itemsPerPage := 8
-		b.WriteString(m.renderSetsListContent(itemsPerPage))
-		b.WriteString("\n")
-		b.WriteString(m.styleManager.GetTitleStyle().Render("Actions") + "\n")
-		b.WriteString(m.renderActionsList())
-	}
-
-	if m.statusMsg != "" {
-		b.WriteString("\n" + m.styleManager.GetFocusedStyle().Render(m.statusMsg))
-	}
-	return RenderPanel(m.styleManager, b.String(), width, height, isFocused, 2, 1)
-}
-
 func (m ImportModel) renderImportView() string {
 	if m.width == 0 || m.height == 0 {
 		return "Initializing..."
@@ -107,11 +83,11 @@ func (m ImportModel) renderImportView() string {
 
 func (m ImportModel) renderImportHeader() string {
 	var b strings.Builder
-	gameName := ""
 	if m.selectedCardGame != nil {
-		gameName = " - " + m.selectedCardGame.Name
+		b.WriteString(RenderBreadcrumbs(m.styleManager, m.selectedCardGame.Name, "Import Sets") + "\n")
+	} else {
+		b.WriteString(RenderBreadcrumbs(m.styleManager, "Import Sets") + "\n")
 	}
-	b.WriteString(m.styleManager.GetTitleStyle().Render("CardMan - Import Sets"+gameName) + "\n")
 	b.WriteString(m.renderCardGameSelector() + "\n")
 	return b.String()
 }
@@ -161,26 +137,23 @@ func (m ImportModel) renderImportFooter() string {
 }
 
 func (m ImportModel) renderCardGameSelector() string {
-	label := m.styleManager.GetBlurredStyle().Render("Card Game: ")
-	value := m.styleManager.GetTitleStyle().Render(m.selectedCardGame.Name)
-	return label + value
+	label := m.styleManager.GetBlurredStyle().Render("Card Game ")
+	return label + RenderStatusBadge(m.styleManager, "info", m.selectedCardGame.Name)
 }
 
 func (m ImportModel) renderSearchInput() string {
-	label := m.styleManager.GetBlurredStyle().Render("Search: ")
-	return label + m.searchInput.View()
+	return renderSearchPrompt(m.styleManager, m.searchInput.View(), "")
 }
 
 func (m ImportModel) renderSetsListPanel(width int) string {
 	var b strings.Builder
-	b.WriteString(m.styleManager.GetTitleStyle().Render("Sets") + "\n")
 	if len(m.filteredSets) == 0 {
 		b.WriteString(m.renderEmptySetsList())
 	} else {
 		itemsPerPage := 15 // Reasonable default
 		b.WriteString(m.renderSetsListContent(itemsPerPage))
 	}
-	return RenderPanel(m.styleManager, b.String(), width, 0, m.focus == importFocusSets, 2, 1)
+	return renderTitledFlexPanel(m.styleManager, "Sets", b.String(), width, m.focus == importFocusSets, 2, 1)
 }
 
 func (m ImportModel) renderEmptySetsList() string {
@@ -226,32 +199,26 @@ func (m ImportModel) renderSetListItem(index int) string {
 func (m ImportModel) renderActionsPanel(width int) string {
 	var b strings.Builder
 	isFocused := m.focus == importFocusActions
-	if isFocused {
-		b.WriteString(m.styleManager.GetTitleStyle().Render("Actions") + "\n")
-	} else {
-		b.WriteString(m.styleManager.GetBlurredStyle().Render("Actions") + "\n")
-	}
 	if len(m.filteredSets) > 0 && m.cursor < len(m.filteredSets) {
 		b.WriteString(m.renderSelectedSetInfo())
 	}
 	b.WriteString(m.renderActionsList())
-	return RenderPanel(m.styleManager, b.String(), width, 0, isFocused, 2, 1)
+	return renderTitledFlexPanel(m.styleManager, "Actions", b.String(), width, isFocused, 2, 1)
 }
 
 func (m ImportModel) renderQueuePanel(width int) string {
 	var b strings.Builder
 	isFocused := m.focus == importFocusQueue
-	if isFocused {
-		b.WriteString(m.styleManager.GetTitleStyle().Render("Queue") + "\n")
-	} else {
-		b.WriteString(m.styleManager.GetBlurredStyle().Render("Queue") + "\n")
+	title := "Queue"
+	if pending := m.queuePendingCount(); pending > 0 {
+		title = fmt.Sprintf("Queue (%d pending)", pending)
 	}
 	if len(m.importQueue) == 0 {
 		b.WriteString(m.styleManager.GetBlurredStyle().Render("No items queued") + "\n")
 	} else {
 		b.WriteString(m.renderQueueList())
 	}
-	return RenderPanel(m.styleManager, b.String(), width, 0, isFocused, 2, 1)
+	return renderTitledFlexPanel(m.styleManager, title, b.String(), width, isFocused, 2, 1)
 }
 
 func (m ImportModel) renderQueueList() string {
@@ -332,8 +299,10 @@ func (m ImportModel) renderStatusBar(contentWidth int) string {
 	importedSets := len(m.databaseSetIDs)
 	filteredCount := len(m.filteredSets)
 
-	leftSection := fmt.Sprintf("Total: %d  Imported: %d", totalSets, importedSets)
-	rightSection := fmt.Sprintf("Showing: %d", filteredCount)
+	hs := m.styleManager.GetHelpStyle()
+	vs := m.styleManager.GetSecondaryStyle().Bold(true)
+	leftSection := hs.Render("Total ") + vs.Render(fmt.Sprintf("%d", totalSets)) + hs.Render("   Imported ") + vs.Render(fmt.Sprintf("%d", importedSets))
+	rightSection := hs.Render("Showing ") + vs.Render(fmt.Sprintf("%d", filteredCount))
 
 	// Calculate widths for left and right sections
 	leftWidth := contentWidth * 2 / 3
@@ -359,11 +328,11 @@ func (m ImportModel) renderStatusBar(contentWidth int) string {
 
 func (m ImportModel) renderHelp() string {
 	hb := NewHelpBuilder(m.configManager)
-	common := strings.Join([]string{
-		"Tab: Switch Panel",
+	common := JoinHelpHints(
+		RenderHelpHint("Tab", "Switch panel"),
 		hb.Pair("nav_up", "↑", "nav_down", "↓", "Navigate"),
 		hb.Build(KeyItem{"back", "Q", "Back"}),
-	}, " | ")
+	)
 	var contextual string
 	switch m.focus {
 	case importFocusSets:
@@ -381,12 +350,12 @@ func (m ImportModel) renderHelp() string {
 			KeyItem{"queue_clear", "Ctrl+L", "Clear Done"},
 		)
 	}
-	return helpStyle.Render(common) + "\n" + helpStyle.Render(contextual)
+	return common + "\n" + contextual
 }
 
 func (m ImportModel) renderImportProgress() string {
-	header := m.styleManager.GetTitleStyle().Render("Importing Sets...")
-	footer := m.styleManager.GetHelpStyle().Render("Press Ctrl+C to cancel")
+	header := RenderBreadcrumbs(m.styleManager, "Importing Sets")
+	footer := RenderHelpHint("Ctrl+C", "Cancel")
 	layout := calculateFrameLayout(lipgloss.Height(header), lipgloss.Height(footer), m.width, m.height)
 	body := m.renderImportProgressBody(layout.ContentWidth, layout.BodyContentHeight)
 	return renderFramedViewWithLayout(header, body, footer, layout, m.styleManager)
@@ -434,10 +403,7 @@ func (m ImportModel) renderProgressBar() string {
 	completed := m.importProgress.setsCompleted
 	total := m.importProgress.totalSets
 	percentage := calculateProgressPercentage(completed, total)
-	bar := createProgressBar(completed, total, 40)
-	// Render progress bar with styled background
-	progressLine := m.styleManager.GetNoStyle().Render(fmt.Sprintf("[%s] %d%%", bar, percentage))
-	b.WriteString(progressLine + "\n\n")
+	b.WriteString(RenderProgressBar(float64(percentage), 45, m.styleManager) + "\n\n")
 	b.WriteString(renderStyledLine(m.styleManager.GetBlurredStyle(), "Sets: %d / %d completed", completed, total))
 	if m.importProgress.cardsImported > 0 {
 		b.WriteString(renderStyledLine(m.styleManager.GetBlurredStyle(), "Total cards: %d", m.importProgress.cardsImported))

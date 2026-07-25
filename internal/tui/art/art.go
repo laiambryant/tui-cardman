@@ -2,205 +2,140 @@
 package art
 
 import (
-	"math"
+	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
 )
 
-const Logo = `
-     ___   ___   ___   ___   _  _   ___   _  _
-    / __| / _ \ | _ \ |   \ | \/ | / _ \ | \| |
-   | (__ | (_| ||   / | |) || |\/|| (_| || .  |
-    \___| \__._||_|_\ |___/ |_|  | \__._||_|\_|
+const Tagline = "Terminal Card Collection Manager"
 
-       ~ Terminal UI Card Collection Manager ~
+// Logo is the plain-text wordmark used outside the TUI (e.g. version output).
+const Logo = `
+   █▀▀ ▄▀█ █▀█ █▀▄ █▀▄▀█ ▄▀█ █▄ █
+   █▄▄ █▀█ █▀▄ █▄▀ █ ▀ █ █▀█ █ ▀█
+
+   ~ ` + Tagline + ` ~
 `
 
-func brailleBitIdx(dx, dy int) uint {
-	if dx == 0 {
-		if dy < 3 {
-			return uint(dy)
-		}
-		return 6
-	}
-	if dy < 3 {
-		return uint(dy + 3)
-	}
-	return 7
+// Half-block wordmark, two rows per letter: C A R D M A N.
+var wordmark = []string{
+	"█▀▀ ▄▀█ █▀█ █▀▄ █▀▄▀█ ▄▀█ █▄ █",
+	"█▄▄ █▀█ █▀▄ █▄▀ █ ▀ █ █▀█ █ ▀█",
 }
 
-func generatePattern(w, h int) []string {
-	if w < 20 {
-		w = 20
+var cardIcons = []string{"★", "♦", "◆", "♠"}
+
+func miniCard(icon string) []string {
+	return []string{
+		"╭─────╮",
+		fmt.Sprintf("│ %s   │", icon),
+		"│  ◢  │",
+		fmt.Sprintf("│   %s │", icon),
+		"╰─────╯",
 	}
-	if h < 8 {
-		h = 8
-	}
-	if w > 60 {
-		w = 60
-	}
-	if h > 25 {
-		h = 25
-	}
-	dotW := w * 2
-	dotH := h * 4
-	cx := float64(dotW) / 2.0
-	cy := float64(dotH) / 2.0
-	maxR := math.Min(cx, cy) * 0.85
-	cardW := float64(dotW) * 0.9
-	cardH := float64(dotH) * 0.9
-	cardLeft := cx - cardW/2
-	cardRight := cx + cardW/2
-	cardTop := cy - cardH/2
-	cardBottom := cy + cardH/2
-	cornerR := math.Min(cardW, cardH) * 0.12
-	grid := make([][]bool, dotH)
-	for i := range grid {
-		grid[i] = make([]bool, dotW)
-	}
-	for py := 0; py < dotH; py++ {
-		for px := 0; px < dotW; px++ {
-			fx := float64(px)
-			fy := float64(py)
-			dx := fx - cx
-			dy := fy - cy
-			dist := math.Sqrt(dx*dx + dy*dy)
-			angle := math.Atan2(dy, dx)
-			inCard := fx >= cardLeft && fx <= cardRight && fy >= cardTop && fy <= cardBottom
-			if inCard {
-				corners := [][2]float64{
-					{cardLeft + cornerR, cardTop + cornerR},
-					{cardRight - cornerR, cardTop + cornerR},
-					{cardLeft + cornerR, cardBottom - cornerR},
-					{cardRight - cornerR, cardBottom - cornerR},
-				}
-				for _, c := range corners {
-					cdx := fx - c[0]
-					cdy := fy - c[1]
-					isCornerQuadrant := false
-					if c[0] < cx && c[1] < cy && fx < c[0] && fy < c[1] {
-						isCornerQuadrant = true
-					} else if c[0] > cx && c[1] < cy && fx > c[0] && fy < c[1] {
-						isCornerQuadrant = true
-					} else if c[0] < cx && c[1] > cy && fx < c[0] && fy > c[1] {
-						isCornerQuadrant = true
-					} else if c[0] > cx && c[1] > cy && fx > c[0] && fy > c[1] {
-						isCornerQuadrant = true
-					}
-					if isCornerQuadrant {
-						cDist := math.Sqrt(cdx*cdx + cdy*cdy)
-						if cDist > cornerR {
-							inCard = false
-						}
-						break
-					}
-				}
-			}
-			if !inCard {
-				continue
-			}
-			borderThick := 2.0
-			nearEdge := fx-cardLeft < borderThick || cardRight-fx < borderThick ||
-				fy-cardTop < borderThick || cardBottom-fy < borderThick
-			if nearEdge {
-				grid[py][px] = true
-				continue
-			}
-			for _, c := range [][2]float64{
-				{cardLeft + cornerR, cardTop + cornerR},
-				{cardRight - cornerR, cardTop + cornerR},
-				{cardLeft + cornerR, cardBottom - cornerR},
-				{cardRight - cornerR, cardBottom - cornerR},
-			} {
-				cdx := fx - c[0]
-				cdy := fy - c[1]
-				cDist := math.Sqrt(cdx*cdx + cdy*cdy)
-				if math.Abs(cDist-cornerR) < borderThick {
-					isCornerQuadrant := false
-					if c[0] < cx && c[1] < cy && fx < c[0] && fy < c[1] {
-						isCornerQuadrant = true
-					} else if c[0] > cx && c[1] < cy && fx > c[0] && fy < c[1] {
-						isCornerQuadrant = true
-					} else if c[0] < cx && c[1] > cy && fx < c[0] && fy > c[1] {
-						isCornerQuadrant = true
-					} else if c[0] > cx && c[1] > cy && fx > c[0] && fy > c[1] {
-						isCornerQuadrant = true
-					}
-					if isCornerQuadrant {
-						grid[py][px] = true
-					}
-				}
-			}
-			numRays := 8
-			for i := 0; i < numRays; i++ {
-				rayAngle := float64(i) * math.Pi / float64(numRays)
-				angleDiff := math.Abs(angle - rayAngle)
-				if angleDiff > math.Pi {
-					angleDiff = 2*math.Pi - angleDiff
-				}
-				rayWidth := 0.06 - 0.02*(dist/maxR)
-				if rayWidth < 0.02 {
-					rayWidth = 0.02
-				}
-				if angleDiff < rayWidth && dist < maxR*0.75 && dist > maxR*0.15 {
-					grid[py][px] = true
-				}
-			}
-			adx := math.Abs(dx)
-			ady := math.Abs(dy)
-			diamondDist := adx + ady
-			for _, r := range []float64{0.15, 0.35, 0.55, 0.75} {
-				ringR := maxR * r
-				if math.Abs(diamondDist-ringR) < 1.5 {
-					grid[py][px] = true
-				}
-			}
-			if diamondDist < maxR*0.08 {
-				grid[py][px] = true
-			}
-		}
-	}
-	var result []string
-	for row := 0; row < h; row++ {
-		var b strings.Builder
-		for col := 0; col < w; col++ {
-			var code rune = 0x2800
-			for dy := 0; dy < 4; dy++ {
-				for dx := 0; dx < 2; dx++ {
-					py := row*4 + dy
-					px := col*2 + dx
-					if py < dotH && px < dotW && grid[py][px] {
-						code |= rune(1 << brailleBitIdx(dx, dy))
-					}
-				}
-			}
-			b.WriteRune(code)
-		}
-		result = append(result, b.String())
-	}
-	return result
 }
 
-func RenderLogo(width, height int, titleStyle, focusedStyle, blurredStyle lipgloss.Style) string {
-	artW := width / 2
-	artH := height * 45 / 100
-	pattern := generatePattern(artW, artH)
-	artStyle := lipgloss.NewStyle().Inherit(focusedStyle)
+type rgb struct{ r, g, b int }
+
+func parseHexColor(c lipgloss.Color) (rgb, bool) {
+	s := string(c)
+	if len(s) != 7 || s[0] != '#' {
+		return rgb{}, false
+	}
+	r, err1 := strconv.ParseInt(s[1:3], 16, 32)
+	g, err2 := strconv.ParseInt(s[3:5], 16, 32)
+	b, err3 := strconv.ParseInt(s[5:7], 16, 32)
+	if err1 != nil || err2 != nil || err3 != nil {
+		return rgb{}, false
+	}
+	return rgb{int(r), int(g), int(b)}, true
+}
+
+func lerpColor(from, to rgb, t float64) lipgloss.Color {
+	r := from.r + int(t*float64(to.r-from.r))
+	g := from.g + int(t*float64(to.g-from.g))
+	b := from.b + int(t*float64(to.b-from.b))
+	return lipgloss.Color(fmt.Sprintf("#%02X%02X%02X", r, g, b))
+}
+
+// gradientLine colors each rune of a line by interpolating between two colors.
+// When either color is not a hex value the whole line is rendered in `from`.
+func gradientLine(line string, from, to lipgloss.Color) string {
+	fromRGB, okFrom := parseHexColor(from)
+	toRGB, okTo := parseHexColor(to)
+	if !okFrom || !okTo {
+		return lipgloss.NewStyle().Foreground(from).Bold(true).Inline(true).Render(line)
+	}
+	runes := []rune(line)
+	span := max(len(runes)-1, 1)
+	var b strings.Builder
+	for i, r := range runes {
+		if r == ' ' {
+			b.WriteRune(r)
+			continue
+		}
+		color := lerpColor(fromRGB, toRGB, float64(i)/float64(span))
+		b.WriteString(lipgloss.NewStyle().Foreground(color).Bold(true).Inline(true).Render(string(r)))
+	}
+	return b.String()
+}
+
+func renderCardFan(accents []lipgloss.Color) string {
+	var cards []string
+	for i, icon := range cardIcons {
+		accent := accents[i%len(accents)]
+		style := lipgloss.NewStyle().Foreground(accent).Inline(true)
+		var lines []string
+		for _, line := range miniCard(icon) {
+			lines = append(lines, style.Render(line))
+		}
+		cards = append(cards, strings.Join(lines, "\n"))
+	}
+	gap := "  "
+	row := cards[0]
+	for _, card := range cards[1:] {
+		row = lipgloss.JoinHorizontal(lipgloss.Center, row, gap, card)
+	}
+	return row
+}
+
+func renderWordmark(accents []lipgloss.Color) string {
+	from := accents[0]
+	to := from
+	if len(accents) > 1 {
+		to = accents[1]
+	}
 	var lines []string
-	for _, line := range pattern {
-		var b strings.Builder
-		for _, ch := range line {
-			if ch == 0x2800 {
-				b.WriteRune(' ')
-			} else {
-				b.WriteRune(ch)
-			}
-		}
-		lines = append(lines, artStyle.Render(b.String()))
+	for _, line := range wordmark {
+		lines = append(lines, gradientLine(line, from, to))
 	}
-	patternArt := strings.Join(lines, "\n")
-	cardmanText := titleStyle.Bold(true).Render("C A R D M A N")
-	subtitle := blurredStyle.Render("~ Terminal UI Card Collection Manager ~")
-	return lipgloss.JoinVertical(lipgloss.Center, patternArt, "", cardmanText, subtitle)
+	return strings.Join(lines, "\n")
+}
+
+func renderTagline(subtle lipgloss.Color, accents []lipgloss.Color) string {
+	subtleStyle := lipgloss.NewStyle().Foreground(subtle).Inline(true)
+	accentStyle := lipgloss.NewStyle().Foreground(accents[0]).Inline(true)
+	return subtleStyle.Render("── ") + accentStyle.Render("✦") + subtleStyle.Render(" "+Tagline+" ") + accentStyle.Render("✦") + subtleStyle.Render(" ──")
+}
+
+// RenderLogo renders the splash screen artwork: a fan of game cards, a
+// gradient CARDMAN wordmark and a tagline, tinted with the active theme.
+func RenderLogo(width, height int, accents []lipgloss.Color, subtle lipgloss.Color) string {
+	if len(accents) == 0 {
+		accents = []lipgloss.Color{"#FF5FD2"}
+	}
+	wordmarkBlock := renderWordmark(accents)
+	compact := lipgloss.JoinVertical(lipgloss.Center, wordmarkBlock, "", renderTagline(subtle, accents))
+	if (width > 0 && width < 44) || (height > 0 && height < 14) {
+		return compact
+	}
+	return lipgloss.JoinVertical(lipgloss.Center,
+		renderCardFan(accents),
+		"",
+		wordmarkBlock,
+		"",
+		renderTagline(subtle, accents),
+	)
 }

@@ -7,11 +7,11 @@ import (
 )
 
 func (m Model) splashView() string {
+	scheme := m.styleManager.scheme
 	logo := art.RenderLogo(
 		m.width, m.height,
-		m.styleManager.GetTitleStyle(),
-		m.styleManager.GetFocusedStyle(),
-		m.styleManager.GetBlurredStyle(),
+		[]lipgloss.Color{scheme.Focused, scheme.Title, scheme.Secondary, scheme.Success},
+		scheme.Subtle,
 	)
 	fullStyle := m.styleManager.GetFullScreenStyle(m.width, m.height).
 		AlignHorizontal(lipgloss.Center).

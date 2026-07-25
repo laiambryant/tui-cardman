@@ -47,9 +47,17 @@ const (
 	ScreenSettings
 	ScreenImport
 	ScreenSplash
-	ScreenCardGameMenu
 	ScreenLists
 	ScreenDeckBuilder
+)
+
+type CardGameMenuOption int
+
+const (
+	MenuMyCollection CardGameMenuOption = iota
+	MenuMyLists
+	MenuMyDecks
+	MenuImportSets
 )
 
 type splashDoneMsg struct{}
@@ -99,7 +107,6 @@ type Model struct {
 	cardGames         []model.CardGame
 	cursor            int
 	cardGameTabs      CardGameTabsModel
-	cardGameMenuModel *CardGameMenuModel
 	listsModel        *ListsModel
 	deckBuilderModel  *DeckBuilderModel
 	selectedGame      *model.CardGame
@@ -348,6 +355,16 @@ func (m *Model) selectCardGame() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	return m, nil
+}
+
+// applyConfiguredTheme applies the persisted theme to the shared style manager.
+func (m *Model) applyConfiguredTheme() {
+	if m.configManager == nil || m.styleManager == nil {
+		return
+	}
+	if theme := m.configManager.Get().UI.Theme; theme != "" {
+		m.styleManager.SetTheme(theme)
+	}
 }
 
 func (m *Model) initMainScreenImport() {
@@ -638,8 +655,6 @@ func (m Model) dispatchScreenUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateSettings(msg)
 	case ScreenCardGameTabs:
 		return m.updateCardGameTabs(msg)
-	case ScreenCardGameMenu:
-		return m.updateCardGameMenu(msg)
 	case ScreenLists:
 		return m.updateLists(msg)
 	case ScreenDeckBuilder:
@@ -664,8 +679,18 @@ func (m *Model) updateSettings(msg tea.Msg) (tea.Model, tea.Cmd) {
 	*m.settingsModel, cmd = m.settingsModel.Update(msg)
 	if m.settingsModel.shouldClose {
 		m.screen = ScreenMain
+		m.refreshThemedComponents()
 	}
 	return m, cmd
+}
+
+// refreshThemedComponents re-applies theme-derived styles to long-lived
+// components after the theme may have changed in settings.
+func (m *Model) refreshThemedComponents() {
+	if m.importModel != nil {
+		m.importModel.spinner.Style = focusedStyle
+		m.styleManager.ApplyTextInputStyles(&m.importModel.searchInput)
+	}
 }
 
 func (m *Model) updateCardGameTabs(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -676,54 +701,6 @@ func (m *Model) updateCardGameTabs(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if isBackKey(action, keyMsg.String()) {
 			m.screen = ScreenMain
 			return m, nil
-		}
-	}
-	return m, cmd
-}
-
-func (m *Model) updateCardGameMenu(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if m.cardGameMenuModel == nil {
-		return m, nil
-	}
-	var cmd tea.Cmd
-	*m.cardGameMenuModel, cmd = m.cardGameMenuModel.Update(msg)
-	if m.cardGameMenuModel.shouldGoBack {
-		m.screen = ScreenMain
-		return m, nil
-	}
-	if m.cardGameMenuModel.optionChosen {
-		m.cardGameMenuModel.optionChosen = false
-		switch m.cardGameMenuModel.selectedOption {
-		case MenuMyCollection:
-			cardGameTabs, err := m.createCardGameTabsModel(m.selectedGame)
-			if err != nil {
-				slog.Error("failed to create card game tabs model", "error", err)
-				m.errorMsg = fmt.Sprintf("Failed to load card game: %v", err)
-				return m, nil
-			}
-			m.cardGameTabs = cardGameTabs
-			m.screen = ScreenCardGameTabs
-			return m, m.cardGameTabs.Init()
-		case MenuMyLists:
-			listsModel, err := m.createListsModel(m.selectedGame)
-			if err != nil {
-				slog.Error("failed to create lists model", "error", err)
-				m.errorMsg = fmt.Sprintf("Failed to load lists: %v", err)
-				return m, nil
-			}
-			m.listsModel = listsModel
-			m.screen = ScreenLists
-			return m, m.listsModel.Init()
-		case MenuMyDecks:
-			deckModel, err := m.createDeckBuilderModel(m.selectedGame)
-			if err != nil {
-				slog.Error("failed to create deck builder model", "error", err)
-				m.errorMsg = fmt.Sprintf("Failed to load decks: %v", err)
-				return m, nil
-			}
-			m.deckBuilderModel = deckModel
-			m.screen = ScreenDeckBuilder
-			return m, m.deckBuilderModel.Init()
 		}
 	}
 	return m, cmd
@@ -814,11 +791,6 @@ func (m Model) View() string {
 		return m.settingsModel.View()
 	case ScreenCardGameTabs:
 		return m.cardGameTabs.View()
-	case ScreenCardGameMenu:
-		if m.cardGameMenuModel != nil {
-			return m.cardGameMenuModel.View()
-		}
-		return ""
 	case ScreenLists:
 		if m.listsModel != nil {
 			return m.listsModel.View()

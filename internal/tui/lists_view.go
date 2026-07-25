@@ -489,7 +489,7 @@ func (m ListsModel) View() string {
 func (m ListsModel) renderHeader() string {
 	var b strings.Builder
 	if m.selectedGame != nil {
-		b.WriteString(m.styleManager.GetTitleStyle().Render(m.selectedGame.Name + " - Lists"))
+		b.WriteString(RenderBreadcrumbs(m.styleManager, m.selectedGame.Name, "Lists"))
 	}
 	return b.String()
 }
@@ -508,35 +508,32 @@ func (m ListsModel) renderBody(availableHeight int) string {
 
 func (m ListsModel) renderListPanel(width, height int) string {
 	var b strings.Builder
+	title := "Your Lists"
 	if m.mode == ListsModeCreate || m.mode == ListsModeEdit {
 		b.WriteString(m.renderForm())
+		title = "Create List"
+		if m.mode == ListsModeEdit {
+			title = "Edit List"
+		}
+	} else if len(m.lists) == 0 {
+		b.WriteString(m.styleManager.GetBlurredStyle().Render("No lists yet. Press 'n' to create one.") + "\n")
 	} else {
-		b.WriteString(m.styleManager.GetTitleStyle().Render("Your Lists") + "\n")
-		if len(m.lists) == 0 {
-			b.WriteString(m.styleManager.GetBlurredStyle().Render("No lists yet. Press 'n' to create one.") + "\n")
-		} else {
-			for i, l := range m.lists {
-				isSelected := m.listCursor == i && m.focus == ListsFocusListPanel
-				isActive := m.selectedList != nil && m.selectedList.ID == l.ID
-				colorDot := m.styleManager.applyBGFG(lipgloss.NewStyle().Foreground(lipgloss.Color(l.Color))).Render("●")
-				label := colorDot + " " + l.Name
-				if isActive {
-					label += " *"
-				}
-				b.WriteString(RenderListItem(label, isSelected))
+		for i, l := range m.lists {
+			isSelected := m.listCursor == i && m.focus == ListsFocusListPanel
+			isActive := m.selectedList != nil && m.selectedList.ID == l.ID
+			colorDot := m.styleManager.applyBGFG(lipgloss.NewStyle().Foreground(lipgloss.Color(l.Color))).Render("●")
+			label := colorDot + " " + l.Name
+			if isActive {
+				label += " *"
 			}
+			b.WriteString(RenderListItem(label, isSelected))
 		}
 	}
-	return RenderPanel(m.styleManager, b.String(), width, height, m.focus == ListsFocusListPanel, 1, 0)
+	return RenderTitledPanel(m.styleManager, title, b.String(), width, height, m.focus == ListsFocusListPanel, 1, 0)
 }
 
 func (m ListsModel) renderForm() string {
 	var b strings.Builder
-	title := "Create List"
-	if m.mode == ListsModeEdit {
-		title = "Edit List"
-	}
-	b.WriteString(m.styleManager.GetTitleStyle().Render(title) + "\n")
 	nameLabel := "Name: "
 	if m.formFocus == 0 {
 		nameLabel = m.styleManager.GetFocusedStyle().Render(nameLabel)
@@ -564,7 +561,11 @@ func (m ListsModel) renderForm() string {
 		arrows = m.styleManager.GetFocusedStyle().Render("<") + " " + colorPreview + " " + m.styleManager.GetFocusedStyle().Render(">")
 	}
 	b.WriteString(colorLabel + arrows + "\n")
-	b.WriteString(m.styleManager.GetBlurredStyle().Render("Tab: next field • Enter: confirm • Esc: cancel"))
+	b.WriteString(JoinHelpHints(
+		RenderHelpHint("Tab", "Next field"),
+		RenderHelpHint("Enter", "Confirm"),
+		RenderHelpHint("Esc", "Cancel"),
+	))
 	return b.String()
 }
 
@@ -585,7 +586,7 @@ func (m ListsModel) renderCardPanel(width, height int) string {
 	} else {
 		top.WriteString(colorDot + " " + m.styleManager.GetBlurredStyle().Render(m.selectedList.Name) + "\n")
 	}
-	top.WriteString(m.styleManager.GetBlurredStyle().Render("Search: ") + m.styleManager.GetNoStyle().Render(m.searchInput.View()) + " " + m.styleManager.GetBlurredStyle().Render(m.cardPagination.StatusText()) + "\n")
+	top.WriteString(renderSearchPrompt(m.styleManager, m.searchInput.View(), m.cardPagination.StatusText()) + "\n")
 	source := m.filteredCards
 	if m.searchInput.Value() == "" {
 		source = m.cards
@@ -632,10 +633,14 @@ func (m ListsModel) renderFooter() string {
 	hb := NewHelpBuilder(m.configManager)
 	var footer string
 	if m.mode == ListsModeCreate || m.mode == ListsModeEdit {
-		footer = m.styleManager.GetHelpStyle().Render("Tab: next field | Enter: confirm | Esc: cancel")
+		footer = JoinHelpHints(
+			RenderHelpHint("Tab", "Next field"),
+			RenderHelpHint("Enter", "Confirm"),
+			RenderHelpHint("Esc", "Cancel"),
+		)
 	} else if m.focus == ListsFocusCardPanel {
-		footer = m.styleManager.GetHelpStyle().Render(strings.Join([]string{
-			"Tab: Switch panel",
+		footer = JoinHelpHints(
+			RenderHelpHint("Tab", "Switch panel"),
 			hb.Build(
 				KeyItem{"increment_quantity", "+", "Add"},
 				KeyItem{"decrement_quantity", "Delete", "Remove"},
@@ -644,10 +649,10 @@ func (m ListsModel) renderFooter() string {
 			hb.Build(KeyItem{"export", "x", "Export"}, KeyItem{"import", "i", "Import"}),
 			hb.Pair("page_next", "Ctrl+N", "page_prev", "Ctrl+P", "Page"),
 			hb.Pair("nav_up", "↑", "nav_down", "↓", "Navigate"),
-			"Left / Shift+Tab: Lists panel",
-		}, " | "))
+			RenderHelpHint("←/Shift+Tab", "Lists panel"),
+		)
 	} else {
-		footer = m.styleManager.GetHelpStyle().Render(strings.Join([]string{
+		footer = JoinHelpHints(
 			hb.Pair("nav_up", "↑", "nav_down", "↓", "Navigate"),
 			hb.Build(KeyItem{"select", "Enter", "Select list"}),
 			hb.Build(
@@ -655,9 +660,9 @@ func (m ListsModel) renderFooter() string {
 				KeyItem{"edit", "e", "Edit"},
 				KeyItem{"delete", "d", "Delete"},
 			),
-			"Right / Tab: Cards panel",
+			RenderHelpHint("→/Tab", "Cards panel"),
 			hb.Build(KeyItem{"back", "Q", "Back"}),
-		}, " | "))
+		)
 	}
 	if m.exportState.statusMsg != "" {
 		footer = m.styleManager.GetHelpStyle().Render(m.exportState.statusMsg) + "  " + footer

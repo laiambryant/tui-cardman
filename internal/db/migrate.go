@@ -2,7 +2,9 @@ package db
 
 import (
 	"database/sql"
+	"embed"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -22,12 +24,29 @@ const (
 	recordMigration       = `INSERT INTO schema_migrations(version, applied_at) VALUES (?, ?)`
 )
 
+//go:embed migrations/*.sql
+var embeddedMigrations embed.FS
+
+// ApplyEmbeddedMigrations applies the migrations compiled into the binary.
+// This works regardless of the process working directory.
+func ApplyEmbeddedMigrations(db *sql.DB) error {
+	sub, err := fs.Sub(embeddedMigrations, "migrations")
+	if err != nil {
+		return fmt.Errorf("open embedded migrations: %w", err)
+	}
+	return applyMigrationsFS(db, sub)
+}
+
+// ApplyMigrations applies migrations from a directory on disk.
 func ApplyMigrations(db *sql.DB, migrationsDir string) error {
-	slog.Debug("starting migration process", "dir", migrationsDir)
+	return applyMigrationsFS(db, os.DirFS(migrationsDir))
+}
+
+func applyMigrationsFS(db *sql.DB, fsys fs.FS) error {
 	if err := ensureMigrationsTable(db); err != nil {
 		return err
 	}
-	migrations, err := loadPendingMigrations(db, migrationsDir)
+	migrations, err := loadPendingMigrations(db, fsys)
 	if err != nil {
 		return err
 	}
@@ -48,8 +67,8 @@ func ensureMigrationsTable(db *sql.DB) error {
 	return err
 }
 
-func loadPendingMigrations(db *sql.DB, dir string) ([]migration, error) {
-	files, err := filepath.Glob(filepath.Join(dir, "*.up.sql"))
+func loadPendingMigrations(db *sql.DB, fsys fs.FS) ([]migration, error) {
+	files, err := fs.Glob(fsys, "*.up.sql")
 	if err != nil {
 		return nil, err
 	}
@@ -69,7 +88,7 @@ func loadPendingMigrations(db *sql.DB, dir string) ([]migration, error) {
 			continue
 		}
 		slog.Debug("migration pending", "version", version, "path", path)
-		pending = append(pending, migration{version: version, path: path})
+		pending = append(pending, migration{version: version, path: path, fsys: fsys})
 	}
 	return pending, nil
 }
@@ -91,7 +110,7 @@ func isApplied(db *sql.DB, version string) (bool, error) {
 
 func applyMigration(db *sql.DB, m migration) error {
 	slog.Debug("applying migration", "version", m.version, "path", m.path)
-	content, err := os.ReadFile(m.path)
+	content, err := fs.ReadFile(m.fsys, m.path)
 	if err != nil {
 		return err
 	}
@@ -127,4 +146,5 @@ func applyMigration(db *sql.DB, m migration) error {
 type migration struct {
 	version string
 	path    string
+	fsys    fs.FS
 }

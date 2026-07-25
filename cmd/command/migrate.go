@@ -1,6 +1,7 @@
 package command
 
 import (
+	"database/sql"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -35,7 +36,7 @@ var migrateCmd = &cobra.Command{
 		}
 		defer sqlDB.Close()
 
-		if err := dbpkg.ApplyMigrations(sqlDB, migrateDir); err != nil {
+		if err := applyMigrationsFromFlag(cmd, sqlDB); err != nil {
 			return fmt.Errorf("apply migrations: %w", err)
 		}
 		fmt.Println("migrations applied")
@@ -43,8 +44,15 @@ var migrateCmd = &cobra.Command{
 	},
 }
 
+func applyMigrationsFromFlag(cmd *cobra.Command, sqlDB *sql.DB) error {
+	if cmd.Flags().Changed("dir") {
+		return dbpkg.ApplyMigrations(sqlDB, migrateDir)
+	}
+	return dbpkg.ApplyEmbeddedMigrations(sqlDB)
+}
+
 func init() {
 	rootCmd.AddCommand(migrateCmd)
 	migrateCmd.Flags().StringVar(&migrateDSN, "dsn", "file:cardman.db?_fk=1", "Database DSN")
-	migrateCmd.Flags().StringVar(&migrateDir, "dir", "internal/db/migrations", "Migrations directory")
+	migrateCmd.Flags().StringVar(&migrateDir, "dir", "", "Apply migrations from a directory instead of the embedded ones")
 }

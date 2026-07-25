@@ -2,6 +2,7 @@ package mtg
 
 import (
 	"context"
+	"time"
 
 	mtgsdk "github.com/laiambryant/mtg-sdk-go"
 	"github.com/laiambryant/mtg-sdk-go/models"
@@ -18,13 +19,15 @@ type Client struct {
 
 func NewClient() *Client {
 	return &Client{
-		limiter: rate.NewLimiter(rate.Every(100_000_000), 1), // 100ms
+		limiter: rate.NewLimiter(rate.Every(100*time.Millisecond), 1),
 		sdk:     mtgsdk.New(),
 	}
 }
 
 func (c *Client) GetSets(ctx context.Context) ([]MTGSet, error) {
-	c.limiter.Wait(context.Background())
+	if err := c.limiter.Wait(ctx); err != nil {
+		return nil, err
+	}
 	sdkSets, err := c.sdk.Sets.List(ctx, query.New())
 	if err != nil {
 		return nil, err
@@ -41,7 +44,9 @@ func (c *Client) GetSets(ctx context.Context) ([]MTGSet, error) {
 }
 
 func (c *Client) GetCardsForSet(ctx context.Context, setCode string, page int) (cards []MTGCard, hasMore bool, totalCount int, err error) {
-	c.limiter.Wait(context.Background())
+	if err := c.limiter.Wait(ctx); err != nil {
+		return nil, false, 0, err
+	}
 	q := query.New().SetCode(setCode).Page(page).PageSize(pageSize)
 	sdkCards, err := c.sdk.Cards.List(ctx, q)
 	if err != nil {

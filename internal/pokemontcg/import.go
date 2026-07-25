@@ -270,7 +270,7 @@ func (s *ImportService) ImportSet(ctx context.Context, set Set) (int, error) {
 			cardsImported++
 		}
 		s.logger.Info("Imported cards page", "set_id", set.ID, "page", page, "count", len(cards), "total_so_far", cardsImported)
-		if page*paginatedResp.PageSize >= paginatedResp.TotalCount {
+		if !paginatedResp.HasMore {
 			break
 		}
 		page++

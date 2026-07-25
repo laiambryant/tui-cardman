@@ -190,7 +190,7 @@ func (m *CardGameTabsModel) computeCollectionStats() {
 		rows = append(rows, table.Row{
 			Truncate(sc.SetName, 20),
 			fmt.Sprintf("%d/%d", sc.Owned, sc.Total),
-			RenderProgressBar(sc.Percent, 16, m.styleManager),
+			RenderPlainProgressBar(sc.Percent, 16),
 		})
 	}
 	m.setCompletionTable.SetRows(rows)
@@ -501,7 +501,7 @@ func (m CardGameTabsModel) View() string {
 func (m CardGameTabsModel) renderCardGameTabsHeader() string {
 	var b strings.Builder
 	if m.selectedGame != nil {
-		b.WriteString(m.styleManager.GetTitleStyle().Render(m.selectedGame.Name+" Collection Manager") + "\n")
+		b.WriteString(RenderBreadcrumbs(m.styleManager, m.selectedGame.Name, "Collection") + "\n")
 	}
 	b.WriteString(RenderTabBar(m.styleManager, []string{"Collection", "Card Search", "Value"}, int(m.currentTab)))
 	return b.String()
@@ -525,29 +525,19 @@ func (m CardGameTabsModel) renderValueHistoryTab(availableHeight int) string {
 		contentWidth = 20
 	}
 	var b strings.Builder
-	ts := m.styleManager.GetTitleStyle()
-	ns := m.styleManager.GetNoStyle()
-	b.WriteString(ts.Render("Collection Value History") + "\n\n")
+	sm := m.styleManager
+	b.WriteString(sm.GetSecondaryStyle().Bold(true).Render("Collection Value History") + "\n\n")
 	valueStr := "N/A"
 	if m.collectionValue > 0 {
 		valueStr = fmt.Sprintf("$%.2f", m.collectionValue)
 	}
-	b.WriteString(ts.Render(valueStr) + "\n")
+	b.WriteString(sm.GetSuccessStyle().Bold(true).Render(valueStr) + "\n")
 	if len(m.valueHistory) >= 2 {
 		if change7d, ok := calcValueChange(m.valueHistory, 7); ok {
-			changeStyle := m.styleManager.applyBGFG(lipgloss.NewStyle().Foreground(lipgloss.Color("34")))
-			if change7d < 0 {
-				changeStyle = m.styleManager.applyBGFG(lipgloss.NewStyle().Foreground(lipgloss.Color("160")))
-			}
-			b.WriteString(ns.Render("7d: ") + changeStyle.Render(fmt.Sprintf("%+.1f%%", change7d)))
-			b.WriteString("  ")
+			b.WriteString(m.renderValueChange("7d", change7d) + "  ")
 		}
 		if change30d, ok := calcValueChange(m.valueHistory, 30); ok {
-			changeStyle := m.styleManager.applyBGFG(lipgloss.NewStyle().Foreground(lipgloss.Color("34")))
-			if change30d < 0 {
-				changeStyle = m.styleManager.applyBGFG(lipgloss.NewStyle().Foreground(lipgloss.Color("160")))
-			}
-			b.WriteString(ns.Render("30d: ") + changeStyle.Render(fmt.Sprintf("%+.1f%%", change30d)))
+			b.WriteString(m.renderValueChange("30d", change30d))
 		}
 		b.WriteString("\n")
 	}
@@ -558,6 +548,15 @@ func (m CardGameTabsModel) renderValueHistoryTab(availableHeight int) string {
 	}
 	b.WriteString(renderValueChart(m.valueHistory, contentWidth, chartHeight, m.styleManager))
 	return b.String()
+}
+
+func (m CardGameTabsModel) renderValueChange(label string, change float64) string {
+	sm := m.styleManager
+	changeStyle := sm.GetSuccessStyle()
+	if change < 0 {
+		changeStyle = sm.GetErrorStyle()
+	}
+	return sm.GetHelpStyle().Render(label+": ") + changeStyle.Render(fmt.Sprintf("%+.1f%%", change))
 }
 
 func (m CardGameTabsModel) renderCardGameTabsFooter() string {
@@ -574,8 +573,8 @@ func (m CardGameTabsModel) renderCardGameTabsFooter() string {
 func (m CardGameTabsModel) buildHelpText() string {
 	hb := NewHelpBuilder(m.configManager)
 	if m.currentTab == TabCardSearch {
-		return strings.Join([]string{
-			"Tab: Switch panel",
+		return JoinHelpHints(
+			RenderHelpHint("Tab", "Switch panel"),
 			hb.Build(
 				KeyItem{"increment_quantity", "+", "Add"},
 				KeyItem{"decrement_quantity", "Delete", "Remove"},
@@ -585,22 +584,22 @@ func (m CardGameTabsModel) buildHelpText() string {
 			hb.Pair("page_next", "Ctrl+N", "page_prev", "Ctrl+P", "Page"),
 			hb.Pair("nav_up", "↑", "nav_down", "↓", "Navigate"),
 			hb.Build(KeyItem{"back", "Q", "Back"}),
-		}, " | ")
+		)
 	}
 	if m.currentTab == TabCollection {
-		return strings.Join([]string{
-			"Tab: Switch panel",
+		return JoinHelpHints(
+			RenderHelpHint("Tab", "Switch panel"),
 			hb.Pair("nav_up", "↑", "nav_down", "↓", "Navigate"),
 			hb.Pair("nav_prev_tab", "Shift+Tab", "nav_next_tab", "Tab", "Switch tabs"),
 			hb.Build(KeyItem{"back", "Q", "Back"}),
-		}, " | ")
+		)
 	}
-	return strings.Join([]string{
+	return JoinHelpHints(
 		hb.Build(KeyItem{"settings", "F1", "Settings"}),
 		hb.Pair("nav_prev_tab", "Shift+Tab", "nav_next_tab", "Tab", "Switch tabs"),
 		hb.Pair("nav_up", "↑", "nav_down", "↓", "Navigate"),
 		hb.Build(KeyItem{"back", "Q", "Back"}, KeyItem{"quit", "Ctrl+C", "Quit"}),
-	}, " | ")
+	)
 }
 
 func (m CardGameTabsModel) updateTableForTab() CardGameTabsModel {
@@ -653,13 +652,14 @@ func (m CardGameTabsModel) renderCollectionTab(availableHeight int) string {
 	if m.collectionValue > 0 {
 		valueStr = fmt.Sprintf("$%.2f", m.collectionValue)
 	}
+	hs := m.styleManager.GetHelpStyle()
 	ns := m.styleManager.GetNoStyle()
-	topLeft := m.styleManager.GetTitleStyle().Render("Your Collection Summary") + "\n" +
-		ns.Render(fmt.Sprintf("Total unique: %d  Total: %d", len(m.userCollections), totalCards)) + "\n" +
-		ns.Render(fmt.Sprintf("Rarity: %s", m.rarityBreakdown)) + "\n" +
-		ns.Render(fmt.Sprintf("Value: %s", valueStr))
+	topLeft := hs.Render("Unique ") + ns.Render(fmt.Sprintf("%d", len(m.userCollections))) +
+		hs.Render("   Total ") + ns.Render(fmt.Sprintf("%d", totalCards)) +
+		hs.Render("   Value ") + m.styleManager.GetSuccessStyle().Bold(true).Render(valueStr) + "\n" +
+		hs.Render("Rarity ") + ns.Render(m.rarityBreakdown)
 	topLeftHeight := 6
-	topLeftPanel := RenderPanel(m.styleManager, topLeft, leftWidth, topLeftHeight, false, 1, 0)
+	topLeftPanel := RenderTitledPanel(m.styleManager, "Collection Summary", topLeft, leftWidth, topLeftHeight, false, 1, 0)
 	topLeftRenderedHeight := lipgloss.Height(topLeftPanel)
 	bottomLeftHeight := availableHeight - topLeftRenderedHeight
 	if bottomLeftHeight < 3 {
@@ -670,7 +670,7 @@ func (m CardGameTabsModel) renderCollectionTab(availableHeight int) string {
 	if len(m.setCompletions) == 0 {
 		bottomLeft = m.styleManager.GetBlurredStyle().Render("No sets found.")
 	}
-	bottomLeftPanel := RenderPanel(m.styleManager, bottomLeft, leftWidth, bottomLeftHeight, m.collectionTabFocus == 0, 1, 0)
+	bottomLeftPanel := RenderTitledPanel(m.styleManager, "Set Completion", bottomLeft, leftWidth, bottomLeftHeight, m.collectionTabFocus == 0, 1, 0)
 	leftColumn := lipgloss.JoinVertical(lipgloss.Left, topLeftPanel, bottomLeftPanel)
 	spotlightHeight := availableHeight
 	if spotlightHeight < 3 {
@@ -698,7 +698,7 @@ func (m CardGameTabsModel) renderCollectionTab(availableHeight int) string {
 			}
 		}
 		var sb strings.Builder
-		sb.WriteString(m.styleManager.GetTitleStyle().Render(selected.SetName) + "\n")
+		sb.WriteString(m.styleManager.GetSecondaryStyle().Bold(true).Render(selected.SetName) + "\n")
 		sb.WriteString(RenderProgressBar(selected.Percent, min(rightWidth-8, 20), m.styleManager) + " ")
 		sb.WriteString(m.styleManager.GetBlurredStyle().Render(fmt.Sprintf("%d/%d (%.0f%%)", selected.Owned, selected.Total, selected.Percent)) + "\n")
 		gridWidth := rightWidth - 6
@@ -708,7 +708,7 @@ func (m CardGameTabsModel) renderCollectionTab(availableHeight int) string {
 		sb.WriteString(renderSetProgressGrid(setCards, ownedCards, gridWidth, spotlightHeight-4, m.styleManager))
 		spotContent = sb.String()
 	}
-	rightPanel := RenderPanel(m.styleManager, spotContent, rightWidth, spotlightHeight, m.collectionTabFocus == 1, 1, 0)
+	rightPanel := RenderTitledPanel(m.styleManager, "Set Spotlight", spotContent, rightWidth, spotlightHeight, m.collectionTabFocus == 1, 1, 0)
 	return lipgloss.JoinHorizontal(lipgloss.Top, leftColumn, rightPanel)
 }
 
@@ -731,16 +731,15 @@ func (m CardGameTabsModel) renderCardSearchTab(availableHeight int) string {
 	rightTableWidth := max(rightWidth-4, 20)
 	tableHeight := CalcTableHeight(availableHeight, 2, 3)
 	leftContent := m.renderSearchLeftPanel(tableHeight, leftTableWidth)
-	leftPanel := RenderPanel(m.styleManager, leftContent, leftWidth, availableHeight, m.searchTabFocus == 0, 1, 0)
+	leftPanel := RenderTitledPanel(m.styleManager, "Search All Cards", leftContent, leftWidth, availableHeight, m.searchTabFocus == 0, 1, 0)
 	rightContent := m.renderSearchRightPanel(tableHeight, rightTableWidth)
-	rightPanel := RenderPanel(m.styleManager, rightContent, rightWidth, availableHeight, m.searchTabFocus == 1, 1, 0)
+	rightPanel := RenderTitledPanel(m.styleManager, "My Collection", rightContent, rightWidth, availableHeight, m.searchTabFocus == 1, 1, 0)
 	return lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, rightPanel)
 }
 
 func (m CardGameTabsModel) renderSearchLeftPanel(tableHeight, tableWidth int) string {
 	var b strings.Builder
-	b.WriteString(m.styleManager.GetTitleStyle().Render("Search All Cards") + "\n")
-	b.WriteString(m.styleManager.GetBlurredStyle().Render("Search: ") + m.styleManager.GetNoStyle().Render(m.searchInput.View()) + " " + m.styleManager.GetBlurredStyle().Render(m.cardPagination.StatusText()) + "\n")
+	b.WriteString(renderSearchPrompt(m.styleManager, m.searchInput.View(), m.cardPagination.StatusText()) + "\n")
 	if len(m.cardTable.Rows()) == 0 {
 		if m.searchInput.Value() == "" {
 			b.WriteString(m.styleManager.GetBlurredStyle().Render("No cards available.") + "\n")
@@ -759,8 +758,7 @@ func (m CardGameTabsModel) renderSearchLeftPanel(tableHeight, tableWidth int) st
 
 func (m CardGameTabsModel) renderSearchRightPanel(tableHeight, tableWidth int) string {
 	var b strings.Builder
-	b.WriteString(m.styleManager.GetTitleStyle().Render("My Collection") + "\n")
-	b.WriteString(m.styleManager.GetBlurredStyle().Render("Search: ") + m.styleManager.GetNoStyle().Render(m.userSearchInput.View()) + " " + m.styleManager.GetBlurredStyle().Render(m.collectionPagination.StatusText()) + "\n")
+	b.WriteString(renderSearchPrompt(m.styleManager, m.userSearchInput.View(), m.collectionPagination.StatusText()) + "\n")
 	if len(m.filteredCollection) == 0 {
 		b.WriteString(m.renderEmptySearchMessage(m.userSearchInput.Value(), "No cards in your collection yet.", "No cards match your search."))
 		return b.String()

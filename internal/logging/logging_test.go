@@ -34,3 +34,17 @@ func TestSanitizeQuery_MixedWhitespace(t *testing.T) {
 func TestSanitizeQuery_LeadingTrailingWhitespace(t *testing.T) {
 	assert.Equal(t, "SELECT 1", SanitizeQuery("  \t\n SELECT 1 \n\t  "))
 }
+
+func TestSanitizeArgs_NonSensitiveQuery(t *testing.T) {
+	args := []any{"a@b.com", 42}
+	assert.Equal(t, args, SanitizeArgs("SELECT * FROM cards WHERE id = ?", args))
+}
+
+func TestSanitizeArgs_PasswordQuery(t *testing.T) {
+	args := []any{"John", "a@b.com", "$2a$10$hash"}
+	assert.Equal(t, []any{"[REDACTED]", "[REDACTED]", "[REDACTED]"}, SanitizeArgs("INSERT INTO users (name, email, password_hash) VALUES (?, ?, ?)", args))
+}
+
+func TestSanitizeArgs_CaseInsensitive(t *testing.T) {
+	assert.Equal(t, []any{"[REDACTED]"}, SanitizeArgs("UPDATE users SET PASSWORD_HASH = ?", []any{"x"}))
+}

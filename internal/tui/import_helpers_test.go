@@ -81,11 +81,11 @@ func TestResolveSetCardCount_NilMaps(t *testing.T) {
 }
 
 func TestGetSetStatusIcon_Imported(t *testing.T) {
-	assert.Equal(t, "[x]", getSetStatusIcon(true))
+	assert.Equal(t, SuccessIcon, getSetStatusIcon(true))
 }
 
 func TestGetSetStatusIcon_NotImported(t *testing.T) {
-	assert.Equal(t, "[ ]", getSetStatusIcon(false))
+	assert.Equal(t, PendingIcon, getSetStatusIcon(false))
 }
 
 func TestCalculatePaginationRange(t *testing.T) {

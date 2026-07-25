@@ -18,7 +18,11 @@ type UIConfig struct {
 	CompactLists   bool            `json:"compact_lists"`
 	VisibleColumns map[string]bool `json:"visible_columns"`
 	ColumnOrder    []string        `json:"column_order"`
+	Theme          string          `json:"theme"`
 }
+
+// DefaultTheme is the theme applied when no theme is configured.
+const DefaultTheme = "aurora"
 
 // Default returns a RuntimeConfig with sensible defaults
 func Default() *RuntimeConfig {
@@ -78,6 +82,7 @@ func Default() *RuntimeConfig {
 			CompactLists:   false,
 			VisibleColumns: DefaultVisibleColumns(),
 			ColumnOrder:    DefaultColumnOrder(),
+			Theme:          DefaultTheme,
 		},
 	}
 }
@@ -99,7 +104,14 @@ func Load(path string) (*RuntimeConfig, error) {
 	initializeKeybindings(&cfg, defaults)
 	initializeVisibleColumns(&cfg, defaults)
 	initializeColumnOrder(&cfg, defaults)
+	initializeTheme(&cfg, defaults)
 	return &cfg, nil
+}
+
+func initializeTheme(cfg, defaults *RuntimeConfig) {
+	if cfg.UI.Theme == "" {
+		cfg.UI.Theme = defaults.UI.Theme
+	}
 }
 
 func DefaultVisibleColumns() map[string]bool {

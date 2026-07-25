@@ -272,7 +272,7 @@ func (m *mockDB) GetUserByEmail(email string) (*User, error) {
 
 	user, exists := m.users[email]
 	if !exists {
-		return nil, errors.New("user not found")
+		return nil, ErrUserNotFound
 	}
 	return user, nil
 }

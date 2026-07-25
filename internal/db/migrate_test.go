@@ -147,8 +147,7 @@ func TestLoadPendingMigrations(t *testing.T) {
 	require.NoError(t, err)
 	_, err = db.Exec("INSERT INTO schema_migrations (version, applied_at) VALUES (?, datetime('now'))", "001")
 	require.NoError(t, err)
-	migrationsDir := "./migrations"
-	pending, err := loadPendingMigrations(db, migrationsDir)
+	pending, err := loadPendingMigrations(db, os.DirFS("./migrations"))
 	require.NoError(t, err)
 	assert.GreaterOrEqual(t, len(pending), 0)
 	for _, m := range pending {
@@ -172,7 +171,8 @@ func TestApplyMigration(t *testing.T) {
 	require.NoError(t, err)
 	m := migration{
 		version: "001",
-		path:    migrationPath,
+		path:    filepath.Base(migrationPath),
+		fsys:    os.DirFS(tempDir),
 	}
 	err = applyMigration(db, m)
 	require.NoError(t, err)
@@ -199,7 +199,8 @@ func TestApplyMigration_InvalidSQL(t *testing.T) {
 	require.NoError(t, err)
 	m := migration{
 		version: "999",
-		path:    migrationPath,
+		path:    filepath.Base(migrationPath),
+		fsys:    os.DirFS(tempDir),
 	}
 	err = applyMigration(db, m)
 	require.Error(t, err)
@@ -223,4 +224,18 @@ func TestMigration_Characterization(t *testing.T) {
 		),
 	}
 	ctesting.VerifyCharacterizationTestsAndResults(t, tests, false)
+}
+
+// TestApplyEmbeddedMigrations verifies migrations compiled into the binary apply cleanly
+func TestApplyEmbeddedMigrations(t *testing.T) {
+	db := testutil.SetupTestDB(t)
+	defer testutil.CleanupTestDB(t, db)
+	err := ApplyEmbeddedMigrations(db)
+	require.NoError(t, err)
+	var count int
+	err = db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&count)
+	require.NoError(t, err)
+	assert.Greater(t, count, 0, "Embedded migrations should be applied")
+	err = ApplyEmbeddedMigrations(db)
+	require.NoError(t, err)
 }

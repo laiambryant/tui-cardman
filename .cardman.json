@@ -50,6 +50,7 @@
       "artist",
       "expansion",
       "quantity"
-    ]
+    ],
+    "theme": "classic"
   }
 }

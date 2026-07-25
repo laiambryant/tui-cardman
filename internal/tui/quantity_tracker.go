@@ -61,18 +61,6 @@ func (qt *QuantityTracker) buildUpdates() map[int64]int {
 	return updates
 }
 
-// snapshot returns the full current state of all cards, including pending changes.
-func (qt *QuantityTracker) snapshot() map[int64]int {
-	combined := make(map[int64]int, len(qt.db))
-	for id, qty := range qt.db {
-		combined[id] = qty
-	}
-	for id, delta := range qt.temp {
-		combined[id] += delta
-	}
-	return combined
-}
-
 // commit applies updates to the db state and clears pending changes.
 func (qt *QuantityTracker) commit(updates map[int64]int) {
 	for id, qty := range updates {

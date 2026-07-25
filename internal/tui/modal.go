@@ -100,8 +100,12 @@ func (m ModalModel) View() string {
 	if m.width == 0 || m.height == 0 {
 		return m.renderModalBox()
 	}
-	header := m.styleManager.GetTitleStyle().Render(m.title)
-	footer := m.styleManager.GetBlurredStyle().Render("← → to select • enter to confirm • esc to cancel")
+	header := RenderBreadcrumbs(m.styleManager, m.title)
+	footer := JoinHelpHints(
+		RenderHelpHint("←/→", "Select"),
+		RenderHelpHint("Enter", "Confirm"),
+		RenderHelpHint("Esc", "Cancel"),
+	)
 	layout := calculateFrameLayout(lipgloss.Height(header), lipgloss.Height(footer), m.width, m.height)
 	body := m.renderModalBody(layout.ContentWidth, layout.BodyContentHeight)
 	return renderFramedViewWithLayout(header, body, footer, layout, m.styleManager)
@@ -112,9 +116,10 @@ func (m ModalModel) renderModalBody(contentWidth, contentHeight int) string {
 	if contentWidth > 0 {
 		panelWidth = min(60, contentWidth)
 	}
-	panelStyle := m.styleManager.Box(m.styleManager.scheme.Title, panelWidth, 0, 0, 4, 2).Align(lipgloss.Center)
+	panelStyle := m.styleManager.Box(m.styleManager.scheme.Focused, panelWidth, 0, 0, 4, 2).Align(lipgloss.Center)
 	messageStyle := m.styleManager.GetBlurredStyle().Align(lipgloss.Center)
 	var b strings.Builder
+	b.WriteString(m.styleManager.GetTitleStyle().Bold(true).Render(m.title) + "\n\n")
 	b.WriteString(messageStyle.Render(m.message) + "\n\n")
 	b.WriteString(m.renderButtons())
 	panel := panelStyle.Render(b.String())

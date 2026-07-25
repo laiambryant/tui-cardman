@@ -184,7 +184,7 @@ func (s ImportState) Render(sm *StyleManager) string {
 	case importPhaseInput:
 		b.WriteString(sm.GetTitleStyle().Render("Import CSV") + "\n")
 		b.WriteString(sm.GetBlurredStyle().Render("File path: ") + s.pathInput.View() + "\n")
-		b.WriteString(sm.GetBlurredStyle().Render("Enter: Load • Esc: Cancel"))
+		b.WriteString(JoinHelpHints(RenderHelpHint("Enter", "Load"), RenderHelpHint("Esc", "Cancel")))
 
 	case importPhaseWorking:
 		b.WriteString(sm.GetBlurredStyle().Render(ImportIcon + " Reading CSV and matching cards..."))
@@ -192,7 +192,7 @@ func (s ImportState) Render(sm *StyleManager) string {
 	case importPhaseResult:
 		if s.errMsg != "" {
 			b.WriteString(sm.GetErrorStyle().Render(s.errMsg) + "\n")
-			b.WriteString(sm.GetBlurredStyle().Render("Esc: Close"))
+			b.WriteString(RenderHelpHint("Esc", "Close"))
 		} else {
 			b.WriteString(sm.GetTitleStyle().Render("Import Summary") + "\n")
 			b.WriteString(sm.GetNoStyle().Render(s.result.Summary()) + "\n")
@@ -211,9 +211,9 @@ func (s ImportState) Render(sm *StyleManager) string {
 				}
 			}
 			if s.result.Imported > 0 {
-				b.WriteString(sm.GetBlurredStyle().Render("Enter/Y: Apply • Esc/N: Cancel"))
+				b.WriteString(JoinHelpHints(RenderHelpHint("Enter/Y", "Apply"), RenderHelpHint("Esc/N", "Cancel")))
 			} else {
-				b.WriteString(sm.GetBlurredStyle().Render("No matching cards found. Esc: Close"))
+				b.WriteString(sm.GetBlurredStyle().Render("No matching cards found. ") + RenderHelpHint("Esc", "Close"))
 			}
 		}
 	}

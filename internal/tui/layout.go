@@ -10,11 +10,16 @@ const (
 	frameBorderSize = 2
 	framePaddingX   = 1
 	framePaddingY   = 0
+	headerBarWidth  = 1
+	frameTopMargin  = 1
 )
+
+var headerAccentBorder = lipgloss.Border{Left: "▌"}
 
 type FrameLayout struct {
 	Width               int
 	Height              int
+	TopMargin           int
 	HeaderHeight        int
 	BodyHeight          int
 	FooterHeight        int
@@ -42,10 +47,13 @@ func renderFramedViewWithLayout(header, body, footer string, layout FrameLayout,
 	header = limitLines(header, layout.HeaderContentHeight)
 	body = limitLines(body, layout.BodyContentHeight)
 	footer = limitLines(footer, layout.FooterContentHeight)
-	headerBox := renderFrameSection(header, layout.Width, layout.HeaderHeight, styleManager)
+	headerBox := renderHeaderSection(header, layout.Width, layout.HeaderHeight, styleManager)
 	bodyBox := renderFrameSection(body, layout.Width, layout.BodyHeight, styleManager)
-	footerBox := renderFrameSection(footer, layout.Width, layout.FooterHeight, styleManager)
+	footerBox := renderFooterSection(footer, layout.Width, layout.FooterHeight, styleManager)
 	frame := lipgloss.JoinVertical(lipgloss.Top, headerBox, bodyBox, footerBox)
+	if layout.TopMargin > 0 {
+		frame = strings.Repeat("\n", layout.TopMargin) + frame
+	}
 	frame = lipgloss.NewStyle().Width(layout.Width).Height(layout.Height).Render(frame)
 	if styleManager == nil {
 		return frame
@@ -58,31 +66,53 @@ func calculateFrameLayout(headerLines, footerLines, width, height int) FrameLayo
 		return FrameLayout{Width: width, Height: height}
 	}
 	minSectionHeight := resolveMinSectionHeight(height)
-	headerLines = max(headerLines, 1)
-	footerLines = max(footerLines, 1)
-	headerHeight := headerLines + frameBorderSize + framePaddingY*2
-	footerHeight := footerLines + frameBorderSize + framePaddingY*2
-	bodyHeight := height - headerHeight - footerHeight
+	topMargin := frameTopMargin
+	if height < 10 {
+		topMargin = 0
+	}
+	headerHeight := max(headerLines, 1)
+	footerHeight := max(footerLines, 1)
+	bodyHeight := height - topMargin - headerHeight - footerHeight
 	if bodyHeight < minSectionHeight {
 		deficit := minSectionHeight - bodyHeight
 		headerHeight, footerHeight = reduceSectionHeights(headerHeight, footerHeight, deficit, minSectionHeight)
-		bodyHeight = height - headerHeight - footerHeight
+		bodyHeight = height - topMargin - headerHeight - footerHeight
 		if bodyHeight < 1 {
 			bodyHeight = 1
 		}
 	}
 	contentWidth := max(width-frameBorderSize-framePaddingX*2, 1)
-	headerContentHeight := max(headerHeight-frameBorderSize-framePaddingY*2, 0)
 	bodyContentHeight := max(bodyHeight-frameBorderSize-framePaddingY*2, 0)
-	footerContentHeight := max(footerHeight-frameBorderSize-framePaddingY*2, 0)
-	return FrameLayout{Width: width, Height: height, HeaderHeight: headerHeight, BodyHeight: bodyHeight, FooterHeight: footerHeight, ContentWidth: contentWidth, HeaderContentHeight: headerContentHeight, BodyContentHeight: bodyContentHeight, FooterContentHeight: footerContentHeight}
+	return FrameLayout{Width: width, Height: height, TopMargin: topMargin, HeaderHeight: headerHeight, BodyHeight: bodyHeight, FooterHeight: footerHeight, ContentWidth: contentWidth, HeaderContentHeight: headerHeight, BodyContentHeight: bodyContentHeight, FooterContentHeight: footerHeight}
 }
 
 func renderFrameSection(content string, width, height int, styleManager *StyleManager) string {
 	contentWidth := max(width-frameBorderSize-framePaddingX*2, 0)
 	contentHeight := max(height-frameBorderSize-framePaddingY*2, 0)
 
-	style := mstyle(styleManager).Box(styleManager.scheme.Blurred, contentWidth, contentHeight, 0, framePaddingX, framePaddingY)
+	style := mstyle(styleManager).Box(styleManager.scheme.Subtle, contentWidth, contentHeight, 0, framePaddingX, framePaddingY)
+	return style.Render(content)
+}
+
+func renderHeaderSection(content string, width, height int, styleManager *StyleManager) string {
+	sm := mstyle(styleManager)
+	contentWidth := max(width-headerBarWidth-framePaddingX*2, 1)
+	style := sm.applyBGFG(lipgloss.NewStyle().
+		Border(headerAccentBorder, false, false, false, true).
+		BorderForeground(sm.scheme.Focused).
+		Padding(0, framePaddingX).
+		Width(contentWidth).
+		Height(max(height, 1)))
+	return style.Render(content)
+}
+
+func renderFooterSection(content string, width, height int, styleManager *StyleManager) string {
+	sm := mstyle(styleManager)
+	contentWidth := max(width-framePaddingX*2-headerBarWidth, 1)
+	style := sm.applyBGFG(lipgloss.NewStyle().
+		Padding(0, framePaddingX+headerBarWidth, 0, framePaddingX+headerBarWidth).
+		Width(contentWidth).
+		Height(max(height, 1)))
 	return style.Render(content)
 }
 
@@ -134,9 +164,8 @@ func resolveMinSectionHeight(height int) int {
 }
 
 func reduceSectionHeights(headerHeight, footerHeight, deficit, minSectionHeight int) (int, int) {
-	// Ensure we never reduce below 3 to maintain at least 1 line of visible content
-	// (3 = 1 content line + 2 for border)
-	minAllowedHeight := max(minSectionHeight, 3)
+	// Header and footer are borderless bars, so one line is the floor for each.
+	minAllowedHeight := 1
 
 	for deficit > 0 && (headerHeight > minAllowedHeight || footerHeight > minAllowedHeight) {
 		if headerHeight > minAllowedHeight {

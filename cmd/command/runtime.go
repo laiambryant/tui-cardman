@@ -21,7 +21,7 @@ type commandRuntime struct {
 	db      *sql.DB
 }
 
-func newCommandRuntime(withDB bool, applyMigrations bool) (*commandRuntime, error) {
+func newCommandRuntime(withDB, applyMigrations bool) (*commandRuntime, error) {
 	if err := config.LoadConfig(); err != nil {
 		return nil, fmt.Errorf("load config: %w", err)
 	}
@@ -50,7 +50,7 @@ func newCommandRuntime(withDB bool, applyMigrations bool) (*commandRuntime, erro
 	}
 
 	if applyMigrations {
-		if err := dbpkg.ApplyMigrations(database, "internal/db/migrations"); err != nil {
+		if err := dbpkg.ApplyEmbeddedMigrations(database); err != nil {
 			_ = database.Close()
 			_ = logFile.Close()
 			return nil, fmt.Errorf("apply migrations: %w", err)
