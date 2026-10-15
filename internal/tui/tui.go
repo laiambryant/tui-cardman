@@ -331,8 +331,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case tea.WindowSizeMsg:
-		m.width = msg.Width
-		m.height = msg.Height
+		m.resize(msg)
+		return m, nil
 	case tea.KeyMsg:
 		s := msg.String()
 		action := GetAction(m.configManager, s)
@@ -361,6 +361,26 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 	return m.handleScreenUpdates(msg)
+}
+
+// resize records the terminal size and passes it to every open screen, so a
+// screen returned to after settings is laid out for the current size.
+func (m *Model) resize(msg tea.WindowSizeMsg) {
+	m.width = msg.Width
+	m.height = msg.Height
+	m.cardGameTabs, _ = m.cardGameTabs.Update(msg)
+	if m.listsModel != nil {
+		*m.listsModel, _ = m.listsModel.Update(msg)
+	}
+	if m.deckBuilderModel != nil {
+		*m.deckBuilderModel, _ = m.deckBuilderModel.Update(msg)
+	}
+	if m.importModel != nil {
+		*m.importModel, _ = m.importModel.Update(msg)
+	}
+	if m.settingsModel != nil {
+		*m.settingsModel, _ = m.settingsModel.Update(msg)
+	}
 }
 
 func (m *Model) handleMainScreenKey(action, s string) (tea.Model, tea.Cmd) {

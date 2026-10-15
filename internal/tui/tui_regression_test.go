@@ -227,3 +227,22 @@ func TestRarityBreakdownIsDeterministic(t *testing.T) {
 	}
 	assert.Equal(t, "C:1 R:1 RH:1 U:1", first, "rarities are abbreviated by word initials")
 }
+
+func TestResizeReachesScreenBehindSettings(t *testing.T) {
+	db := setupTUIDB(t)
+	m, err := NewModel(db, false)
+	require.NoError(t, err)
+	m = update(t, m, splashDoneMsg{}, tea.WindowSizeMsg{Width: 100, Height: 30})
+	m.inputs[0].SetValue("Ash")
+	m.inputs[1].SetValue("Ketchum")
+	m.inputs[2].SetValue("ash@example.com")
+	m.focusIndex = len(m.inputs)
+	m = update(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	_, _ = m.navigateToMode(&m.cardGames[0], int(MenuMyLists))
+	require.Equal(t, ScreenLists, m.screen)
+
+	m = update(t, m, keyF1, tea.WindowSizeMsg{Width: 160, Height: 50}, keyEsc)
+	require.Equal(t, ScreenLists, m.screen)
+	assert.Equal(t, 160, m.listsModel.width)
+	assert.Equal(t, 50, m.listsModel.height)
+}
