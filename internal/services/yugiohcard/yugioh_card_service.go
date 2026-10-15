@@ -33,19 +33,10 @@ const upsertQuery = `INSERT OR REPLACE INTO yugioh_cards
 
 func (s *YuGiOhCardServiceImpl) UpsertYuGiOhCard(ctx context.Context, tx *sql.Tx, cardID int64, yc *model.YuGiOhCard) error {
 	markersJSON, _ := json.Marshal(yc.LinkMarkers)
-
-	var attribute, race *string
-	if yc.Attribute != nil {
-		attribute = yc.Attribute
-	}
-	if yc.Race != nil {
-		race = yc.Race
-	}
-
 	if _, err := db.ExecContextTx(ctx, tx, upsertQuery,
 		cardID, yc.CardType, yc.FrameType, yc.Description,
 		yc.ATK, yc.DEF, yc.Level,
-		attribute, race, yc.Scale, yc.LinkVal,
+		yc.Attribute, yc.Race, yc.Scale, yc.LinkVal,
 		string(markersJSON),
 	); err != nil {
 		slog.Error("failed to upsert yugioh card", "card_id", cardID, "error", err)

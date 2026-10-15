@@ -2,6 +2,7 @@
 package export
 
 import (
+	"bufio"
 	"encoding/csv"
 	"fmt"
 	"os"
@@ -18,6 +19,9 @@ type CardRow struct {
 	Number   string
 	Rarity   string
 	Quantity int
+	// Category is the Pokemon TCG card category ("Pokemon", "Trainer" or
+	// "Energy") when known. It is only used by the PTCGO format.
+	Category string
 }
 
 func ToCSV(rows []CardRow, filepath string) (err error) {
@@ -47,79 +51,56 @@ func ToCSV(rows []CardRow, filepath string) (err error) {
 }
 
 func ToText(rows []CardRow, filepath string) error {
-	f, err := os.Create(filepath)
-	if err != nil {
-		return fmt.Errorf("failed to create file: %w", err)
-	}
-	defer f.Close()
-	header := fmt.Sprintf("%-30s %-20s %-8s %-8s %-15s %s\n", "Name", "Set", "Code", "Number", "Rarity", "Qty")
-	if _, err := f.WriteString(header); err != nil {
-		return err
-	}
-	if _, err := f.WriteString(strings.Repeat("-", 90) + "\n"); err != nil {
-		return err
-	}
-	for _, r := range rows {
-		line := fmt.Sprintf("%-30s %-20s %-8s %-8s %-15s %d\n", r.Name, r.SetName, r.SetCode, r.Number, r.Rarity, r.Quantity)
-		if _, err := f.WriteString(line); err != nil {
-			return err
+	return writeFile(filepath, func(w *bufio.Writer) {
+		fmt.Fprintf(w, "%-30s %-20s %-8s %-8s %-15s %s\n", "Name", "Set", "Code", "Number", "Rarity", "Qty")
+		w.WriteString(strings.Repeat("-", 90) + "\n")
+		for _, r := range rows {
+			fmt.Fprintf(w, "%-30s %-20s %-8s %-8s %-15s %d\n", r.Name, r.SetName, r.SetCode, r.Number, r.Rarity, r.Quantity)
 		}
-	}
-	return nil
+	})
 }
 
+// ToPTCGO writes a deck list in the Pokemon TCG Online text format, grouped
+// into Pokémon, Trainer and Energy sections.
 func ToPTCGO(deckName string, rows []CardRow, filepath string) error {
-	f, err := os.Create(filepath)
-	if err != nil {
-		return fmt.Errorf("failed to create file: %w", err)
-	}
-	defer f.Close()
-	pokemon := []CardRow{}
-	trainers := []CardRow{}
-	energy := []CardRow{}
+	sections := []struct {
+		title string
+		rows  []CardRow
+	}{{title: "Pokémon"}, {title: "Trainer Cards"}, {title: "Energy"}}
 	for _, r := range rows {
-		lower := strings.ToLower(r.Name)
-		if strings.Contains(lower, "energy") {
-			energy = append(energy, r)
-		} else if strings.Contains(lower, "supporter") || strings.Contains(lower, "stadium") || strings.Contains(lower, "item") || isTrainerRarity(r.Rarity) {
-			trainers = append(trainers, r)
-		} else {
-			pokemon = append(pokemon, r)
+		i := ptcgoSection(r)
+		sections[i].rows = append(sections[i].rows, r)
+	}
+	return writeFile(filepath, func(w *bufio.Writer) {
+		fmt.Fprintf(w, "****** %s ******\n", deckName)
+		for _, sec := range sections {
+			fmt.Fprintf(w, "\n##%s - %d\n\n", sec.title, sumQty(sec.rows))
+			for _, r := range sec.rows {
+				fmt.Fprintf(w, "* %d %s %s %s\n", r.Quantity, r.Name, r.SetCode, r.Number)
+			}
 		}
-	}
-	if _, err := f.WriteString("****** " + deckName + " ******\n\n"); err != nil {
-		return err
-	}
-	if _, err := f.WriteString("##Pokémon - " + fmt.Sprintf("%d", sumQty(pokemon)) + "\n\n"); err != nil {
-		return err
-	}
-	for _, r := range pokemon {
-		if _, err := fmt.Fprintf(f, "* %d %s %s %s\n", r.Quantity, r.Name, r.SetCode, r.Number); err != nil {
-			return err
-		}
-	}
-	if _, err := f.WriteString("\n##Trainer Cards - " + fmt.Sprintf("%d", sumQty(trainers)) + "\n\n"); err != nil {
-		return err
-	}
-	for _, r := range trainers {
-		if _, err := fmt.Fprintf(f, "* %d %s %s %s\n", r.Quantity, r.Name, r.SetCode, r.Number); err != nil {
-			return err
-		}
-	}
-	if _, err := f.WriteString("\n##Energy - " + fmt.Sprintf("%d", sumQty(energy)) + "\n\n"); err != nil {
-		return err
-	}
-	for _, r := range energy {
-		if _, err := fmt.Fprintf(f, "* %d %s %s %s\n", r.Quantity, r.Name, r.SetCode, r.Number); err != nil {
-			return err
-		}
-	}
-	return nil
+	})
 }
 
-func isTrainerRarity(rarity string) bool {
-	lower := strings.ToLower(rarity)
-	return strings.Contains(lower, "trainer") || strings.Contains(lower, "uncommon") || lower == ""
+// ptcgoSection returns 0 for Pokémon, 1 for trainers and 2 for energy. The
+// card category is used when known; otherwise the name is the only hint.
+func ptcgoSection(r CardRow) int {
+	switch strings.ToLower(r.Category) {
+	case "pokemon":
+		return 0
+	case "trainer":
+		return 1
+	case "energy":
+		return 2
+	}
+	lower := strings.ToLower(r.Name)
+	switch {
+	case strings.Contains(lower, "energy"):
+		return 2
+	case strings.Contains(lower, "supporter") || strings.Contains(lower, "stadium"):
+		return 1
+	}
+	return 0
 }
 
 func sumQty(rows []CardRow) int {
@@ -128,6 +109,26 @@ func sumQty(rows []CardRow) int {
 		total += r.Quantity
 	}
 	return total
+}
+
+// writeFile creates path, lets write fill it and reports write, flush and
+// close errors.
+func writeFile(path string, write func(w *bufio.Writer)) (err error) {
+	f, err := os.Create(path)
+	if err != nil {
+		return fmt.Errorf("failed to create file: %w", err)
+	}
+	defer func() {
+		if closeErr := f.Close(); closeErr != nil && err == nil {
+			err = fmt.Errorf("failed to close file: %w", closeErr)
+		}
+	}()
+	w := bufio.NewWriter(f)
+	write(w)
+	if err := w.Flush(); err != nil {
+		return fmt.Errorf("failed to write file: %w", err)
+	}
+	return nil
 }
 
 // GenerateFilename builds "<type>_<name>_<date>.<ext>". The name is lowercased

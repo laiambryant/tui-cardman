@@ -10,76 +10,46 @@ import (
 	"github.com/laiambryant/tui-cardman/internal/model"
 )
 
-// ButtonStrategy defines the interface for configuration storage strategies
+// ButtonStrategy defines how the configuration is stored.
 type ButtonStrategy interface {
 	Load() (*RuntimeConfig, error)
 	Save(config *RuntimeConfig) error
-	HasUnsavedChanges() bool
-	MarkUnsaved()
-	IsAvailable() bool
 }
 
-// LocalStrategy handles file-based configuration storage
+// LocalStrategy stores the configuration in a JSON file.
 type LocalStrategy struct {
 	configPath string
 }
 
 // NewLocalStrategy creates a new local file strategy
 func NewLocalStrategy(configPath string) *LocalStrategy {
-	return &LocalStrategy{
-		configPath: configPath,
-	}
+	return &LocalStrategy{configPath: configPath}
 }
 
 func (s *LocalStrategy) Load() (*RuntimeConfig, error) {
-	cfg, err := Load(s.configPath)
-	if err != nil {
-		return nil, err
-	}
-	return cfg, nil
+	return Load(s.configPath)
 }
 
 func (s *LocalStrategy) Save(config *RuntimeConfig) error {
-	if err := Save(config, s.configPath); err != nil {
-		return fmt.Errorf("failed to save config: %w", err)
-	}
-	return nil
-}
-
-func (s *LocalStrategy) HasUnsavedChanges() bool {
-	return false
-}
-
-func (s *LocalStrategy) MarkUnsaved() {
-}
-
-func (s *LocalStrategy) IsAvailable() bool {
-	return true
+	return Save(config, s.configPath)
 }
 
 // ButtonConfigService interface for remote strategy (to avoid import cycle)
 type ButtonConfigService interface {
 	GetByUserID(ctx context.Context, userID int64) (*model.ButtonConfiguration, error)
 	Save(ctx context.Context, userID int64, config *RuntimeConfig) error
-	InitializeDefault(ctx context.Context, userID int64) error
 	MigrateLocalToDB(ctx context.Context, userID int64, localPath string) error
 }
 
-// RemoteStrategy handles database-based configuration storage
+// RemoteStrategy stores a user's configuration in the database.
 type RemoteStrategy struct {
-	service           ButtonConfigService
-	userID            int64
-	hasUnsavedChanges bool
-	defaultConfig     *RuntimeConfig
+	service ButtonConfigService
+	userID  int64
 }
 
 // NewRemoteStrategy creates a new remote database strategy
-func NewRemoteStrategy(service ButtonConfigService, userID int64, defaultConfig *RuntimeConfig) *RemoteStrategy {
-	return &RemoteStrategy{
-		service:       service,
-		userID:        userID,
-		defaultConfig: defaultConfig,
-	}
+func NewRemoteStrategy(service ButtonConfigService, userID int64) *RemoteStrategy {
+	return &RemoteStrategy{service: service, userID: userID}
 }
 
 // MigrateFromLocal migrates a local config file to the database if the file exists.
@@ -95,50 +65,32 @@ func (s *RemoteStrategy) MigrateFromLocal(localPath string) {
 	}
 }
 
+// Load returns the user's configuration, or the defaults when there is none
+// or it cannot be read.
 func (s *RemoteStrategy) Load() (*RuntimeConfig, error) {
 	if s.service == nil {
-		slog.Debug("no remote service available, using default config")
-		return s.defaultConfig, nil
+		return Default(), nil
 	}
-	slog.Info("loading configuration from database", "user_id", s.userID)
 	buttonConfig, err := s.service.GetByUserID(context.Background(), s.userID)
 	if err != nil {
 		slog.Debug("no database configuration found, using default", "user_id", s.userID, "error", err)
-		return s.defaultConfig, nil
+		return Default(), nil
 	}
-	var dbConfig RuntimeConfig
-	if err := json.Unmarshal([]byte(buttonConfig.Configuration), &dbConfig); err != nil {
+	var cfg RuntimeConfig
+	if err := json.Unmarshal([]byte(buttonConfig.Configuration), &cfg); err != nil {
 		slog.Error("failed to unmarshal database configuration", "user_id", s.userID, "error", err)
-		return s.defaultConfig, nil
+		return Default(), nil
 	}
-	initializeKeybindings(&dbConfig, s.defaultConfig)
-	s.hasUnsavedChanges = false
-	slog.Info("loaded configuration from database", "user_id", s.userID)
-	return &dbConfig, nil
+	applyDefaults(&cfg)
+	return &cfg, nil
 }
 
 func (s *RemoteStrategy) Save(config *RuntimeConfig) error {
 	if s.service == nil {
 		return ErrNoRemoteServiceAvailable
 	}
-	slog.Info("saving configuration to database", "user_id", s.userID)
 	if err := s.service.Save(context.Background(), s.userID, config); err != nil {
 		return fmt.Errorf("failed to save config: %w", err)
 	}
-	s.hasUnsavedChanges = false
-	slog.Info("configuration saved to database", "user_id", s.userID)
 	return nil
-}
-
-func (s *RemoteStrategy) HasUnsavedChanges() bool {
-	return s.hasUnsavedChanges
-}
-
-func (s *RemoteStrategy) MarkUnsaved() {
-	s.hasUnsavedChanges = true
-	slog.Debug("marked configuration as unsaved", "user_id", s.userID)
-}
-
-func (s *RemoteStrategy) IsAvailable() bool {
-	return s.service != nil
 }

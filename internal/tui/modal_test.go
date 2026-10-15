@@ -22,13 +22,6 @@ func TestModalModel_HideShow(t *testing.T) {
 	assert.Equal(t, 0, m.selected, "Show() should reset selection to 0")
 }
 
-func TestModalModel_SetMessage(t *testing.T) {
-	m := NewModalModel("Title", "Message", nil, nil, defaultStyleManager)
-	m = m.SetMessage("New Title", "New Message")
-	assert.Equal(t, "New Title", m.title)
-	assert.Equal(t, "New Message", m.message)
-}
-
 func TestModalModel_SetDimensions(t *testing.T) {
 	m := NewModalModel("Title", "Message", nil, nil, defaultStyleManager)
 	m = m.SetDimensions(80, 24)

@@ -890,3 +890,30 @@ func TestUpsertCard_UpdateError(t *testing.T) {
 	assert.Equal(t, "Test Card", name)
 	assert.Equal(t, "Common", rarity)
 }
+
+func TestGetCardsByGameID_LoadsPokemonCategory(t *testing.T) {
+	db := testutil.SetupTestDB(t)
+	defer testutil.CleanupTestDB(t, db)
+	testutil.ApplyTestMigrations(t, db, "../../db/migrations")
+	gameID, _, setID, _ := setupCardTestData(t, db)
+
+	res, err := db.Exec(`INSERT INTO cards (card_game_id, set_id, api_id, name, number) VALUES (?, ?, 'base1-88', 'Professor Oak', '88')`, gameID, setID)
+	require.NoError(t, err)
+	oakID, err := res.LastInsertId()
+	require.NoError(t, err)
+	_, err = db.Exec(`INSERT INTO pokemon_cards (card_id, category) VALUES (?, 'Trainer')`, oakID)
+	require.NoError(t, err)
+	_, err = db.Exec(`INSERT INTO cards (card_game_id, set_id, api_id, name, number) VALUES (?, ?, 'base1-1', 'Alakazam', '1')`, gameID, setID)
+	require.NoError(t, err)
+
+	cards, err := NewCardService(db).GetCardsByGameID(gameID)
+	require.NoError(t, err)
+	require.Len(t, cards, 2)
+	assert.Equal(t, "Alakazam", cards[0].Name)
+	assert.Empty(t, cards[0].Category, "cards without Pokemon details have no category")
+	assert.Equal(t, "Trainer", cards[1].Category)
+
+	card, err := NewCardService(db).GetCardByGameAndSetCodeAndNumber(gameID, "base1", "88")
+	require.NoError(t, err)
+	assert.Equal(t, "Trainer", card.Category)
+}

@@ -27,8 +27,10 @@ type Card struct {
 	Number        string    `json:"number"`
 	Artist        string    `json:"artist"`
 	UpdatedAt     time.Time `json:"updated_at"`
-	CardGame      *CardGame `json:"card_game,omitempty"`
-	Set           *Set      `json:"set,omitempty"`
+	// Category is the Pokemon TCG category (Pokemon, Trainer, Energy); empty for other games.
+	Category string    `json:"category,omitempty"`
+	CardGame *CardGame `json:"card_game,omitempty"`
+	Set      *Set      `json:"set,omitempty"`
 }
 
 // UserCollection represents a user's card collection entry

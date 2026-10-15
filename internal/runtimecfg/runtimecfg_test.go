@@ -199,318 +199,105 @@ func TestGetConfigPath_EnvOverride(t *testing.T) {
 
 // --- Manager tests ---
 
+func newTestManager(t *testing.T) *Manager {
+	t.Helper()
+	m, err := NewManager(true, filepath.Join(t.TempDir(), "config.json"), nil, 0)
+	require.NoError(t, err)
+	return m
+}
+
 func TestManager_Get_ReturnsDefensiveCopy(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "config.json")
-
-	strategy := NewLocalStrategy(path)
-	cfg := Default()
-
-	m := &Manager{
-		config:      cfg,
-		strategy:    strategy,
-		subscribers: make([]Subscriber, 0),
-		keyToAction: buildKeyToActionMap(cfg.Keybindings),
-	}
+	m := newTestManager(t)
 
 	got1 := m.Get()
 	got1.Keybindings["quit"] = "MUTATED"
+	got1.UI.VisibleColumns["artist"] = true
+	got1.UI.ColumnOrder[0] = "MUTATED"
 
 	got2 := m.Get()
 	assert.NotEqual(t, "MUTATED", got2.Keybindings["quit"], "Get() should return a defensive copy")
+	assert.False(t, got2.UI.VisibleColumns["artist"])
+	assert.Equal(t, "name", got2.UI.ColumnOrder[0])
 }
 
 func TestManager_KeyForAction(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "config.json")
-
-	strategy := NewLocalStrategy(path)
-	cfg := Default()
-
-	m := &Manager{
-		config:      cfg,
-		strategy:    strategy,
-		subscribers: make([]Subscriber, 0),
-		keyToAction: buildKeyToActionMap(cfg.Keybindings),
-	}
-
-	key := m.KeyForAction("quit")
-	assert.Equal(t, cfg.Keybindings["quit"], key)
-}
-
-func TestManager_KeyForAction_UnknownAction(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "config.json")
-
-	strategy := NewLocalStrategy(path)
-	cfg := Default()
-
-	m := &Manager{
-		config:      cfg,
-		strategy:    strategy,
-		subscribers: make([]Subscriber, 0),
-		keyToAction: buildKeyToActionMap(cfg.Keybindings),
-	}
-
-	key := m.KeyForAction("nonexistent_action")
-	assert.Empty(t, key)
+	m := newTestManager(t)
+	assert.Equal(t, Default().Keybindings["quit"], m.KeyForAction("quit"))
+	assert.Empty(t, m.KeyForAction("nonexistent_action"))
 }
 
 func TestManager_MatchAction_AllBindings(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "config.json")
-
-	strategy := NewLocalStrategy(path)
-	cfg := Default()
-
-	m := &Manager{
-		config:      cfg,
-		strategy:    strategy,
-		subscribers: make([]Subscriber, 0),
-		keyToAction: buildKeyToActionMap(cfg.Keybindings),
+	m := newTestManager(t)
+	for action, key := range Default().Keybindings {
+		assert.Equal(t, action, m.MatchAction(key), "key %q should match action %q", key, action)
 	}
-
-	// Every keybinding should match its action
-	for action, key := range cfg.Keybindings {
-		matched := m.MatchAction(key)
-		assert.Equal(t, action, matched, "key %q should match action %q", key, action)
-	}
+	assert.Empty(t, m.MatchAction("ctrl+shift+z"))
 }
 
-func TestManager_MatchAction_WithFilteredActions(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "config.json")
-
-	strategy := NewLocalStrategy(path)
-	cfg := Default()
-
-	m := &Manager{
-		config:      cfg,
-		strategy:    strategy,
-		subscribers: make([]Subscriber, 0),
-		keyToAction: buildKeyToActionMap(cfg.Keybindings),
-	}
-
-	quitKey := cfg.Keybindings["quit"]
-
-	// Match against a list that includes "quit"
-	matched := m.MatchAction(quitKey, "quit", "select")
-	assert.Equal(t, "quit", matched)
-
-	// Match against a list that does NOT include "quit"
-	notMatched := m.MatchAction(quitKey, "select", "nav_up")
-	assert.Empty(t, notMatched)
-}
-
-func TestManager_SetKeybinding_Valid(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "config.json")
-
-	strategy := NewLocalStrategy(path)
-	cfg := Default()
-
-	m := &Manager{
-		config:      cfg,
-		strategy:    strategy,
-		subscribers: make([]Subscriber, 0),
-		keyToAction: buildKeyToActionMap(cfg.Keybindings),
-	}
-
-	err := m.SetKeybinding("quit", "ctrl+q")
-	require.NoError(t, err)
-	assert.Equal(t, "ctrl+q", m.KeyForAction("quit"))
-}
-
-func TestManager_SetKeybinding_ConflictRejected(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "config.json")
-
-	strategy := NewLocalStrategy(path)
-	cfg := Default()
-
-	m := &Manager{
-		config:      cfg,
-		strategy:    strategy,
-		subscribers: make([]Subscriber, 0),
-		keyToAction: buildKeyToActionMap(cfg.Keybindings),
-	}
-
-	// "quit" is currently bound to ctrl+c; try binding "select" to the same key
-	quitKey := cfg.Keybindings["quit"]
-	err := m.SetKeybinding("select", quitKey)
-	assert.Error(t, err, "binding two actions to the same key should fail")
-}
-
-func TestManager_Subscribe_Notified(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "config.json")
-
-	strategy := NewLocalStrategy(path)
-	cfg := Default()
-
-	m := &Manager{
-		config:      cfg,
-		strategy:    strategy,
-		subscribers: make([]Subscriber, 0),
-		keyToAction: buildKeyToActionMap(cfg.Keybindings),
-	}
-
-	var notified bool
-	m.Subscribe(func(c *RuntimeConfig) {
-		notified = true
-	})
-
-	newCfg := Default()
-	newCfg.Keybindings["quit"] = "ctrl+q"
-	err := m.Set(newCfg)
+func TestManager_Set_SavesAndRebuildsIndex(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	m, err := NewManager(true, path, nil, 0)
 	require.NoError(t, err)
 
-	assert.True(t, notified, "subscriber should have been called on Set()")
+	cfg := m.Get()
+	cfg.Keybindings["quit"] = "ctrl+q"
+	require.NoError(t, m.Set(cfg))
+
+	assert.Equal(t, "quit", m.MatchAction("ctrl+q"))
+	assert.Empty(t, m.MatchAction("ctrl+c"))
+	saved, err := Load(path)
+	require.NoError(t, err)
+	assert.Equal(t, "ctrl+q", saved.Keybindings["quit"])
+}
+
+func TestManager_Set_ValidationFailure(t *testing.T) {
+	m := newTestManager(t)
+	err := m.Set(&RuntimeConfig{Keybindings: map[string]string{"quit": "ctrl+c", "select": "ctrl+c"}})
+	assert.Error(t, err)
+	assert.Equal(t, "quit", m.MatchAction("ctrl+c"), "a rejected config is not applied")
 }
 
 func TestManager_ConcurrentGet(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "config.json")
-
-	strategy := NewLocalStrategy(path)
-	cfg := Default()
-
-	m := &Manager{
-		config:      cfg,
-		strategy:    strategy,
-		subscribers: make([]Subscriber, 0),
-		keyToAction: buildKeyToActionMap(cfg.Keybindings),
-	}
-
+	m := newTestManager(t)
 	var wg sync.WaitGroup
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			got := m.Get()
-			assert.NotNil(t, got)
+			assert.NotNil(t, m.Get())
 		}()
 	}
 	wg.Wait()
 }
 
-func TestManager_HasUnsavedChanges_LocalStrategy(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "config.json")
-
-	strategy := NewLocalStrategy(path)
-	cfg := Default()
-
-	m := &Manager{
-		config:      cfg,
-		strategy:    strategy,
-		subscribers: make([]Subscriber, 0),
-		keyToAction: buildKeyToActionMap(cfg.Keybindings),
-	}
-
-	// LocalStrategy.HasUnsavedChanges always returns false
-	assert.False(t, m.HasUnsavedChanges())
-}
-
-func TestManager_IsUserMode_LocalStrategy(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "config.json")
-
-	strategy := NewLocalStrategy(path)
-	cfg := Default()
-
-	m := &Manager{
-		config:      cfg,
-		strategy:    strategy,
-		subscribers: make([]Subscriber, 0),
-		keyToAction: buildKeyToActionMap(cfg.Keybindings),
-	}
-
-	assert.False(t, m.IsUserMode())
-}
-
 // --- LocalStrategy tests ---
 
 func TestLocalStrategy_Load_CreatesDefault_WhenMissing(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "config.json")
-
-	strategy := NewLocalStrategy(path)
+	strategy := NewLocalStrategy(filepath.Join(t.TempDir(), "config.json"))
 	cfg, err := strategy.Load()
 	require.NoError(t, err)
-	require.NotNil(t, cfg)
-
-	defaults := Default()
-	assert.Equal(t, defaults.Keybindings, cfg.Keybindings)
+	assert.Equal(t, Default(), cfg)
 }
 
 func TestLocalStrategy_Save_And_Load(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "config.json")
-
-	strategy := NewLocalStrategy(path)
+	strategy := NewLocalStrategy(filepath.Join(t.TempDir(), "config.json"))
 	cfg := Default()
 	cfg.Keybindings["quit"] = "ctrl+q"
-
-	err := strategy.Save(cfg)
-	require.NoError(t, err)
+	require.NoError(t, strategy.Save(cfg))
 
 	loaded, err := strategy.Load()
 	require.NoError(t, err)
 	assert.Equal(t, "ctrl+q", loaded.Keybindings["quit"])
 }
 
-func TestLocalStrategy_HasUnsavedChanges_AlwaysFalse(t *testing.T) {
-	strategy := NewLocalStrategy("/tmp/test.json")
-	assert.False(t, strategy.HasUnsavedChanges())
-	strategy.MarkUnsaved()
-	assert.False(t, strategy.HasUnsavedChanges())
-}
-
-func TestLocalStrategy_IsAvailable(t *testing.T) {
-	strategy := NewLocalStrategy("/tmp/test.json")
-	assert.True(t, strategy.IsAvailable())
-}
-
 // --- validateKeybindings tests ---
 
-func TestValidateKeybindings_EmptyKey_Rejected(t *testing.T) {
-	m := &Manager{
-		config:      Default(),
-		subscribers: make([]Subscriber, 0),
-	}
+func TestValidateKeybindings(t *testing.T) {
+	err := validateKeybindings(map[string]string{"quit": "", "select": "enter"})
+	assert.ErrorContains(t, err, "not bound to any key")
 
-	err := m.validateKeybindings(map[string]string{
-		"quit":   "",
-		"select": "enter",
-	})
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "not bound to any key")
-}
+	err = validateKeybindings(map[string]string{"quit": "ctrl+c", "select": "ctrl+c"})
+	assert.ErrorContains(t, err, "bound to both")
 
-func TestValidateKeybindings_DuplicateKeys_Rejected(t *testing.T) {
-	m := &Manager{
-		config:      Default(),
-		subscribers: make([]Subscriber, 0),
-	}
-
-	err := m.validateKeybindings(map[string]string{
-		"quit":   "ctrl+c",
-		"select": "ctrl+c",
-	})
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "bound to both")
-}
-
-func TestValidateKeybindings_Valid(t *testing.T) {
-	m := &Manager{
-		config:      Default(),
-		subscribers: make([]Subscriber, 0),
-	}
-
-	err := m.validateKeybindings(map[string]string{
-		"quit":   "ctrl+c",
-		"select": "enter",
-	})
-	assert.NoError(t, err)
+	assert.NoError(t, validateKeybindings(map[string]string{"quit": "ctrl+c", "select": "enter"}))
 }

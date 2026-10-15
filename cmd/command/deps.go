@@ -138,7 +138,7 @@ func (d *cliDeps) cardRows(gameID int64, quantities map[int64]int) ([]export.Car
 }
 
 func toCardRow(c cardmodel.Card, quantity int) export.CardRow {
-	row := export.CardRow{Name: c.Name, Number: c.Number, Rarity: c.Rarity, Quantity: quantity}
+	row := export.CardRow{Name: c.Name, Number: c.Number, Rarity: c.Rarity, Quantity: quantity, Category: c.Category}
 	if c.Set != nil {
 		row.SetName = c.Set.Name
 		row.SetCode = c.Set.Code

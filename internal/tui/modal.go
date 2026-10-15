@@ -172,12 +172,6 @@ func (m ModalModel) Show() ModalModel {
 	return m
 }
 
-func (m ModalModel) SetMessage(title, message string) ModalModel {
-	m.title = title
-	m.message = message
-	return m
-}
-
 func (m ModalModel) SetDimensions(width, height int) ModalModel {
 	m.width = width
 	m.height = height

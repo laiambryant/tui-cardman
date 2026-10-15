@@ -540,6 +540,7 @@ func buildCardExportRows(cards []model.Card, dbQtys, tempDeltas map[int64]int) [
 			Number:   c.Number,
 			Rarity:   c.Rarity,
 			Quantity: qty,
+			Category: c.Category,
 		})
 	}
 	return rows

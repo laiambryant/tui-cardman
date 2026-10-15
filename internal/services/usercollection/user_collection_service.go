@@ -129,18 +129,18 @@ func (s *UserCollectionServiceImpl) GetUserCollectionByGameID(userID, gameID int
 
 func scanUserCollection(rows *sql.Rows) (model.UserCollection, error) {
 	var (
-		collection                   model.UserCollection
-		card                         model.Card
-		game                         model.CardGame
-		acquiredDate, gameCreatedAt  sql.NullTime
-		notes, apiID, number, artist sql.NullString
-		setID                        sql.NullInt64
-		setName, setCode             sql.NullString
+		collection                           model.UserCollection
+		card                                 model.Card
+		game                                 model.CardGame
+		acquiredDate, gameCreatedAt          sql.NullTime
+		notes, rarity, apiID, number, artist sql.NullString
+		setID                                sql.NullInt64
+		setName, setCode                     sql.NullString
 	)
 	err := rows.Scan(
 		&collection.ID, &collection.UserID, &collection.CardID, &collection.Quantity, &collection.Condition,
 		&acquiredDate, &notes, &collection.CreatedAt, &collection.UpdatedAt,
-		&card.ID, &card.CardGameID, &card.Name, &card.Rarity, &card.IsPlaceholder, &card.CreatedAt,
+		&card.ID, &card.CardGameID, &card.Name, &rarity, &card.IsPlaceholder, &card.CreatedAt,
 		&apiID, &number, &artist,
 		&game.ID, &game.Name, &gameCreatedAt,
 		&setID, &setName, &setCode,
@@ -151,6 +151,7 @@ func scanUserCollection(rows *sql.Rows) (model.UserCollection, error) {
 	collection.AcquiredDate = acquiredDate.Time
 	collection.Notes = notes.String
 	game.CreatedAt = gameCreatedAt.Time
+	card.Rarity = rarity.String
 	card.APIID = apiID.String
 	card.Number = number.String
 	card.Artist = artist.String

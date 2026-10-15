@@ -3,122 +3,82 @@ package runtimecfg
 import (
 	"fmt"
 	"maps"
-	"slices"
 	"sync"
 )
 
-// Subscriber is a function that gets called when config changes
-type Subscriber func(*RuntimeConfig)
-
-// Manager manages the runtime configuration
+// Manager holds the runtime configuration and persists changes through a
+// storage strategy (a local file or the user's database row).
 type Manager struct {
 	mu          sync.RWMutex
 	config      *RuntimeConfig
 	strategy    ButtonStrategy
-	subscribers []Subscriber
 	keyToAction map[string]string // Reverse index for O(1) key→action lookups
 }
 
-// NewManager creates a new config manager
+// NewManager creates a config manager. Local mode reads configPath; remote
+// (SSH) mode loads the user's configuration from the database, first
+// migrating configPath into it when the user has no configuration yet.
 func NewManager(isLocal bool, configPath string, service ButtonConfigService, userID int64) (*Manager, error) {
 	var strategy ButtonStrategy
-	var config *RuntimeConfig
-	var err error
 	if isLocal {
 		strategy = NewLocalStrategy(configPath)
-		config, err = strategy.Load()
-		if err != nil {
-			return nil, fmt.Errorf("failed to load local config: %w", err)
-		}
 	} else {
-		config = Default()
-		remoteStrategy := NewRemoteStrategy(service, userID, config)
-		remoteStrategy.MigrateFromLocal(configPath)
-		strategy = remoteStrategy
-		dbConfig, loadErr := strategy.Load()
-		if loadErr == nil && dbConfig != nil {
-			config = dbConfig
-		}
+		remote := NewRemoteStrategy(service, userID)
+		remote.MigrateFromLocal(configPath)
+		strategy = remote
+	}
+	config, err := strategy.Load()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load config: %w", err)
 	}
 	return &Manager{
 		config:      config,
 		strategy:    strategy,
-		subscribers: make([]Subscriber, 0),
 		keyToAction: buildKeyToActionMap(config.Keybindings),
 	}, nil
 }
 
+// Get returns a copy of the current configuration.
 func (m *Manager) Get() *RuntimeConfig {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	cfg := *m.config
-	cfg.Keybindings = make(map[string]string)
-	maps.Copy(cfg.Keybindings, m.config.Keybindings)
+	cfg.Keybindings = maps.Clone(m.config.Keybindings)
+	cfg.UI.VisibleColumns = maps.Clone(m.config.UI.VisibleColumns)
+	cfg.UI.ColumnOrder = append([]string(nil), m.config.UI.ColumnOrder...)
 	return &cfg
 }
 
-// Set updates the configuration and notifies subscribers
+// Set validates, applies and saves a new configuration.
 func (m *Manager) Set(cfg *RuntimeConfig) error {
-	m.mu.Lock()
-	if err := m.validateKeybindings(cfg.Keybindings); err != nil {
-		m.mu.Unlock()
+	if err := validateKeybindings(cfg.Keybindings); err != nil {
 		return err
 	}
+	m.mu.Lock()
 	m.config = cfg
 	m.keyToAction = buildKeyToActionMap(cfg.Keybindings)
-	m.strategy.MarkUnsaved()
-	subscribers := make([]Subscriber, len(m.subscribers))
-	copy(subscribers, m.subscribers)
 	m.mu.Unlock()
-	for _, sub := range subscribers {
-		sub(cfg)
-	}
 	if err := m.strategy.Save(cfg); err != nil {
 		return fmt.Errorf("failed to save config: %w", err)
 	}
 	return nil
 }
 
-// Subscribe adds a subscriber that will be called when config changes
-func (m *Manager) Subscribe(sub Subscriber) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.subscribers = append(m.subscribers, sub)
-}
-
 // KeyForAction returns the key binding for the given action
 func (m *Manager) KeyForAction(action string) string {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	if key, exists := m.config.Keybindings[action]; exists {
-		return key
-	}
-	return ""
+	return m.config.Keybindings[action]
 }
 
-// MatchAction returns the action name if the keypress matches any configured action
-func (m *Manager) MatchAction(keyPress string, actions ...string) string {
+// MatchAction returns the action bound to the key press, or "" if none is.
+func (m *Manager) MatchAction(keyPress string) string {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	if len(actions) > 0 {
-		return m.matchAmongActions(keyPress, actions)
-	}
-	if action, exists := m.keyToAction[keyPress]; exists {
-		return action
-	}
-	return ""
+	return m.keyToAction[keyPress]
 }
 
-func (m *Manager) matchAmongActions(keyPress string, actions []string) string {
-	if action, exists := m.keyToAction[keyPress]; exists {
-		if slices.Contains(actions, action) {
-			return action
-		}
-	}
-	return ""
-}
-
-func (m *Manager) validateKeybindings(bindings map[string]string) error {
+func validateKeybindings(bindings map[string]string) error {
 	seen := make(map[string]string)
 	for action, key := range bindings {
 		if key == "" {
@@ -130,57 +90,6 @@ func (m *Manager) validateKeybindings(bindings map[string]string) error {
 		seen[key] = action
 	}
 	return nil
-}
-
-// SetKeybinding updates a single keybinding
-func (m *Manager) SetKeybinding(action, key string) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	newBindings := make(map[string]string)
-	maps.Copy(newBindings, m.config.Keybindings)
-	newBindings[action] = key
-	if err := m.validateKeybindings(newBindings); err != nil {
-		return err
-	}
-	m.config.Keybindings[action] = key
-	m.keyToAction = buildKeyToActionMap(m.config.Keybindings)
-	return nil
-}
-
-// SaveToDatabase saves the current configuration using the strategy
-func (m *Manager) SaveToDatabase() error {
-	m.mu.RLock()
-	config := m.config
-	m.mu.RUnlock()
-	return m.strategy.Save(config)
-}
-
-// LoadFromDatabase loads configuration using the strategy
-func (m *Manager) LoadFromDatabase() error {
-	config, err := m.strategy.Load()
-	if err != nil {
-		return err
-	}
-	m.mu.Lock()
-	m.config = config
-	m.mu.Unlock()
-	return nil
-}
-
-// HasUnsavedChanges returns true if there are unsaved changes
-func (m *Manager) HasUnsavedChanges() bool {
-	return m.strategy.HasUnsavedChanges()
-}
-
-// MarkUnsaved marks the configuration as having unsaved changes
-func (m *Manager) MarkUnsaved() {
-	m.strategy.MarkUnsaved()
-}
-
-// IsUserMode returns true if the manager is using remote strategy
-func (m *Manager) IsUserMode() bool {
-	_, isRemote := m.strategy.(*RemoteStrategy)
-	return isRemote
 }
 
 func buildKeyToActionMap(keybindings map[string]string) map[string]string {

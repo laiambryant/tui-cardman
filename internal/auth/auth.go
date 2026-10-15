@@ -11,12 +11,13 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+var emailRegex = regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
+
 // ValidateEmail checks if email format is valid
 func ValidateEmail(email string) error {
 	if email == "" {
 		return ErrEmailRequired
 	}
-	emailRegex := regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
 	if !emailRegex.MatchString(email) {
 		return fmt.Errorf("invalid email format")
 	}
@@ -62,22 +63,20 @@ func VerifyPassword(password, hash string) error {
 	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
 }
 
-// Service provides authentication operations
-type Service struct {
-	db interface {
-		CreateUser(req RegisterRequest, passwordHash string) (*User, error)
-		GetUserByEmail(email string) (*User, error)
-		UpdateLastLogin(userID int64) error
-	}
-}
-
-// NewService creates a new auth service
-func NewService(db interface {
+// UserStore is the user persistence used by Service.
+type UserStore interface {
 	CreateUser(req RegisterRequest, passwordHash string) (*User, error)
 	GetUserByEmail(email string) (*User, error)
 	UpdateLastLogin(userID int64) error
-},
-) *Service {
+}
+
+// Service provides authentication operations
+type Service struct {
+	db UserStore
+}
+
+// NewService creates a new auth service
+func NewService(db UserStore) *Service {
 	return &Service{db: db}
 }
 

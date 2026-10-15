@@ -301,3 +301,26 @@ func TestResolveCSVToCardQuantities_LookupError(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "lookup failed")
 }
+
+func TestToPTCGO_ClassifiesByCategory(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "deck.ptcgo")
+	rows := []export.CardRow{
+		{Name: "Wartortle", SetCode: "BS", Number: "42", Rarity: "Uncommon", Category: "Pokemon", Quantity: 2},
+		{Name: "Professor Oak", SetCode: "BS", Number: "88", Rarity: "Uncommon", Category: "Trainer", Quantity: 1},
+		{Name: "Double Colorless Energy", SetCode: "BS", Number: "96", Rarity: "Uncommon", Category: "Energy", Quantity: 4},
+		{Name: "Water Energy", SetCode: "BS", Number: "102", Quantity: 10},
+	}
+	require.NoError(t, export.ToPTCGO("Blastoise", rows, path))
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+
+	sections := strings.Split(string(data), "##")
+	require.Len(t, sections, 4)
+	assert.Contains(t, sections[1], "Pokémon - 2")
+	assert.Contains(t, sections[1], "Wartortle", "Uncommon Pokémon are Pokémon")
+	assert.Contains(t, sections[2], "Trainer Cards - 1")
+	assert.Contains(t, sections[2], "Professor Oak")
+	assert.Contains(t, sections[3], "Energy - 14")
+	assert.Contains(t, sections[3], "Double Colorless Energy")
+	assert.Contains(t, sections[3], "Water Energy", "falls back to the name without a category")
+}

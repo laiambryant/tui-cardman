@@ -11,7 +11,6 @@ var defaultStyleManager *StyleManager
 var (
 	focusedStyle   lipgloss.Style
 	blurredStyle   lipgloss.Style
-	noStyle        lipgloss.Style
 	helpStyle      lipgloss.Style
 	errorStyle     lipgloss.Style
 	titleStyle     lipgloss.Style
@@ -90,7 +89,6 @@ func (sm *StyleManager) ThemeName() string {
 func refreshGlobalStyles(sm *StyleManager) {
 	focusedStyle = sm.GetFocusedStyle()
 	blurredStyle = sm.GetBlurredStyle()
-	noStyle = sm.GetNoStyle()
 	helpStyle = sm.GetHelpStyle()
 	errorStyle = sm.GetErrorStyle()
 	titleStyle = sm.GetTitleStyle()
@@ -157,11 +155,6 @@ func (sm *StyleManager) GetSuccessStyle() lipgloss.Style {
 	return sm.createForegroundStyle(sm.scheme.Success)
 }
 
-// GetWarningStyle returns the style for warning states
-func (sm *StyleManager) GetWarningStyle() lipgloss.Style {
-	return sm.createForegroundStyle(sm.scheme.Warning)
-}
-
 // GetSubtleStyle returns the style for low-emphasis chrome such as separators
 func (sm *StyleManager) GetSubtleStyle() lipgloss.Style {
 	return sm.createForegroundStyle(sm.scheme.Subtle)
@@ -179,27 +172,6 @@ func (sm *StyleManager) GetBadgeStyle(background lipgloss.Color) lipgloss.Style 
 		fg = lipgloss.Color("0")
 	}
 	return lipgloss.NewStyle().Foreground(fg).Background(background).Bold(true).Padding(0, 1).Inline(true)
-}
-
-// GetBoxStyle returns a styled box with optional focus
-func (sm *StyleManager) GetBoxStyle(focused bool) lipgloss.Style {
-	color := sm.scheme.Subtle
-	if focused {
-		color = sm.scheme.Focused
-	}
-	style := sm.createRoundedBorderStyle(color, false).Padding(1, 2).Width(40).Align(lipgloss.Center)
-	if focused {
-		style = style.Bold(true)
-	}
-	return sm.applyBGFG(style)
-}
-
-func (sm *StyleManager) createRoundedBorderStyle(color lipgloss.Color, pad bool) lipgloss.Style {
-	s := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(color)
-	if pad {
-		s = s.Padding(1, 2)
-	}
-	return s
 }
 
 // GetModalStyle returns a styled modal dialog
@@ -253,35 +225,6 @@ func (sm *StyleManager) resolveColor(preferred, fallback1, fallback2 lipgloss.Co
 
 func (sm *StyleManager) getTableSelectionColors() (lipgloss.Color, lipgloss.Color) {
 	return sm.resolveColor(sm.scheme.TableSelectedForeground, sm.scheme.Foreground, sm.scheme.Focused), sm.resolveColor(sm.scheme.TableSelectedBackground, sm.scheme.Focused, sm.scheme.Title)
-}
-
-// GetTableBaseStyle returns the style for the table container
-func (sm *StyleManager) GetTableBaseStyle() lipgloss.Style {
-	return sm.applyBGFG(lipgloss.NewStyle().BorderStyle(lipgloss.RoundedBorder()).BorderForeground(sm.scheme.Subtle))
-}
-
-// GetPanelStyle returns a styled panel
-func (sm *StyleManager) GetPanelStyle() lipgloss.Style {
-	return sm.Box(sm.scheme.Subtle, 0, 0, 0, 2, 1)
-}
-
-// GetTabStyle returns a styled tab
-func (sm *StyleManager) GetTabStyle(active bool) lipgloss.Style {
-	color := sm.scheme.Blurred
-	border := sm.createInactiveBorder()
-	if active {
-		color = sm.scheme.Focused
-		border = sm.createActiveBorder()
-	}
-	return sm.applyBGFG(lipgloss.NewStyle().Border(border, true).BorderForeground(color).Padding(0, 1))
-}
-
-func (sm *StyleManager) createActiveBorder() lipgloss.Border {
-	return lipgloss.Border{Top: "─", Bottom: " ", Left: "│", Right: "│"}
-}
-
-func (sm *StyleManager) createInactiveBorder() lipgloss.Border {
-	return lipgloss.Border{Top: "─", Bottom: "─", Left: "│", Right: "│"}
 }
 
 // GetFullScreenStyle returns a style sized to the full terminal with themed background/foreground

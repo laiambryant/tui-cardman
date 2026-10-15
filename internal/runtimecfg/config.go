@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 )
 
 // RuntimeConfig holds all application configuration
@@ -87,12 +88,12 @@ func Default() *RuntimeConfig {
 	}
 }
 
-// Load reads configuration from a file path
+// Load reads configuration from a file path. A missing file yields the defaults.
 func Load(path string) (*RuntimeConfig, error) {
-	if _, err := os.Stat(path); os.IsNotExist(err) {
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
 		return Default(), nil
 	}
-	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read config file: %w", err)
 	}
@@ -100,15 +101,35 @@ func Load(path string) (*RuntimeConfig, error) {
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("failed to parse config file: %w", err)
 	}
-	defaults := Default()
-	initializeKeybindings(&cfg, defaults)
-	initializeVisibleColumns(&cfg, defaults)
-	initializeColumnOrder(&cfg, defaults)
-	initializeTheme(&cfg, defaults)
+	applyDefaults(&cfg)
 	return &cfg, nil
 }
 
-func initializeTheme(cfg, defaults *RuntimeConfig) {
+// applyDefaults fills in keybindings, columns and theme missing from cfg, e.g.
+// options added after the configuration was saved.
+func applyDefaults(cfg *RuntimeConfig) {
+	defaults := Default()
+	if cfg.Keybindings == nil {
+		cfg.Keybindings = map[string]string{}
+	}
+	for action, key := range defaults.Keybindings {
+		if _, ok := cfg.Keybindings[action]; !ok {
+			cfg.Keybindings[action] = key
+		}
+	}
+	if cfg.UI.VisibleColumns == nil {
+		cfg.UI.VisibleColumns = map[string]bool{}
+	}
+	for col, visible := range defaults.UI.VisibleColumns {
+		if _, ok := cfg.UI.VisibleColumns[col]; !ok {
+			cfg.UI.VisibleColumns[col] = visible
+		}
+	}
+	for _, col := range defaults.UI.ColumnOrder {
+		if !slices.Contains(cfg.UI.ColumnOrder, col) {
+			cfg.UI.ColumnOrder = append(cfg.UI.ColumnOrder, col)
+		}
+	}
 	if cfg.UI.Theme == "" {
 		cfg.UI.Theme = defaults.UI.Theme
 	}
@@ -127,46 +148,6 @@ func DefaultVisibleColumns() map[string]bool {
 
 func DefaultColumnOrder() []string {
 	return []string{"name", "expansion", "rarity", "number", "quantity", "artist"}
-}
-
-func initializeColumnOrder(cfg, defaults *RuntimeConfig) {
-	if len(cfg.UI.ColumnOrder) == 0 {
-		cfg.UI.ColumnOrder = defaults.UI.ColumnOrder
-		return
-	}
-	existing := make(map[string]bool, len(cfg.UI.ColumnOrder))
-	for _, k := range cfg.UI.ColumnOrder {
-		existing[k] = true
-	}
-	for _, k := range defaults.UI.ColumnOrder {
-		if !existing[k] {
-			cfg.UI.ColumnOrder = append(cfg.UI.ColumnOrder, k)
-		}
-	}
-}
-
-func initializeVisibleColumns(cfg, defaults *RuntimeConfig) {
-	if cfg.UI.VisibleColumns == nil {
-		cfg.UI.VisibleColumns = defaults.UI.VisibleColumns
-	} else {
-		for col, vis := range defaults.UI.VisibleColumns {
-			if _, exists := cfg.UI.VisibleColumns[col]; !exists {
-				cfg.UI.VisibleColumns[col] = vis
-			}
-		}
-	}
-}
-
-func initializeKeybindings(cfg, defaults *RuntimeConfig) {
-	if cfg.Keybindings == nil {
-		cfg.Keybindings = defaults.Keybindings
-	} else {
-		for action, key := range defaults.Keybindings {
-			if _, exists := cfg.Keybindings[action]; !exists {
-				cfg.Keybindings[action] = key
-			}
-		}
-	}
 }
 
 // Save writes configuration to a file path

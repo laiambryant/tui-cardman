@@ -64,17 +64,13 @@ func (m *Model) renderCardGamesPanel(width, height int) string {
 // renderRightPanel renders the right side of the home screen split into
 // top (mode selection) and bottom (stats).
 func (m *Model) renderRightPanel(width, height int) string {
-	// Split right panel: top ~45% for modes, bottom ~55% for stats
-	// We render them as a vertical join inside a single outer panel.
-	// inner area (accounting for panel border+padding: 2 border + 2 pad each side = 6 per axis)
+	// Mode buttons on top and stats below, inside a single outer panel.
+	// Inner area: 2 border + 2 padding on each side = 6 columns.
 	innerWidth := max(width-6, 10)
 	btnMaxWidth := max(innerWidth-4, 6)
 
-	topHeight := height * 45 / 100
-	bottomHeight := height - topHeight
-
-	topContent := m.renderModesSection(innerWidth, btnMaxWidth, topHeight)
-	bottomContent := m.renderStatsSection(innerWidth, bottomHeight)
+	topContent := m.renderModesSection(btnMaxWidth)
+	bottomContent := m.renderStatsSection(innerWidth)
 
 	body := lipgloss.JoinVertical(lipgloss.Left, topContent, bottomContent)
 	return RenderTitledPanel(m.styleManager, "Browse", body, width, height, m.mainFocusPanel == 1, 2, 1)
@@ -87,19 +83,17 @@ var modeLabels = []string{
 	"Import Sets",
 }
 
-func (m *Model) renderModesSection(innerWidth, btnMaxWidth, availHeight int) string {
+func (m *Model) renderModesSection(btnMaxWidth int) string {
 	var b strings.Builder
 	b.WriteString(secondaryStyle.Bold(true).Render("Select Mode") + "\n")
 	for i, label := range modeLabels {
 		focused := m.rightPanelCursor == i && m.mainFocusPanel == 1
 		b.WriteString(RenderButtonItem(m.styleManager, label, focused, btnMaxWidth))
 	}
-	_ = availHeight // used for future trimming if needed
 	return b.String()
 }
 
-func (m *Model) renderStatsSection(innerWidth, availHeight int) string {
-	_ = availHeight
+func (m *Model) renderStatsSection(innerWidth int) string {
 	sm := m.styleManager
 
 	var b strings.Builder
