@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -44,7 +45,7 @@ var serveSSHCmd = &cobra.Command{
 				bubbletea.Middleware(func(s ssh.Session) (tea.Model, []tea.ProgramOption) {
 					_, _, active := s.Pty()
 					if !active {
-						fmt.Println("no active terminal, skipping")
+						wish.Fatalln(s, "cardman requires an interactive terminal (try ssh -t)")
 						return nil, nil
 					}
 					model, err := tui.NewModel(runtime.db, true)
@@ -65,7 +66,7 @@ var serveSSHCmd = &cobra.Command{
 			return fmt.Errorf("create SSH server: %w", err)
 		}
 		done := make(chan os.Signal, 1)
-		signal.Notify(done, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
+		signal.Notify(done, os.Interrupt, syscall.SIGTERM)
 		defer signal.Stop(done)
 		serverErr := make(chan error, 1)
 		go func() {
@@ -101,43 +102,32 @@ var serveSSHCmd = &cobra.Command{
 	},
 }
 
-// ensureHostKey generates SSH host key if it doesn't exist
+// ensureHostKey expands a leading "~/" in keyPath and generates an ED25519
+// host key there if none exists yet.
 func ensureHostKey(keyPath string) (string, error) {
 	if keyPath == "" {
 		return "", fmt.Errorf("SSH_HOST_KEY must not be empty")
 	}
-	if len(keyPath) >= 2 && keyPath[:2] == "~/" {
+	if rest, ok := strings.CutPrefix(keyPath, "~/"); ok {
 		home, err := os.UserHomeDir()
 		if err != nil {
 			return "", fmt.Errorf("get home dir: %w", err)
 		}
-		keyPath = filepath.Join(home, keyPath[2:])
+		keyPath = filepath.Join(home, rest)
 	}
-	if err := checkIfKeyExists(keyPath); err != nil {
-		return "", err
+	if _, err := os.Stat(keyPath); !os.IsNotExist(err) {
+		return keyPath, nil
 	}
+	if err := os.MkdirAll(filepath.Dir(keyPath), 0o700); err != nil {
+		return "", fmt.Errorf("create key directory: %w", err)
+	}
+	fmt.Printf("Generating SSH host key at %s...\n", keyPath)
+	// wish creates the key file when the configured host key path does not exist.
+	if _, err := wish.NewServer(wish.WithHostKeyPath(keyPath)); err != nil {
+		return "", fmt.Errorf("generate host key: %w", err)
+	}
+	fmt.Println(lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Render("Host key generated successfully"))
 	return keyPath, nil
-}
-
-func checkIfKeyExists(keyPath string) error {
-	if _, err := os.Stat(keyPath); os.IsNotExist(err) {
-		dir := filepath.Dir(keyPath)
-		if err := os.MkdirAll(dir, 0o700); err != nil {
-			return fmt.Errorf("create key directory: %w", err)
-		}
-		fmt.Printf("Generating SSH host key at %s...\n", keyPath)
-		if err := generateHostKey(keyPath); err != nil {
-			return fmt.Errorf("generate host key: %w", err)
-		}
-		fmt.Println(lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Render("Host key generated successfully"))
-	}
-	return nil
-}
-
-// generateHostKey creates a new ED25519 SSH host key
-func generateHostKey(path string) error {
-	_, err := wish.NewServer(wish.WithHostKeyPath(path))
-	return err
 }
 
 func init() {

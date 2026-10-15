@@ -6,6 +6,8 @@ import (
 	"strconv"
 
 	"github.com/spf13/cobra"
+
+	"github.com/laiambryant/tui-cardman/internal/gameimporter"
 )
 
 var importCmd = &cobra.Command{
@@ -18,96 +20,60 @@ var importListSetsCmd = &cobra.Command{
 	Short: "List available sets for a game from the API",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		runtime, err := newCommandRuntime(true, false)
-		if err != nil {
-			return err
-		}
-		defer runtime.Close()
-		importer, err := buildImporterForGame(runtime.db, args[0], runtime.config)
-		if err != nil {
-			return err
-		}
-		gameSets, err := importer.FetchSets(cmd.Context())
-		if err != nil {
-			return fmt.Errorf("fetch sets: %w", err)
-		}
-		rows := make([][]string, len(gameSets))
-		for i, s := range gameSets {
-			rows[i] = []string{s.APIID, s.Name, s.Code, strconv.Itoa(s.Total)}
-		}
-		writeTabular(os.Stdout, []string{"API ID", "NAME", "CODE", "TOTAL"}, rows)
-		return nil
+		return withImporter(args[0], func(importer gameimporter.GameImporter) error {
+			gameSets, err := importer.FetchSets(cmd.Context())
+			if err != nil {
+				return fmt.Errorf("fetch sets: %w", err)
+			}
+			rows := make([][]string, len(gameSets))
+			for i, s := range gameSets {
+				rows[i] = []string{s.APIID, s.Name, s.Code, strconv.Itoa(s.Total)}
+			}
+			writeTabular(os.Stdout, []string{"API ID", "NAME", "CODE", "TOTAL"}, rows)
+			return nil
+		})
 	},
+}
+
+// importAction builds a RunE that runs an import for the game named in args[0].
+func importAction(message string, run func(cmd *cobra.Command, args []string, importer gameimporter.GameImporter) error) func(*cobra.Command, []string) error {
+	return func(cmd *cobra.Command, args []string) error {
+		return withImporter(args[0], func(importer gameimporter.GameImporter) error {
+			fmt.Printf(message+"\n", args[0])
+			if err := run(cmd, args, importer); err != nil {
+				return err
+			}
+			fmt.Println("Done.")
+			return nil
+		})
+	}
 }
 
 var importGroupSetsCmd = &cobra.Command{
 	Use:   "sets <game> <set-id...>",
 	Short: "Import specific sets for a game",
 	Args:  cobra.MinimumNArgs(2),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		runtime, err := newCommandRuntime(true, false)
-		if err != nil {
-			return err
-		}
-		defer runtime.Close()
-		importer, err := buildImporterForGame(runtime.db, args[0], runtime.config)
-		if err != nil {
-			return err
-		}
-		setIDs := args[1:]
-		fmt.Printf("Importing %d set(s) for %s...\n", len(setIDs), args[0])
-		if err := importer.ImportSpecific(cmd.Context(), setIDs); err != nil {
-			return err
-		}
-		fmt.Println("Done.")
-		return nil
-	},
+	RunE: importAction("Importing selected sets for %s...", func(cmd *cobra.Command, args []string, importer gameimporter.GameImporter) error {
+		return importer.ImportSpecific(cmd.Context(), args[1:])
+	}),
 }
 
 var importAllCmd = &cobra.Command{
 	Use:   "all <game>",
 	Short: "Import all sets for a game",
 	Args:  cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		runtime, err := newCommandRuntime(true, false)
-		if err != nil {
-			return err
-		}
-		defer runtime.Close()
-		importer, err := buildImporterForGame(runtime.db, args[0], runtime.config)
-		if err != nil {
-			return err
-		}
-		fmt.Printf("Importing all sets for %s...\n", args[0])
-		if err := importer.ImportAll(cmd.Context()); err != nil {
-			return err
-		}
-		fmt.Println("Done.")
-		return nil
-	},
+	RunE: importAction("Importing all sets for %s...", func(cmd *cobra.Command, _ []string, importer gameimporter.GameImporter) error {
+		return importer.ImportAll(cmd.Context())
+	}),
 }
 
 var importNewCmd = &cobra.Command{
 	Use:   "new <game>",
 	Short: "Import only new sets for a game",
 	Args:  cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		runtime, err := newCommandRuntime(true, false)
-		if err != nil {
-			return err
-		}
-		defer runtime.Close()
-		importer, err := buildImporterForGame(runtime.db, args[0], runtime.config)
-		if err != nil {
-			return err
-		}
-		fmt.Printf("Importing new sets for %s...\n", args[0])
-		if err := importer.ImportNew(cmd.Context()); err != nil {
-			return err
-		}
-		fmt.Println("Done.")
-		return nil
-	},
+	RunE: importAction("Importing new sets for %s...", func(cmd *cobra.Command, _ []string, importer gameimporter.GameImporter) error {
+		return importer.ImportNew(cmd.Context())
+	}),
 }
 
 func init() {

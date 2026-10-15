@@ -13,7 +13,7 @@ var importFullCmd = &cobra.Command{
 	Short: shortMessageImportAll,
 	Long:  longMessageImportAll,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return runPokemonImport(func(importer gameimporter.GameImporter) error {
+		return withImporter("pokemon", func(importer gameimporter.GameImporter) error {
 			if err := importer.ImportAll(cmd.Context()); err != nil {
 				return fmt.Errorf("import failed: %w", err)
 			}

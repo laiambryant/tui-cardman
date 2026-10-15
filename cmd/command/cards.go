@@ -21,36 +21,31 @@ var cardsListCmd = &cobra.Command{
 	Short: "List all cards for a game",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		deps, err := buildCLIDeps()
-		if err != nil {
-			return err
-		}
-		defer deps.Close()
-		game, err := resolveGame(deps.gameSvc, args[0])
-		if err != nil {
-			return err
-		}
-		cards, err := deps.cardSvc.GetCardsByGameID(game.ID)
-		if err != nil {
-			return err
-		}
-		if q, _ := cmd.Flags().GetString("search"); q != "" {
-			cards = filterCards(cards, q)
-		}
-		if asJSON, _ := cmd.Flags().GetBool("json"); asJSON {
-			return json.NewEncoder(os.Stdout).Encode(cards)
-		}
-		rows := make([][]string, len(cards))
-		for i, c := range cards {
-			setCode, setName := "", ""
-			if c.Set != nil {
-				setCode = c.Set.Code
-				setName = c.Set.Name
+		query, _ := cmd.Flags().GetString("search")
+		asJSON, _ := cmd.Flags().GetBool("json")
+		return withDeps(func(d *cliDeps) error {
+			game, err := d.resolveGame(args[0])
+			if err != nil {
+				return err
 			}
-			rows[i] = []string{c.Name, setCode, setName, c.Number, c.Rarity}
-		}
-		writeTabular(os.Stdout, []string{"NAME", "SET CODE", "SET", "NUMBER", "RARITY"}, rows)
-		return nil
+			cards, err := d.cardSvc.GetCardsByGameID(game.ID)
+			if err != nil {
+				return err
+			}
+			if query != "" {
+				cards = filterCards(cards, query)
+			}
+			if asJSON {
+				return json.NewEncoder(os.Stdout).Encode(cards)
+			}
+			rows := make([][]string, len(cards))
+			for i, c := range cards {
+				r := toCardRow(c, 0)
+				rows[i] = []string{c.Name, r.SetCode, r.SetName, c.Number, c.Rarity}
+			}
+			writeTabular(os.Stdout, []string{"NAME", "SET CODE", "SET", "NUMBER", "RARITY"}, rows)
+			return nil
+		})
 	},
 }
 
@@ -59,32 +54,23 @@ var cardsInfoCmd = &cobra.Command{
 	Short: "Show details for a specific card",
 	Args:  cobra.ExactArgs(3),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		deps, err := buildCLIDeps()
-		if err != nil {
-			return err
-		}
-		defer deps.Close()
-		game, err := resolveGame(deps.gameSvc, args[0])
-		if err != nil {
-			return err
-		}
-		c, err := deps.cardSvc.GetCardByGameAndSetCodeAndNumber(game.ID, args[1], args[2])
-		if err != nil {
-			return err
-		}
-		if c == nil {
-			return fmt.Errorf("card not found for game %q: %s %s", game.Name, args[1], args[2])
-		}
-		if asJSON, _ := cmd.Flags().GetBool("json"); asJSON {
-			return json.NewEncoder(os.Stdout).Encode(c)
-		}
-		setCode, setName := "", ""
-		if c.Set != nil {
-			setCode = c.Set.Code
-			setName = c.Set.Name
-		}
-		fmt.Printf("Name:    %s\nSet:     %s (%s)\nNumber:  %s\nRarity:  %s\n", c.Name, setName, setCode, c.Number, c.Rarity)
-		return nil
+		asJSON, _ := cmd.Flags().GetBool("json")
+		return withDeps(func(d *cliDeps) error {
+			game, err := d.resolveGame(args[0])
+			if err != nil {
+				return err
+			}
+			c, err := d.findCard(game.ID, args[1], args[2])
+			if err != nil {
+				return err
+			}
+			if asJSON {
+				return json.NewEncoder(os.Stdout).Encode(c)
+			}
+			r := toCardRow(*c, 0)
+			fmt.Printf("Name:    %s\nSet:     %s (%s)\nNumber:  %s\nRarity:  %s\n", c.Name, r.SetName, r.SetCode, c.Number, c.Rarity)
+			return nil
+		})
 	},
 }
 

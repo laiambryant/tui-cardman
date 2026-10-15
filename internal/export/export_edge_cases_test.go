@@ -252,6 +252,21 @@ func TestGenerateFilename_SpacesReplaced(t *testing.T) {
 	assert.Contains(t, name, "fire_deck_two")
 }
 
+func TestGenerateFilename_PathAndReservedCharactersReplaced(t *testing.T) {
+	name := export.GenerateFilename("deck", "AC/DC: Mega\\Deck?", "csv")
+	assert.NotContains(t, name, "/")
+	assert.NotContains(t, name, "\\")
+	assert.NotContains(t, name, ":")
+	assert.NotContains(t, name, "?")
+	assert.Contains(t, name, "deck_ac_dc_mega_deck_")
+
+	name = export.GenerateFilename("collection", "Magic: The Gathering", "csv")
+	assert.Contains(t, name, "collection_magic_the_gathering_")
+
+	name = export.GenerateFilename("list", "Pokémon ✦ wants", "csv")
+	assert.Contains(t, name, "list_pokémon_wants_")
+}
+
 // ---------------------------------------------------------------------------
 // ResolveCSVToCardQuantities additional cases
 // ---------------------------------------------------------------------------

@@ -19,5 +19,7 @@ func Execute(version goversion.Info) error {
 
 func init() {
 	rootCmd.CompletionOptions.DisableDefaultCmd = true
+	// Runtime errors are not usage errors; don't print the help text for them.
+	rootCmd.SilenceUsage = true
 	rootCmd.SetVersionTemplate("{{.Version}}\n")
 }

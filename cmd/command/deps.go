@@ -1,14 +1,16 @@
 package command
 
 import (
-	"database/sql"
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"strconv"
 	"strings"
 	"text/tabwriter"
 
-	"github.com/laiambryant/tui-cardman/internal/config"
+	"github.com/spf13/cobra"
+
 	"github.com/laiambryant/tui-cardman/internal/export"
 	"github.com/laiambryant/tui-cardman/internal/gameimporter"
 	"github.com/laiambryant/tui-cardman/internal/importers"
@@ -21,9 +23,9 @@ import (
 	"github.com/laiambryant/tui-cardman/internal/services/usercollection"
 )
 
+// cliDeps holds the services used by the data commands, scoped to the local user.
 type cliDeps struct {
 	runtime *commandRuntime
-	db      *sql.DB
 	userID  int64
 	cardSvc card.CardService
 	collSvc usercollection.UserCollectionService
@@ -32,104 +34,132 @@ type cliDeps struct {
 	gameSvc cardgame.CardGameService
 }
 
-var gameAliases = map[string]string{
-	"pokemon":  "Pokémon TCG",
-	"mtg":      "Magic: The Gathering",
-	"yugioh":   "Yu-Gi-Oh!",
-	"onepiece": "One Piece",
-}
-
-func buildCLIDeps() (*cliDeps, error) {
+// withDeps opens the database (applying migrations), resolves the local user
+// and runs fn.
+func withDeps(fn func(d *cliDeps) error) error {
 	runtime, err := newCommandRuntime(true, true)
 	if err != nil {
-		return nil, err
+		return err
+	}
+	defer runtime.Close()
+	u, err := user.NewUserService(runtime.db).GetFirstUser()
+	if errors.Is(err, user.ErrNoUsersFound) {
+		return errors.New("no local user found — run 'cardman serve' first")
+	}
+	if err != nil {
+		return fmt.Errorf("get user: %w", err)
 	}
 	database := runtime.db
-	userSvc := user.NewUserService(database)
-	u, err := userSvc.GetFirstUser()
-	if err != nil {
-		runtime.Close()
-		if errors.Is(err, user.ErrNoUsersFound) {
-			return nil, fmt.Errorf("no local user found — run 'cardman serve' first")
-		}
-		return nil, fmt.Errorf("get user: %w", err)
-	}
-	return &cliDeps{
+	return fn(&cliDeps{
 		runtime: runtime,
-		db:      database,
 		userID:  u.ID,
 		cardSvc: card.NewCardService(database),
 		collSvc: usercollection.NewUserCollectionService(database),
 		deckSvc: deck.NewDeckService(database),
 		listSvc: list.NewListService(database),
 		gameSvc: cardgame.NewCardGameService(database),
-	}, nil
+	})
 }
 
-func (d *cliDeps) Close() {
-	if d == nil {
-		return
+// withImporter opens the database (applying migrations) and runs fn with the
+// importer for the named game.
+func withImporter(gameName string, fn func(importer gameimporter.GameImporter) error) error {
+	runtime, err := newCommandRuntime(true, true)
+	if err != nil {
+		return err
 	}
-	if d.runtime != nil {
-		d.runtime.Close()
-		return
+	defer runtime.Close()
+	importer, err := importers.New(runtime.db, canonicalGameName(gameName), runtime.config.GetAPIKey())
+	if errors.Is(err, importers.ErrUnsupportedGame) {
+		return fmt.Errorf("unknown game: %q (try: pokemon, mtg, yugioh, onepiece)", gameName)
 	}
-	if d.db != nil {
-		_ = d.db.Close()
+	if err != nil {
+		return err
 	}
+	return fn(importer)
 }
 
-func normalizeGameName(name string) string {
-	if canonical, ok := gameAliases[strings.ToLower(name)]; ok {
+var gameAliases = map[string]string{
+	"pokemon":              "Pokemon",
+	"pokémon tcg":          "Pokemon",
+	"pokemontcg":           "Pokemon",
+	"mtg":                  "Magic: The Gathering",
+	"magic":                "Magic: The Gathering",
+	"magic: the gathering": "Magic: The Gathering",
+	"yugioh":               "Yu-Gi-Oh!",
+	"yu-gi-oh":             "Yu-Gi-Oh!",
+	"yu-gi-oh!":            "Yu-Gi-Oh!",
+	"onepiece":             "One Piece",
+	"one piece":            "One Piece",
+}
+
+// canonicalGameName maps a user-supplied game alias to its card_games name.
+func canonicalGameName(name string) string {
+	if canonical, ok := gameAliases[strings.ToLower(strings.TrimSpace(name))]; ok {
 		return canonical
 	}
 	return name
 }
 
-func canonicalGameName(name string) string {
-	normalized := strings.TrimSpace(strings.ToLower(name))
-	switch normalized {
-	case "pokemon", "pokémon tcg", "pokemontcg":
-		return "Pokemon"
-	case "mtg", "magic", "magic: the gathering":
-		return "Magic: The Gathering"
-	case "yugioh", "yu-gi-oh", "yu-gi-oh!":
-		return "Yu-Gi-Oh!"
-	case "onepiece", "one piece":
-		return "One Piece"
-	default:
-		return normalizeGameName(name)
-	}
-}
-
-func resolveGame(gameSvc cardgame.CardGameService, gameName string) (*cardmodel.CardGame, error) {
-	canonical := canonicalGameName(gameName)
-	game, err := gameSvc.GetCardGameByName(canonical)
+func (d *cliDeps) resolveGame(gameName string) (*cardmodel.CardGame, error) {
+	game, err := d.gameSvc.GetCardGameByName(canonicalGameName(gameName))
 	if err != nil {
 		return nil, fmt.Errorf("game %q not found (try: pokemon, mtg, yugioh, onepiece): %w", gameName, err)
 	}
 	return game, nil
 }
 
-func resolveGameByID(gameSvc cardgame.CardGameService, gameID int64) (*cardmodel.CardGame, error) {
-	games, err := gameSvc.GetAllCardGames()
+// findCard looks up a card of the given game by set code and number.
+func (d *cliDeps) findCard(gameID int64, setCode, number string) (*cardmodel.Card, error) {
+	c, err := d.cardSvc.GetCardByGameAndSetCodeAndNumber(gameID, setCode, number)
+	if err != nil {
+		return nil, fmt.Errorf("card not found: %w", err)
+	}
+	if c == nil {
+		return nil, fmt.Errorf("card not found: %s %s", setCode, number)
+	}
+	return c, nil
+}
+
+// cardRows returns export rows for the cards of a game with a positive
+// quantity, in the card listing order (by name).
+func (d *cliDeps) cardRows(gameID int64, quantities map[int64]int) ([]export.CardRow, error) {
+	cards, err := d.cardSvc.GetCardsByGameID(gameID)
 	if err != nil {
 		return nil, err
 	}
-	for _, g := range games {
-		if g.ID == gameID {
-			return &g, nil
+	rows := make([]export.CardRow, 0, len(quantities))
+	for _, c := range cards {
+		if qty := quantities[c.ID]; qty > 0 {
+			rows = append(rows, toCardRow(c, qty))
 		}
 	}
-	return nil, fmt.Errorf("game with ID %d not found", gameID)
+	return rows, nil
 }
 
-func buildImporterForGame(database *sql.DB, gameName string, cfg config.Config) (gameimporter.GameImporter, error) {
-	importer, err := importers.New(database, canonicalGameName(gameName), cfg.GetAPIKey())
-	if errors.Is(err, importers.ErrUnsupportedGame) {
-		return nil, fmt.Errorf("unknown game: %q (try: pokemon, mtg, yugioh, onepiece)", gameName)
+func toCardRow(c cardmodel.Card, quantity int) export.CardRow {
+	row := export.CardRow{Name: c.Name, Number: c.Number, Rarity: c.Rarity, Quantity: quantity}
+	if c.Set != nil {
+		row.SetName = c.Set.Name
+		row.SetCode = c.Set.Code
 	}
-	return importer, err
+	return row
+}
+
+func parseID(kind, s string) (int64, error) {
+	id, err := strconv.ParseInt(s, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("invalid %s ID: %s", kind, s)
+	}
+	return id, nil
+}
+
+func parseQuantity(s string) (int, error) {
+	qty, err := strconv.Atoi(s)
+	if err != nil || qty <= 0 {
+		return 0, fmt.Errorf("invalid quantity: %s (must be a positive integer)", s)
+	}
+	return qty, nil
 }
 
 func writeTabular(w io.Writer, headers []string, rows [][]string) {
@@ -141,41 +171,45 @@ func writeTabular(w io.Writer, headers []string, rows [][]string) {
 	tw.Flush()
 }
 
-func resolveOutputFile(outputFlag, exportType, name, format string) string {
-	if outputFlag != "" {
-		return outputFlag
+// printCardRows prints card rows as a NAME/SET/NUMBER/RARITY/QTY table.
+func printCardRows(rows []export.CardRow) {
+	table := make([][]string, len(rows))
+	for i, r := range rows {
+		table[i] = []string{r.Name, r.SetCode, r.Number, r.Rarity, strconv.Itoa(r.Quantity)}
 	}
-	return export.GenerateFilename(exportType, name, format)
+	writeTabular(os.Stdout, []string{"NAME", "SET", "NUMBER", "RARITY", "QTY"}, table)
 }
 
-func buildCardsByIDMap(cards []cardmodel.Card) map[int64]cardmodel.Card {
-	m := make(map[int64]cardmodel.Card, len(cards))
-	for _, c := range cards {
-		m[c.ID] = c
+var exportExtensions = map[string]string{"csv": "csv", "text": "txt", "ptcgo": "ptcgo"}
+
+// exportRows writes rows in the given format (csv, text or ptcgo) to outputFlag,
+// or to a generated file name when outputFlag is empty.
+func exportRows(rows []export.CardRow, format, outputFlag, exportType, name, title string) error {
+	ext, ok := exportExtensions[format]
+	if !ok {
+		return fmt.Errorf("unknown export format %q (use csv, text or ptcgo)", format)
 	}
-	return m
+	outFile := outputFlag
+	if outFile == "" {
+		outFile = export.GenerateFilename(exportType, name, ext)
+	}
+	var err error
+	switch format {
+	case "text":
+		err = export.ToText(rows, outFile)
+	case "ptcgo":
+		err = export.ToPTCGO(title, rows, outFile)
+	default:
+		err = export.ToCSV(rows, outFile)
+	}
+	if err != nil {
+		return err
+	}
+	fmt.Printf("Exported %d cards to %s\n", len(rows), outFile)
+	return nil
 }
 
-func quantitiesToCardRows(quantities map[int64]int, cardsByID map[int64]cardmodel.Card) []export.CardRow {
-	rows := make([]export.CardRow, 0, len(quantities))
-	for cardID, qty := range quantities {
-		c, ok := cardsByID[cardID]
-		if !ok || qty == 0 {
-			continue
-		}
-		setName, setCode := "", ""
-		if c.Set != nil {
-			setName = c.Set.Name
-			setCode = c.Set.Code
-		}
-		rows = append(rows, export.CardRow{
-			Name:     c.Name,
-			SetName:  setName,
-			SetCode:  setCode,
-			Number:   c.Number,
-			Rarity:   c.Rarity,
-			Quantity: qty,
-		})
-	}
-	return rows
+func addExportFlags(cmd *cobra.Command) {
+	cmd.Flags().String("format", "csv", "Export format: csv, text, ptcgo")
+	cmd.Flags().String("output", "", "Output file path (auto-generated if omitted)")
 }

@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 )
 
 type CardRow struct {
@@ -129,8 +130,16 @@ func sumQty(rows []CardRow) int {
 	return total
 }
 
+// GenerateFilename builds "<type>_<name>_<date>.<ext>". The name is lowercased
+// and every run of characters other than letters and digits becomes a single
+// "_", so names like "AC/DC" or "Magic: The Gathering" give valid file names.
 func GenerateFilename(exportType, name, format string) string {
-	sanitized := strings.ReplaceAll(strings.ToLower(name), " ", "_")
+	sanitized := strings.Trim(strings.Join(strings.FieldsFunc(strings.ToLower(name), func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
+	}), "_"), "_")
+	if sanitized == "" {
+		sanitized = "export"
+	}
 	date := time.Now().Format("2006-01-02")
 	return fmt.Sprintf("%s_%s_%s.%s", exportType, sanitized, date, format)
 }

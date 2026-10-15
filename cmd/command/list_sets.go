@@ -2,7 +2,7 @@ package command
 
 import (
 	"fmt"
-	"log/slog"
+	"strconv"
 
 	"github.com/spf13/cobra"
 
@@ -21,10 +21,7 @@ This command queries the API for all sets and displays them in a table format
 showing the set ID, name, series, and total card count.
 
 Use this to discover set IDs for use with the 'import-sets' command.
-
-Examples:
-  cardman list-sets
-  cardman list-sets | grep -i "Sword"
+For plain, scriptable output use 'cardman import list-sets pokemon'.
 `
 )
 
@@ -72,12 +69,7 @@ var listSetsCmd = &cobra.Command{
 		}
 		defer runtime.Close()
 
-		apiKey := runtime.config.GetAPIKey()
-		client := pokemontcg.NewClient(apiKey)
-		logger := slog.Default()
-
-		logger.Info("Fetching sets from API...")
-		sets, err := client.GetSets(cmd.Context())
+		sets, err := pokemontcg.NewClient(runtime.config.GetAPIKey()).GetSets(cmd.Context())
 		if err != nil {
 			return fmt.Errorf("failed to fetch sets: %w", err)
 		}
@@ -89,13 +81,9 @@ var listSetsCmd = &cobra.Command{
 			{Title: "TOTAL CARDS", Width: 15},
 		}
 
-		rows := []table.Row{}
+		rows := make([]table.Row, 0, len(sets))
 		for _, set := range sets {
-			rows = append(rows, table.Row{
-				set.ID,
-				set.Name,
-				fmt.Sprintf("%d", set.Total),
-			})
+			rows = append(rows, table.Row{set.ID, set.Name, strconv.Itoa(set.Total)})
 		}
 
 		t := table.New(
@@ -118,9 +106,8 @@ var listSetsCmd = &cobra.Command{
 			Bold(true)
 		t.SetStyles(s)
 
-		m := model{t}
-		if _, err := tea.NewProgram(m).Run(); err != nil {
-			fmt.Println("Error running program:", err)
+		if _, err := tea.NewProgram(model{t}).Run(); err != nil {
+			return fmt.Errorf("run sets table: %w", err)
 		}
 		return nil
 	},

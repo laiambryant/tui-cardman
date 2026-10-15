@@ -2,13 +2,10 @@ package command
 
 import (
 	"fmt"
-	"os"
-	"strconv"
 
 	"github.com/spf13/cobra"
 
 	"github.com/laiambryant/tui-cardman/internal/export"
-	cardmodel "github.com/laiambryant/tui-cardman/internal/model"
 )
 
 var collectionCmd = &cobra.Command{
@@ -21,32 +18,10 @@ var collectionListCmd = &cobra.Command{
 	Short: "List your collection for a game",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		deps, err := buildCLIDeps()
-		if err != nil {
-			return err
-		}
-		defer deps.Close()
-		game, err := resolveGame(deps.gameSvc, args[0])
-		if err != nil {
-			return err
-		}
-		items, err := deps.collSvc.GetUserCollectionByGameID(deps.userID, game.ID)
-		if err != nil {
-			return err
-		}
-		rows := make([][]string, 0, len(items))
-		for _, item := range items {
-			if item.Card == nil {
-				continue
-			}
-			setCode := ""
-			if item.Card.Set != nil {
-				setCode = item.Card.Set.Code
-			}
-			rows = append(rows, []string{item.Card.Name, setCode, item.Card.Number, item.Card.Rarity, strconv.Itoa(item.Quantity)})
-		}
-		writeTabular(os.Stdout, []string{"NAME", "SET", "NUMBER", "RARITY", "QTY"}, rows)
-		return nil
+		return withCollectionRows(args[0], func(_ string, rows []export.CardRow) error {
+			printCardRows(rows)
+			return nil
+		})
 	},
 }
 
@@ -55,36 +30,7 @@ var collectionAddCmd = &cobra.Command{
 	Short: "Add cards to your collection",
 	Args:  cobra.ExactArgs(4),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		ctx := cmd.Context()
-		qty, err := strconv.Atoi(args[3])
-		if err != nil {
-			return fmt.Errorf("invalid quantity: %s", args[3])
-		}
-		deps, err := buildCLIDeps()
-		if err != nil {
-			return err
-		}
-		defer deps.Close()
-		game, err := resolveGame(deps.gameSvc, args[0])
-		if err != nil {
-			return err
-		}
-		c, err := deps.cardSvc.GetCardByGameAndSetCodeAndNumber(game.ID, args[1], args[2])
-		if err != nil {
-			return fmt.Errorf("card not found: %w", err)
-		}
-		if c == nil {
-			return fmt.Errorf("card not found for game %q: %s %s", game.Name, args[1], args[2])
-		}
-		existing, err := deps.collSvc.GetCardQuantity(deps.userID, c.ID)
-		if err != nil {
-			return err
-		}
-		if err := deps.collSvc.UpsertCollectionBatch(ctx, deps.userID, map[int64]int{c.ID: existing + qty}); err != nil {
-			return err
-		}
-		fmt.Printf("Added %d × %s to collection (total: %d)\n", qty, c.Name, existing+qty)
-		return nil
+		return adjustCollection(cmd, args, 1)
 	},
 }
 
@@ -93,41 +39,40 @@ var collectionRemoveCmd = &cobra.Command{
 	Short: "Remove cards from your collection",
 	Args:  cobra.ExactArgs(4),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		ctx := cmd.Context()
-		qty, err := strconv.Atoi(args[3])
-		if err != nil {
-			return fmt.Errorf("invalid quantity: %s", args[3])
-		}
-		deps, err := buildCLIDeps()
-		if err != nil {
-			return err
-		}
-		defer deps.Close()
-		game, err := resolveGame(deps.gameSvc, args[0])
-		if err != nil {
-			return err
-		}
-		c, err := deps.cardSvc.GetCardByGameAndSetCodeAndNumber(game.ID, args[1], args[2])
-		if err != nil {
-			return fmt.Errorf("card not found: %w", err)
-		}
-		if c == nil {
-			return fmt.Errorf("card not found for game %q: %s %s", game.Name, args[1], args[2])
-		}
-		existing, err := deps.collSvc.GetCardQuantity(deps.userID, c.ID)
-		if err != nil {
-			return err
-		}
-		newQty := existing - qty
-		if newQty < 0 {
-			newQty = 0
-		}
-		if err := deps.collSvc.UpsertCollectionBatch(ctx, deps.userID, map[int64]int{c.ID: newQty}); err != nil {
-			return err
-		}
-		fmt.Printf("Removed %d × %s from collection (total: %d)\n", qty, c.Name, newQty)
-		return nil
+		return adjustCollection(cmd, args, -1)
 	},
+}
+
+// adjustCollection adds (sign 1) or removes (sign -1) copies of a card.
+func adjustCollection(cmd *cobra.Command, args []string, sign int) error {
+	qty, err := parseQuantity(args[3])
+	if err != nil {
+		return err
+	}
+	return withDeps(func(d *cliDeps) error {
+		game, err := d.resolveGame(args[0])
+		if err != nil {
+			return err
+		}
+		c, err := d.findCard(game.ID, args[1], args[2])
+		if err != nil {
+			return err
+		}
+		existing, err := d.collSvc.GetCardQuantity(d.userID, c.ID)
+		if err != nil {
+			return err
+		}
+		newQty := max(existing+sign*qty, 0)
+		if err := d.collSvc.UpsertCollectionBatch(cmd.Context(), d.userID, map[int64]int{c.ID: newQty}); err != nil {
+			return err
+		}
+		verb, prep := "Added", "to"
+		if sign < 0 {
+			verb, prep = "Removed", "from"
+		}
+		fmt.Printf("%s %d × %s %s collection (total: %d)\n", verb, qty, c.Name, prep, newQty)
+		return nil
+	})
 }
 
 var collectionImportCmd = &cobra.Command{
@@ -135,36 +80,32 @@ var collectionImportCmd = &cobra.Command{
 	Short: "Import collection from a CSV file",
 	Args:  cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		ctx := cmd.Context()
-		deps, err := buildCLIDeps()
-		if err != nil {
-			return err
-		}
-		defer deps.Close()
-		game, err := resolveGame(deps.gameSvc, args[0])
-		if err != nil {
-			return err
-		}
 		rows, err := export.FromCSV(args[1])
 		if err != nil {
 			return err
 		}
-		lookup := func(setCode, number string) (int64, error) {
-			c, err := deps.cardSvc.GetCardByGameAndSetCodeAndNumber(game.ID, setCode, number)
-			if err != nil || c == nil {
-				return 0, nil
+		return withDeps(func(d *cliDeps) error {
+			game, err := d.resolveGame(args[0])
+			if err != nil {
+				return err
 			}
-			return c.ID, nil
-		}
-		result, quantities, err := export.ResolveCSVToCardQuantities(rows, lookup)
-		if err != nil {
-			return err
-		}
-		if err := deps.collSvc.UpsertCollectionBatch(ctx, deps.userID, quantities); err != nil {
-			return err
-		}
-		fmt.Println(result.Summary())
-		return nil
+			lookup := func(setCode, number string) (int64, error) {
+				c, err := d.cardSvc.GetCardByGameAndSetCodeAndNumber(game.ID, setCode, number)
+				if err != nil || c == nil {
+					return 0, err
+				}
+				return c.ID, nil
+			}
+			result, quantities, err := export.ResolveCSVToCardQuantities(rows, lookup)
+			if err != nil {
+				return err
+			}
+			if err := d.collSvc.UpsertCollectionBatch(cmd.Context(), d.userID, quantities); err != nil {
+				return err
+			}
+			fmt.Println(result.Summary())
+			return nil
+		})
 	},
 }
 
@@ -174,64 +115,35 @@ var collectionExportCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		format, _ := cmd.Flags().GetString("format")
-		outputFlag, _ := cmd.Flags().GetString("output")
-		deps, err := buildCLIDeps()
-		if err != nil {
-			return err
-		}
-		defer deps.Close()
-		game, err := resolveGame(deps.gameSvc, args[0])
-		if err != nil {
-			return err
-		}
-		items, err := deps.collSvc.GetUserCollectionByGameID(deps.userID, game.ID)
-		if err != nil {
-			return err
-		}
-		cardRows := collectionToCardRows(items)
-		outFile := resolveOutputFile(outputFlag, "collection", game.Name, format)
-		switch format {
-		case "text":
-			err = export.ToText(cardRows, outFile)
-		case "ptcgo":
-			err = export.ToPTCGO(game.Name+" Collection", cardRows, outFile)
-		default:
-			err = export.ToCSV(cardRows, outFile)
-		}
-		if err != nil {
-			return err
-		}
-		fmt.Printf("Exported %d cards to %s\n", len(cardRows), outFile)
-		return nil
+		output, _ := cmd.Flags().GetString("output")
+		return withCollectionRows(args[0], func(gameName string, rows []export.CardRow) error {
+			return exportRows(rows, format, output, "collection", gameName, gameName+" Collection")
+		})
 	},
 }
 
-func collectionToCardRows(items []cardmodel.UserCollection) []export.CardRow {
-	rows := make([]export.CardRow, 0, len(items))
-	for _, item := range items {
-		if item.Card == nil {
-			continue
+// withCollectionRows loads the user's collection for a game (most recently
+// added first) as rows and calls fn.
+func withCollectionRows(gameArg string, fn func(gameName string, rows []export.CardRow) error) error {
+	return withDeps(func(d *cliDeps) error {
+		game, err := d.resolveGame(gameArg)
+		if err != nil {
+			return err
 		}
-		setName, setCode := "", ""
-		if item.Card.Set != nil {
-			setName = item.Card.Set.Name
-			setCode = item.Card.Set.Code
+		items, err := d.collSvc.GetUserCollectionByGameID(d.userID, game.ID)
+		if err != nil {
+			return err
 		}
-		rows = append(rows, export.CardRow{
-			Name:     item.Card.Name,
-			SetName:  setName,
-			SetCode:  setCode,
-			Number:   item.Card.Number,
-			Rarity:   item.Card.Rarity,
-			Quantity: item.Quantity,
-		})
-	}
-	return rows
+		rows := make([]export.CardRow, 0, len(items))
+		for _, item := range items {
+			rows = append(rows, toCardRow(*item.Card, item.Quantity))
+		}
+		return fn(game.Name, rows)
+	})
 }
 
 func init() {
-	collectionExportCmd.Flags().String("format", "csv", "Export format: csv, text, ptcgo")
-	collectionExportCmd.Flags().String("output", "", "Output file path (auto-generated if omitted)")
+	addExportFlags(collectionExportCmd)
 	collectionCmd.AddCommand(collectionListCmd, collectionAddCmd, collectionRemoveCmd, collectionImportCmd, collectionExportCmd)
 	rootCmd.AddCommand(collectionCmd)
 }

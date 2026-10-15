@@ -168,20 +168,28 @@ cardman collection list <game>
 cardman collection add <game> <set-code> <number> <quantity>
 cardman collection remove <game> <set-code> <number> <quantity>
 cardman collection import <game> <csv-file>
-cardman collection export <game>
+cardman collection export <game> [--format csv|text|ptcgo] [--output <file>]
 cardman lists list <game>
-cardman lists create <game> <name>
+cardman lists create <game> <name> [--description <text>] [--color <hex>]
 cardman lists show <list-id>
 cardman lists add-card <list-id> <set-code> <number> <quantity>
+cardman lists remove-card <list-id> <set-code> <number>
+cardman lists export <list-id> [--format csv|text|ptcgo] [--output <file>]
+cardman lists delete <list-id>
 cardman decks list <game>
 cardman decks create <game> <name>
 cardman decks show <deck-id>
 cardman decks add-card <deck-id> <set-code> <number> <quantity>
+cardman decks remove-card <deck-id> <set-code> <number>
+cardman decks export <deck-id> [--format csv|text|ptcgo] [--output <file>]
+cardman decks delete <deck-id>
 cardman import list-sets <game>
 cardman import sets <game> <set-id...>
 cardman import all <game>
 cardman import new <game>
 ```
+
+`add`/`add-card` add the given quantity to what you already have; quantities must be positive.
 
 ```
 make help                Show all Make targets
