@@ -66,18 +66,18 @@ func NewImportState(cardSvc cardservice.CardService, gameID int64, sm *StyleMana
 	}
 }
 
-// HandleKey processes a key event and returns any commands to run.
-func (s *ImportState) HandleKey(key string) tea.Cmd {
+// Update processes a key event and returns any commands to run.
+func (s *ImportState) Update(msg tea.KeyMsg) tea.Cmd {
 	if !s.active {
 		return nil
 	}
-
+	key := msg.String()
 	switch s.phase {
 	case importPhaseInput:
-		return s.handleInputPhaseKey(key)
+		return s.handleInputPhaseKey(msg)
 	case importPhaseWorking:
-		// only allow quit during loading
-		if key == "esc" || key == "ctrl+c" {
+		// only allow canceling while loading
+		if key == "esc" {
 			s.active = false
 			return func() tea.Msg { return importCancelMsg{} }
 		}
@@ -87,8 +87,8 @@ func (s *ImportState) HandleKey(key string) tea.Cmd {
 	return nil
 }
 
-func (s *ImportState) handleInputPhaseKey(key string) tea.Cmd {
-	switch key {
+func (s *ImportState) handleInputPhaseKey(msg tea.KeyMsg) tea.Cmd {
+	switch msg.String() {
 	case "esc":
 		s.active = false
 		return func() tea.Msg { return importCancelMsg{} }
@@ -98,33 +98,32 @@ func (s *ImportState) handleInputPhaseKey(key string) tea.Cmd {
 			return nil
 		}
 		s.phase = importPhaseWorking
-		cardSvc := s.cardSvc
-		gameID := s.gameID
-		return func() tea.Msg {
-			rows, err := export.FromCSV(path)
-			if err != nil {
-				return importReadyMsg{err: err}
-			}
-			lookup := func(setCode, number string) (int64, error) {
-				card, err := cardSvc.GetCardByGameAndSetCodeAndNumber(gameID, setCode, number)
-				if err != nil {
-					return 0, err
-				}
-				if card == nil {
-					return 0, nil
-				}
-				return card.ID, nil
-			}
-			result, quantities, err := export.ResolveCSVToCardQuantities(rows, lookup)
-			if err != nil {
-				return importReadyMsg{err: err}
-			}
-			return importReadyMsg{result: result, quantities: quantities}
+		return resolveCSVCmd(s.cardSvc, s.gameID, path)
+	}
+	var cmd tea.Cmd
+	s.pathInput, cmd = s.pathInput.Update(msg)
+	return cmd
+}
+
+// resolveCSVCmd reads a CSV file and matches its rows against the game's cards.
+func resolveCSVCmd(cardSvc cardservice.CardService, gameID int64, path string) tea.Cmd {
+	return func() tea.Msg {
+		rows, err := export.FromCSV(path)
+		if err != nil {
+			return importReadyMsg{err: err}
 		}
-	default:
-		var cmd tea.Cmd
-		s.pathInput, cmd = s.pathInput.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(key)})
-		return cmd
+		lookup := func(setCode, number string) (int64, error) {
+			card, err := cardSvc.GetCardByGameAndSetCodeAndNumber(gameID, setCode, number)
+			if err != nil || card == nil {
+				return 0, err
+			}
+			return card.ID, nil
+		}
+		result, quantities, err := export.ResolveCSVToCardQuantities(rows, lookup)
+		if err != nil {
+			return importReadyMsg{err: err}
+		}
+		return importReadyMsg{result: result, quantities: quantities}
 	}
 }
 
@@ -146,16 +145,6 @@ func (s *ImportState) handleResultPhaseKey(key string) tea.Cmd {
 		}
 	}
 	return nil
-}
-
-// HandleTextInput passes a full tea.KeyMsg to the text input (for characters, backspace, etc.)
-func (s *ImportState) HandleTextInput(msg tea.KeyMsg) tea.Cmd {
-	if !s.active || s.phase != importPhaseInput {
-		return nil
-	}
-	var cmd tea.Cmd
-	s.pathInput, cmd = s.pathInput.Update(msg)
-	return cmd
 }
 
 // HandleResult processes the async importReadyMsg.

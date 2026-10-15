@@ -286,10 +286,6 @@ func TestBuildCardExportRows_NilSet(t *testing.T) {
 	assert.Equal(t, "", rows[0].SetCode)
 }
 
-func TestMatchActionOrDefault_NilConfig(t *testing.T) {
-	assert.Equal(t, "fallback", MatchActionOrDefault(nil, "ctrl+c", "fallback"))
-}
-
 func TestGetAction_NilConfig(t *testing.T) {
 	assert.Equal(t, "", GetAction(nil, "ctrl+c"))
 }

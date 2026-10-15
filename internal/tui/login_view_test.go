@@ -27,12 +27,13 @@ func TestInitSSHConfigManagerReplacesExistingManager(t *testing.T) {
 		db:            db,
 		isSSHMode:     true,
 		configManager: localManager,
+		styleManager:  NewStyleManager(),
 	}
 
 	m.initSSHConfigManager(userID)
 
 	require.NotNil(t, m.configManager)
-	assert.True(t, m.configManager.IsUserMode())
+	assert.NotSame(t, localManager, m.configManager)
 }
 
 func TestNewModelSSHStartsWithoutConfigManager(t *testing.T) {

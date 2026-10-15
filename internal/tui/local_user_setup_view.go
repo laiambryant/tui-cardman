@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -19,14 +20,14 @@ func (m *Model) initLocalUserSetupInputs() {
 	m.focusIndex = 0
 }
 
-func (m Model) localUserSetupView() string {
+func (m *Model) localUserSetupView() string {
 	header := RenderBreadcrumbs(m.styleManager, "Welcome")
 	body := m.renderLocalUserSetupBody()
 	footer := m.renderLocalUserSetupFooter()
 	return renderFramedView(header, body, footer, m.width, m.height, m.styleManager)
 }
 
-func (m Model) renderLocalUserSetupBody() string {
+func (m *Model) renderLocalUserSetupBody() string {
 	var b strings.Builder
 	b.WriteString(focusedStyle.Render("Let's set up your local profile to get started.") + "\n")
 	b.WriteString(blurredStyle.Render("This will be used to manage your card collections.") + "\n")
@@ -45,11 +46,11 @@ func (m Model) renderLocalUserSetupBody() string {
 	return b.String()
 }
 
-func (m Model) renderLocalUserSetupFooter() string {
+func (m *Model) renderLocalUserSetupFooter() string {
 	return helpStyle.Render(m.buildLocalSetupHelpText())
 }
 
-func (m Model) buildLocalSetupHelpText() string {
+func (m *Model) buildLocalSetupHelpText() string {
 	hb := NewHelpBuilder(m.configManager)
 	return JoinHelpHints(
 		hb.Build(KeyItem{"settings", "F1", "Settings"}),
@@ -61,69 +62,41 @@ func (m Model) buildLocalSetupHelpText() string {
 	)
 }
 
-func (m *Model) validateLocalUserSetupInputs(name, surname, email string) string {
-	name = strings.TrimSpace(name)
-	surname = strings.TrimSpace(surname)
-	email = strings.TrimSpace(email)
-	if name == "" {
-		return "First name is required"
-	}
-	if surname == "" {
-		return "Last name is required"
-	}
-	if email == "" {
-		return "Email is required"
-	}
-	if !strings.Contains(email, "@") || !strings.Contains(email, ".") {
-		return "Please enter a valid email address"
-	}
-	return ""
-}
-
 func (m *Model) initLocalConfigManager() {
 	if m.configManager != nil {
 		return
 	}
-	configPath := runtimecfg.GetConfigPath()
-	configManager, cfgErr := runtimecfg.NewManager(true, configPath, nil, 0)
-	if cfgErr != nil {
-		fmt.Printf("Warning: failed to initialize config manager, will fallback to default configuration: %v\n", cfgErr)
-	} else {
-		m.configManager = configManager
-		m.applyConfiguredTheme()
+	configManager, err := runtimecfg.NewManager(true, runtimecfg.GetConfigPath(), nil, 0)
+	if err != nil {
+		slog.Warn("failed to initialize config manager, using default keybindings", "error", err)
+		return
 	}
+	m.configManager = configManager
+	m.applyConfiguredTheme()
 }
 
 func (m *Model) handleLocalUserSetup() (tea.Model, tea.Cmd) {
-	name := strings.TrimSpace(m.inputs[0].Value())
-	surname := strings.TrimSpace(m.inputs[1].Value())
-	email := strings.TrimSpace(m.inputs[2].Value())
-	if validationErr := m.validateLocalUserSetupInputs(name, surname, email); validationErr != "" {
-		m.errorMsg = validationErr
-		return m, nil
-	}
 	req := auth.RegisterRequest{
-		Name:     name,
-		Surname:  surname,
-		Email:    email,
-		Password: "",
+		Name:    strings.TrimSpace(m.inputs[0].Value()),
+		Surname: strings.TrimSpace(m.inputs[1].Value()),
+		Email:   strings.TrimSpace(m.inputs[2].Value()),
 	}
-	user, err := m.userService.CreateUser(req, "")
-	if err != nil {
-		if strings.Contains(err.Error(), "UNIQUE constraint") {
-			m.errorMsg = "This email is already registered"
-		} else {
+	switch {
+	case req.Name == "":
+		m.errorMsg = "First name is required"
+	case req.Surname == "":
+		m.errorMsg = "Last name is required"
+	case req.Email == "":
+		m.errorMsg = "Email is required"
+	case auth.ValidateEmail(req.Email) != nil:
+		m.errorMsg = "Please enter a valid email address"
+	default:
+		u, err := m.userService.CreateUser(req, "")
+		if err != nil {
 			m.errorMsg = fmt.Sprintf("Failed to create profile: %v", err)
+			return m, nil
 		}
-		return m, nil
-	}
-	m.user = user
-	m.initLocalConfigManager()
-	m.screen = ScreenMain
-	m.errorMsg = ""
-	m.initMainScreenImport()
-	if m.importModel != nil {
-		return m, m.importModel.Init()
+		return m, m.enterMainScreen(u)
 	}
 	return m, nil
 }

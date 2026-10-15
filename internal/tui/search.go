@@ -68,9 +68,7 @@ func fuzzySearchCards(cards []model.Card, query string) []FuzzySearchResult {
 		})
 	}
 
-	sort.Slice(results, func(i, j int) bool {
-		return results[i].Score > results[j].Score
-	})
+	sortByScore(results, func(r FuzzySearchResult) (int, int) { return r.Score, r.Index })
 
 	return results
 }
@@ -129,15 +127,26 @@ func fuzzySearchCollections(collections []model.UserCollection, query string) []
 	for idx, score := range bestScore {
 		ranked = append(ranked, scored{idx, score})
 	}
-	sort.Slice(ranked, func(i, j int) bool {
-		return ranked[i].score > ranked[j].score
-	})
+	sortByScore(ranked, func(r scored) (int, int) { return r.score, r.index })
 
 	results := make([]model.UserCollection, 0, len(ranked))
 	for _, r := range ranked {
 		results = append(results, collections[r.index])
 	}
 	return results
+}
+
+// sortByScore orders fuzzy matches by descending score, keeping the original
+// order for equal scores so results do not jump around between searches.
+func sortByScore[T any](items []T, key func(T) (score, index int)) {
+	sort.Slice(items, func(i, j int) bool {
+		si, ii := key(items[i])
+		sj, ij := key(items[j])
+		if si != sj {
+			return si > sj
+		}
+		return ii < ij
+	})
 }
 
 // --- Search Cache ---

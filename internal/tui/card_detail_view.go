@@ -56,63 +56,42 @@ func (m *CardDetailModel) Close() {
 }
 
 func (m *CardDetailModel) fetchDetailCmd(cardID int64) tea.Cmd {
+	tcgService, cmService, listService, userID := m.tcgService, m.cmService, m.listService, m.userID
+	renderer := m.activeRenderer()
 	return func() tea.Msg {
-		var tcgPrices []model.TCGPlayerPriceRow
-		var cmPrice *model.CardMarketPriceRow
-		var lists []model.UserList
-		if m.tcgService != nil {
-			tcgPrices, _ = m.tcgService.GetLatestPricesForCard(cardID)
+		var msg cardDetailLoadedMsg
+		if tcgService != nil {
+			msg.tcgPrices, _ = tcgService.GetLatestPricesForCard(cardID)
 		}
-		if m.cmService != nil {
-			cmPrice, _ = m.cmService.GetLatestPriceForCard(cardID)
+		if cmService != nil {
+			msg.cardMarketPrice, _ = cmService.GetLatestPriceForCard(cardID)
 		}
-		if m.listService != nil && m.userID > 0 {
-			lists, _ = m.listService.GetListsContainingCard(m.userID, cardID)
+		if listService != nil && userID > 0 {
+			msg.lists, _ = listService.GetListsContainingCard(userID, cardID)
 		}
-		var extraData any
-		for _, r := range m.renderers {
-			if r.CanRender(m.card.CardGameID) {
-				extraData = r.FetchExtra(cardID)
-				break
-			}
+		if renderer != nil {
+			msg.extraData = renderer.FetchExtra(cardID)
 		}
-		return cardDetailLoadedMsg{
-			tcgPrices:       tcgPrices,
-			cardMarketPrice: cmPrice,
-			lists:           lists,
-			extraData:       extraData,
-		}
+		return msg
 	}
 }
 
-func (m *CardDetailModel) Update(msg tea.Msg) (CardDetailModel, tea.Cmd) {
-	switch msg := msg.(type) {
-	case cardDetailLoadedMsg:
-		m.tcgPrices = msg.tcgPrices
-		m.cardMarketPrice = msg.cardMarketPrice
-		m.listsContaining = msg.lists
-		m.extraData = msg.extraData
-		return *m, nil
-	case tea.KeyMsg:
-		s := msg.String()
-		if s == "esc" || s == "q" {
-			m.Close()
-			return *m, nil
-		}
-		if s == "up" || s == "k" {
-			if m.scroll > 0 {
-				m.scroll--
-			}
-			return *m, nil
-		}
-		if s == "down" || s == "j" {
-			if m.scroll < m.maxScroll {
-				m.scroll++
-			}
-			return *m, nil
-		}
+func (m *CardDetailModel) applyLoaded(msg cardDetailLoadedMsg) {
+	m.tcgPrices = msg.tcgPrices
+	m.cardMarketPrice = msg.cardMarketPrice
+	m.listsContaining = msg.lists
+	m.extraData = msg.extraData
+}
+
+func (m *CardDetailModel) handleKey(key string) {
+	switch key {
+	case "esc", "q":
+		m.Close()
+	case "up", "k":
+		m.scroll = max(m.scroll-1, 0)
+	case "down", "j":
+		m.scroll = min(m.scroll+1, m.maxScroll)
 	}
-	return *m, nil
 }
 
 func (m *CardDetailModel) activeRenderer() CardDetailRenderer {

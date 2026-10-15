@@ -7,7 +7,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-func (m Model) mainView() string {
+func (m *Model) mainView() string {
 	header := m.renderMainHeader()
 	footer := m.renderMainFooter()
 	layout := calculateFrameLayout(lipgloss.Height(header), lipgloss.Height(footer), m.width, m.height)
@@ -15,7 +15,7 @@ func (m Model) mainView() string {
 	return renderFramedViewWithLayout(header, body, footer, layout, m.styleManager)
 }
 
-func (m Model) renderMainHeader() string {
+func (m *Model) renderMainHeader() string {
 	brand := RenderBrand(m.styleManager)
 	divider := subtleStyle.Render("  │  ")
 	if m.user != nil {
@@ -24,7 +24,7 @@ func (m Model) renderMainHeader() string {
 	return brand + divider + helpStyle.Render("Card Collection Manager")
 }
 
-func (m Model) renderMainFooter() string {
+func (m *Model) renderMainFooter() string {
 	var b strings.Builder
 	if m.errorMsg != "" {
 		b.WriteString(errorStyle.Render("Error: "+m.errorMsg) + "\n")
@@ -33,7 +33,7 @@ func (m Model) renderMainFooter() string {
 	return b.String()
 }
 
-func (m Model) renderSplitMainBody(contentWidth, contentHeight int) string {
+func (m *Model) renderSplitMainBody(contentWidth, contentHeight int) string {
 	if contentWidth <= 0 || contentHeight <= 0 {
 		return ""
 	}
@@ -46,7 +46,7 @@ func (m Model) renderSplitMainBody(contentWidth, contentHeight int) string {
 	return lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, rightPanel)
 }
 
-func (m Model) renderCardGamesPanel(width, height int) string {
+func (m *Model) renderCardGamesPanel(width, height int) string {
 	var b strings.Builder
 	innerWidth := max(width-6, 10)
 	btnMaxWidth := max(innerWidth-4, 6)
@@ -63,7 +63,7 @@ func (m Model) renderCardGamesPanel(width, height int) string {
 
 // renderRightPanel renders the right side of the home screen split into
 // top (mode selection) and bottom (stats).
-func (m Model) renderRightPanel(width, height int) string {
+func (m *Model) renderRightPanel(width, height int) string {
 	// Split right panel: top ~45% for modes, bottom ~55% for stats
 	// We render them as a vertical join inside a single outer panel.
 	// inner area (accounting for panel border+padding: 2 border + 2 pad each side = 6 per axis)
@@ -87,7 +87,7 @@ var modeLabels = []string{
 	"Import Sets",
 }
 
-func (m Model) renderModesSection(innerWidth, btnMaxWidth, availHeight int) string {
+func (m *Model) renderModesSection(innerWidth, btnMaxWidth, availHeight int) string {
 	var b strings.Builder
 	b.WriteString(secondaryStyle.Bold(true).Render("Select Mode") + "\n")
 	for i, label := range modeLabels {
@@ -98,7 +98,7 @@ func (m Model) renderModesSection(innerWidth, btnMaxWidth, availHeight int) stri
 	return b.String()
 }
 
-func (m Model) renderStatsSection(innerWidth, availHeight int) string {
+func (m *Model) renderStatsSection(innerWidth, availHeight int) string {
 	_ = availHeight
 	sm := m.styleManager
 
@@ -155,7 +155,7 @@ func (m Model) renderStatsSection(innerWidth, availHeight int) string {
 	return b.String()
 }
 
-func (m Model) renderMainMenuHelp() string {
+func (m *Model) renderMainMenuHelp() string {
 	hb := NewHelpBuilder(m.configManager)
 	return JoinHelpHints(
 		hb.Build(KeyItem{"settings", "F1", "Settings"}),

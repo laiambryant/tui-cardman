@@ -37,34 +37,27 @@ func (m *Model) initRegisterInputs() {
 }
 
 func (m *Model) handleRegister() (tea.Model, tea.Cmd) {
-	name := m.inputs[0].Value()
-	surname := m.inputs[1].Value()
-	email := m.inputs[2].Value()
-	password := m.inputs[3].Value()
-	user, err := m.authService.Register(auth.RegisterRequest{
-		Name:     name,
-		Surname:  surname,
-		Email:    email,
-		Password: password,
+	u, err := m.authService.Register(auth.RegisterRequest{
+		Name:     m.inputs[0].Value(),
+		Surname:  m.inputs[1].Value(),
+		Email:    m.inputs[2].Value(),
+		Password: m.inputs[3].Value(),
 	})
 	if err != nil {
 		m.errorMsg = err.Error()
 		return m, nil
 	}
-	m.user = user
-	m.screen = ScreenMain
-	m.errorMsg = ""
-	return m, nil
+	return m, m.enterMainScreen(u)
 }
 
-func (m Model) registerView() string {
+func (m *Model) registerView() string {
 	header := RenderBreadcrumbs(m.styleManager, "Register")
 	body := m.renderRegisterBody()
 	footer := m.renderRegisterFooter()
 	return renderFramedView(header, body, footer, m.width, m.height, m.styleManager)
 }
 
-func (m Model) renderRegisterBody() string {
+func (m *Model) renderRegisterBody() string {
 	var b strings.Builder
 	b.WriteString(RenderConditionalLabel(true, "First Name:") + "\n")
 	b.WriteString(m.inputs[0].View() + "\n")
@@ -81,7 +74,7 @@ func (m Model) renderRegisterBody() string {
 	return b.String()
 }
 
-func (m Model) renderRegisterFooter() string {
+func (m *Model) renderRegisterFooter() string {
 	var b strings.Builder
 	b.WriteString(helpStyle.Render("Already have an account? Press Enter on the button below") + "\n")
 	b.WriteString(RenderButton(m.focusIndex == len(m.inputs)+1, "[ Back to Login ]") + "\n")

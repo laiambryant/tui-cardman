@@ -29,10 +29,6 @@ func (r *MTGCardRenderer) FetchExtra(cardID int64) any {
 	return mc
 }
 
-func (r *MTGCardRenderer) ModalDimensions(termWidth, termHeight int) (int, int) {
-	return max(80, termWidth-6), max(30, termHeight-4)
-}
-
 func (r *MTGCardRenderer) RenderLeft(card model.Card, extra any, width, height int, sm *StyleManager) string {
 	mc, _ := extra.(*model.MagicCard)
 	cw := max(width-6, 10)

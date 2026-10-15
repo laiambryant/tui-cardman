@@ -132,23 +132,6 @@ func TestCalculateProgressPercentage(t *testing.T) {
 	}
 }
 
-func TestCreateProgressBar(t *testing.T) {
-	bar := createProgressBar(5, 10, 20)
-	assert.Equal(t, 20, len([]rune(bar)))
-	assert.Contains(t, bar, "█")
-	assert.Contains(t, bar, "░")
-}
-
-func TestCreateProgressBar_Full(t *testing.T) {
-	bar := createProgressBar(10, 10, 10)
-	assert.Equal(t, "██████████", bar)
-}
-
-func TestCreateProgressBar_Empty(t *testing.T) {
-	bar := createProgressBar(0, 10, 10)
-	assert.Equal(t, "░░░░░░░░░░", bar)
-}
-
 func TestSplitImportPanelWidths_Normal(t *testing.T) {
 	left, right := splitImportPanelWidths(80)
 	assert.Greater(t, left, 0)

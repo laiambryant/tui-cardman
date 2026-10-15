@@ -39,11 +39,6 @@ func calculateProgressPercentage(completed, total int) int {
 	return int(float64(completed) / float64(total) * 100)
 }
 
-func createProgressBar(completed, total, barWidth int) string {
-	filledWidth := int(float64(barWidth) * float64(completed) / float64(total))
-	return strings.Repeat("█", filledWidth) + strings.Repeat("░", barWidth-filledWidth)
-}
-
 func renderStyledLine(style lipgloss.Style, format string, args ...interface{}) string {
 	return style.Render(fmt.Sprintf(format, args...)) + "\n"
 }
@@ -94,10 +89,6 @@ func (m ImportModel) renderImportHeader() string {
 
 func (m ImportModel) renderImportBody(maxLines int) string {
 	var b strings.Builder
-	if m.isLoading {
-		b.WriteString(m.styleManager.GetFocusedStyle().Render(m.loadingMsg))
-		return b.String()
-	}
 	b.WriteString(m.renderSearchInput() + "\n\n")
 	contentWidth := m.width - frameBorderSize - framePaddingX*2
 	if contentWidth < 0 {
@@ -331,7 +322,7 @@ func (m ImportModel) renderHelp() string {
 	common := JoinHelpHints(
 		RenderHelpHint("Tab", "Switch panel"),
 		hb.Pair("nav_up", "↑", "nav_down", "↓", "Navigate"),
-		hb.Build(KeyItem{"back", "Q", "Back"}),
+		hb.Build(KeyItem{"quit_alt", "Esc", "Back"}),
 	)
 	var contextual string
 	switch m.focus {

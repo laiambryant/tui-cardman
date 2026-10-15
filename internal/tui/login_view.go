@@ -3,7 +3,9 @@ package tui
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -22,57 +24,42 @@ func (m *Model) initLoginInputs() {
 }
 
 func (m *Model) initSSHConfigManager(userID int64) {
-	if !m.isSSHMode {
-		return
-	}
 	buttonConfigService := buttonconfig.NewButtonConfigService(m.db)
 	ctx := context.Background()
-	_, err := buttonConfigService.GetByUserID(ctx, userID)
-	if err == sql.ErrNoRows {
+	if _, err := buttonConfigService.GetByUserID(ctx, userID); errors.Is(err, sql.ErrNoRows) {
 		if initErr := buttonConfigService.InitializeDefault(ctx, userID); initErr != nil {
-			fmt.Printf("Warning: failed to initialize default config for user %d: %v\n", userID, initErr)
+			slog.Warn("failed to initialize default config", "user_id", userID, "error", initErr)
 		}
 	}
-	configPath := runtimecfg.GetConfigPath()
-	configManager, err := runtimecfg.NewManager(false, configPath, buttonConfigService, userID)
+	configManager, err := runtimecfg.NewManager(false, runtimecfg.GetConfigPath(), buttonConfigService, userID)
 	if err != nil {
 		m.errorMsg = fmt.Sprintf("Login successful but failed to load config: %v", err)
-	} else {
-		m.configManager = configManager
-		m.applyConfiguredTheme()
+		return
 	}
+	m.configManager = configManager
+	m.applyConfiguredTheme()
 }
 
 func (m *Model) handleLogin() (tea.Model, tea.Cmd) {
-	email := m.inputs[0].Value()
-	password := m.inputs[1].Value()
-	user, err := m.authService.Login(auth.LoginRequest{
-		Email:    email,
-		Password: password,
+	u, err := m.authService.Login(auth.LoginRequest{
+		Email:    m.inputs[0].Value(),
+		Password: m.inputs[1].Value(),
 	})
 	if err != nil {
 		m.errorMsg = err.Error()
 		return m, nil
 	}
-	m.user = user
-	m.initSSHConfigManager(user.ID)
-	m.screen = ScreenMain
-	m.errorMsg = ""
-	m.initMainScreenImport()
-	if m.importModel != nil {
-		return m, m.importModel.Init()
-	}
-	return m, nil
+	return m, m.enterMainScreen(u)
 }
 
-func (m Model) loginView() string {
+func (m *Model) loginView() string {
 	header := RenderBreadcrumbs(m.styleManager, "Login")
 	body := m.renderLoginBody()
 	footer := m.renderLoginFooter()
 	return renderFramedView(header, body, footer, m.width, m.height, m.styleManager)
 }
 
-func (m Model) renderLoginBody() string {
+func (m *Model) renderLoginBody() string {
 	var b strings.Builder
 	b.WriteString(RenderConditionalLabel(true, "Email:") + "\n")
 	b.WriteString(m.inputs[0].View() + "\n")
@@ -85,7 +72,7 @@ func (m Model) renderLoginBody() string {
 	return b.String()
 }
 
-func (m Model) renderLoginFooter() string {
+func (m *Model) renderLoginFooter() string {
 	var b strings.Builder
 	b.WriteString(helpStyle.Render("Don't have an account? Press Enter on the button below") + "\n")
 	b.WriteString(RenderButton(m.focusIndex == len(m.inputs)+1, "[ Register ]") + "\n")

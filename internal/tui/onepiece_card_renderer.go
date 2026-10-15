@@ -29,10 +29,6 @@ func (r *OnePieceCardRenderer) FetchExtra(cardID int64) any {
 	return oc
 }
 
-func (r *OnePieceCardRenderer) ModalDimensions(termWidth, termHeight int) (int, int) {
-	return max(80, termWidth-6), max(30, termHeight-4)
-}
-
 func (r *OnePieceCardRenderer) RenderLeft(card model.Card, extra any, width, height int, sm *StyleManager) string {
 	oc, _ := extra.(*model.OnePieceCard)
 	cw := max(width-6, 10)

@@ -70,19 +70,24 @@ func renderValueChart(snapshots []usercollection.ValueSnapshot, width, height in
 	return b.String()
 }
 
+// calcValueChange returns the percentage change between the latest snapshot
+// and the most recent one taken at least days earlier (or the oldest one).
+// Snapshots are only recorded on days the collection is opened, so they are
+// matched by date rather than by position.
 func calcValueChange(snapshots []usercollection.ValueSnapshot, days int) (float64, bool) {
 	if len(snapshots) < 2 {
 		return 0, false
 	}
 	latest := snapshots[len(snapshots)-1]
-	target := len(snapshots) - days
-	if target < 0 {
-		target = 0
+	cutoff := latest.Date.AddDate(0, 0, -days)
+	prev := snapshots[0]
+	for _, s := range snapshots[:len(snapshots)-1] {
+		if !s.Date.After(cutoff) {
+			prev = s
+		}
 	}
-	prev := snapshots[target]
 	if prev.Value == 0 {
 		return 0, false
 	}
-	change := ((latest.Value - prev.Value) / prev.Value) * 100
-	return change, true
+	return (latest.Value - prev.Value) / prev.Value * 100, true
 }

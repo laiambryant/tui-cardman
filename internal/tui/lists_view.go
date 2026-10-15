@@ -181,13 +181,7 @@ func (m ListsModel) Update(msg tea.Msg) (ListsModel, tea.Cmd) {
 	}
 	if m.importState.active {
 		if keyMsg, ok := msg.(tea.KeyMsg); ok {
-			cmd := m.importState.HandleTextInput(keyMsg)
-			if cmd == nil {
-				cmd = m.importState.HandleKey(keyMsg.String())
-			} else {
-				_ = m.importState.HandleKey(keyMsg.String())
-			}
-			return m, cmd
+			return m, m.importState.Update(keyMsg)
 		}
 	}
 	switch msg := msg.(type) {
@@ -216,12 +210,9 @@ func (m ListsModel) Update(msg tea.Msg) (ListsModel, tea.Cmd) {
 			return m, nil
 		}
 		s := msg.String()
-		action := MatchActionOrDefault(m.configManager, s, "")
-		if action == "quit" || s == "ctrl+c" {
-			return m, tea.Quit
-		}
+		action := GetAction(m.configManager, s)
 		if m.mode == ListsModeCreate || m.mode == ListsModeEdit {
-			return m.handleFormKeys(s, action)
+			return m.handleFormKeys(msg, s, action)
 		}
 		if m.focus == ListsFocusListPanel {
 			return m.handleListPanelKeys(s, action)
@@ -283,15 +274,7 @@ func (m ListsModel) handleListPanelKeys(s, action string) (ListsModel, tea.Cmd) 
 	}
 	if action == "delete" && len(m.lists) > 0 && m.listCursor < len(m.lists) {
 		l := m.lists[m.listCursor]
-		m.modal = newModal(
-			"Delete List",
-			fmt.Sprintf("Delete list %q? This cannot be undone.", l.Name),
-			func() tea.Cmd {
-				return func() tea.Msg { return deleteListMsg{listID: l.ID} }
-			},
-			func() tea.Cmd { return nil },
-			m.styleManager, m.width, m.height,
-		)
+		m.modal = newConfirmModal("Delete List", fmt.Sprintf("Delete list %q? This cannot be undone.", l.Name), deleteListMsg{listID: l.ID}, m.styleManager, m.width, m.height)
 		return m, nil
 	}
 	return m, nil
@@ -321,8 +304,9 @@ func (m ListsModel) handleCardPanelKeys(msg tea.KeyMsg, s, action string) (Lists
 		m.listContentsTable.Blur()
 		return m, nil
 	}
-	// Back key: only handle when search is NOT focused (so Esc closes, not clears search)
-	if isBackKey(action, s) && m.cardSubFocus != listCardSubFocusSearch {
+	// While the search box has focus only Esc goes back, so "q" can be typed.
+	if m.cardSubFocus == listCardSubFocusSearch && isBackKeyWhileTyping(action, s) ||
+		m.cardSubFocus != listCardSubFocusSearch && isBackKey(action, s) {
 		if m.cardSubFocus == listCardSubFocusContents {
 			m.cardSubFocus = listCardSubFocusSearch
 			m.listContentsTable.Blur()
@@ -401,7 +385,7 @@ func (m ListsModel) handleCardPanelKeys(msg tea.KeyMsg, s, action string) (Lists
 	return m, nil
 }
 
-func (m ListsModel) handleFormKeys(s, action string) (ListsModel, tea.Cmd) {
+func (m ListsModel) handleFormKeys(msg tea.KeyMsg, s, action string) (ListsModel, tea.Cmd) {
 	if s == "esc" {
 		m.mode = ListsModeNormal
 		m.nameInput.Blur()
@@ -437,35 +421,20 @@ func (m ListsModel) handleFormKeys(s, action string) (ListsModel, tea.Cmd) {
 			return m, nil
 		}
 		if m.mode == ListsModeCreate {
-			m.modal = newModal(
-				"Create List",
-				fmt.Sprintf("Create list %q?", m.nameInput.Value()),
-				func() tea.Cmd { return func() tea.Msg { return createListMsg{} } },
-				func() tea.Cmd { return nil },
-				m.styleManager, m.width, m.height,
-			)
+			m.modal = newConfirmModal("Create List", fmt.Sprintf("Create list %q?", m.nameInput.Value()), createListMsg{}, m.styleManager, m.width, m.height)
 		} else {
-			m.modal = newModal(
-				"Update List",
-				fmt.Sprintf("Update list %q?", m.nameInput.Value()),
-				func() tea.Cmd { return func() tea.Msg { return updateListMsg{} } },
-				func() tea.Cmd { return nil },
-				m.styleManager, m.width, m.height,
-			)
+			m.modal = newConfirmModal("Update List", fmt.Sprintf("Update list %q?", m.nameInput.Value()), updateListMsg{}, m.styleManager, m.width, m.height)
 		}
 		return m, nil
 	}
-	if m.formFocus == 0 {
-		var cmd tea.Cmd
-		m.nameInput, cmd = m.nameInput.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)})
-		return m, cmd
+	var cmd tea.Cmd
+	switch m.formFocus {
+	case 0:
+		m.nameInput, cmd = m.nameInput.Update(msg)
+	case 1:
+		m.descInput, cmd = m.descInput.Update(msg)
 	}
-	if m.formFocus == 1 {
-		var cmd tea.Cmd
-		m.descInput, cmd = m.descInput.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)})
-		return m, cmd
-	}
-	return m, nil
+	return m, cmd
 }
 
 func (m ListsModel) updateFormFocus() ListsModel {
@@ -732,13 +701,7 @@ func (m ListsModel) handleSaveListCards() (ListsModel, tea.Cmd) {
 		return m, nil
 	}
 	message := fmt.Sprintf("Save %d card changes to list %q?", m.quantities.pendingCount(), m.selectedList.Name)
-	m.modal = newModal(
-		"Confirm Save",
-		message,
-		func() tea.Cmd { return func() tea.Msg { return saveListCardsMsg{} } },
-		func() tea.Cmd { return nil },
-		m.styleManager, m.width, m.height,
-	)
+	m.modal = newConfirmModal("Confirm Save", message, saveListCardsMsg{}, m.styleManager, m.width, m.height)
 	return m, nil
 }
 

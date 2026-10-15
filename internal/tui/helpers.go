@@ -270,11 +270,17 @@ func GetColumnOrder(cfg *runtimecfg.Manager) []string {
 	return c.UI.ColumnOrder
 }
 
-func Truncate(s string, max int) string {
-	if len(s) > max {
-		return s[:max-3] + "..."
+// Truncate shortens s to at most maxLen runes, ending it with "..." when there
+// is room for it.
+func Truncate(s string, maxLen int) string {
+	runes := []rune(s)
+	if len(runes) <= maxLen {
+		return s
 	}
-	return s
+	if maxLen < 3 {
+		return string(runes[:max(maxLen, 0)])
+	}
+	return string(runes[:maxLen-3]) + "..."
 }
 
 // NewStyledTable creates a table with consistent styling
@@ -287,13 +293,6 @@ func NewStyledTable(columns []table.Column, height int, focused bool, styleManag
 	s := styleManager.GetTableStyles()
 	t.SetStyles(s)
 	return t
-}
-
-func MatchActionOrDefault(cfg *runtimecfg.Manager, keyString, fallback string) string {
-	if cfg != nil {
-		return cfg.MatchAction(keyString)
-	}
-	return fallback
 }
 
 func progressBarCells(percent float64, width int) (int, int, float64) {
@@ -445,13 +444,11 @@ func RenderStatusBadge(sm *StyleManager, kind, label string) string {
 }
 
 func RenderFramedWithModal(header, footer string, bodyFn func(availableHeight int) string, width, height int, sm *StyleManager, modal *ModalModel) string {
-	layout := calculateFrameLayout(lipgloss.Height(header), lipgloss.Height(footer), width, height)
-	body := bodyFn(layout.BodyContentHeight)
-	content := renderFramedViewWithLayout(header, body, footer, layout, sm)
 	if modal != nil && modal.IsVisible() {
 		return modal.View()
 	}
-	return content
+	layout := calculateFrameLayout(lipgloss.Height(header), lipgloss.Height(footer), width, height)
+	return renderFramedViewWithLayout(header, bodyFn(layout.BodyContentHeight), footer, layout, sm)
 }
 
 func CalcTableHeight(availableHeight, headerLines, minHeight int) int {
@@ -492,8 +489,13 @@ func RenderButtonItem(sm *StyleManager, label string, isSelected bool, maxWidth 
 		Padding(0, 1)).Render(label) + "\n"
 }
 
+// GetAction returns the configured action bound to key s, or "" when none is
+// (or no configuration is loaded).
 func GetAction(cfg *runtimecfg.Manager, s string) string {
-	return MatchActionOrDefault(cfg, s, "")
+	if cfg == nil {
+		return ""
+	}
+	return cfg.MatchAction(s)
 }
 
 func RenderListItem(line string, isSelected bool) string {
@@ -543,7 +545,7 @@ func buildCardExportRows(cards []model.Card, dbQtys, tempDeltas map[int64]int) [
 	return rows
 }
 
-func (m Model) buildAuthViewHelpText() string {
+func (m *Model) buildAuthViewHelpText() string {
 	hb := NewHelpBuilder(m.configManager)
 	return JoinHelpHints(
 		hb.Build(KeyItem{"settings", "F1", "Settings"}),

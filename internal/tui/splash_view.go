@@ -6,7 +6,7 @@ import (
 	"github.com/laiambryant/tui-cardman/internal/tui/art"
 )
 
-func (m Model) splashView() string {
+func (m *Model) splashView() string {
 	scheme := m.styleManager.scheme
 	logo := art.RenderLogo(
 		m.width, m.height,

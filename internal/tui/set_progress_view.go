@@ -2,6 +2,7 @@ package tui
 
 import (
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -39,9 +40,7 @@ func renderSetProgressGrid(cards []model.Card, ownedCardIDs map[int64]bool, widt
 	if len(cards) == 0 {
 		return sm.GetBlurredStyle().Render("No cards in this set.")
 	}
-	sort.Slice(cards, func(i, j int) bool {
-		return cards[i].Number < cards[j].Number
-	})
+	sortCardsByNumber(cards)
 	cellWidth := 2
 	cols := (width - 4) / cellWidth
 	if cols < 1 {
@@ -72,4 +71,20 @@ func renderSetProgressGrid(cards []model.Card, ownedCardIDs map[int64]bool, widt
 		b.WriteString("\n")
 	}
 	return b.String()
+}
+
+// sortCardsByNumber orders cards by collector number, comparing numeric
+// numbers by value ("2" before "10") and putting them before other numbers.
+func sortCardsByNumber(cards []model.Card) {
+	sort.SliceStable(cards, func(i, j int) bool {
+		a, aErr := strconv.Atoi(cards[i].Number)
+		b, bErr := strconv.Atoi(cards[j].Number)
+		switch {
+		case aErr == nil && bErr == nil:
+			return a < b
+		case aErr == nil || bErr == nil:
+			return aErr == nil
+		}
+		return cards[i].Number < cards[j].Number
+	})
 }

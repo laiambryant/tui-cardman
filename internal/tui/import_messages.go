@@ -55,18 +55,6 @@ type importProgressMsg struct {
 	cardsImported int
 }
 
-type importAllSetsSuccessMsg struct{}
-
-type importAllSetsErrorMsg struct {
-	err error
-}
-
-type importNewSetsSuccessMsg struct{}
-
-type importNewSetsErrorMsg struct {
-	err error
-}
-
 type importConfirmedMsg struct{}
 
 type fetchDatabaseSetCountsSuccessMsg struct {

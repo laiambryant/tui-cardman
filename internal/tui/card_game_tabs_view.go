@@ -3,6 +3,8 @@ package tui
 import (
 	"context"
 	"fmt"
+	"maps"
+	"slices"
 	"sort"
 	"strings"
 
@@ -73,6 +75,7 @@ type CardGameTabsModel struct {
 	collectionPagination Pagination
 	mutationPending      bool
 	mutationStatus       string
+	shouldGoBack         bool
 }
 
 // NewCardGameTabsModel creates a new card game tabs model
@@ -118,25 +121,7 @@ func NewCardGameTabsModel(selectedGame *model.CardGame, cfg *runtimecfg.Manager,
 }
 
 func (m *CardGameTabsModel) computeCollectionStats() {
-	rarityCounts := make(map[string]int)
-	for _, uc := range m.userCollections {
-		if uc.Card != nil {
-			rarityCounts[uc.Card.Rarity] += uc.Quantity
-		}
-	}
-	var parts []string
-	for r, count := range rarityCounts {
-		label := r
-		if len(label) > 2 {
-			label = label[:1]
-		}
-		parts = append(parts, fmt.Sprintf("%s:%d", label, count))
-	}
-	if len(parts) > 0 {
-		m.rarityBreakdown = strings.Join(parts, " ")
-	} else {
-		m.rarityBreakdown = "N/A"
-	}
+	m.rarityBreakdown = rarityBreakdown(m.userCollections)
 	setMap := make(map[int64]*struct {
 		id           int64
 		name         string
@@ -270,16 +255,15 @@ func (m CardGameTabsModel) Update(msg tea.Msg) (CardGameTabsModel, tea.Cmd) {
 		}
 		return m, nil
 	}
-	if m.cardDetail != nil && m.cardDetail.visible {
-		if _, ok := msg.(cardDetailLoadedMsg); ok {
-			updated, cmd := m.cardDetail.Update(msg)
-			*m.cardDetail = updated
-			return m, cmd
+	if loaded, ok := msg.(cardDetailLoadedMsg); ok {
+		if m.cardDetail != nil {
+			m.cardDetail.applyLoaded(loaded)
 		}
+		return m, nil
+	}
+	if m.cardDetail != nil && m.cardDetail.visible {
 		if keyMsg, ok := msg.(tea.KeyMsg); ok {
-			updated, cmd := m.cardDetail.Update(keyMsg)
-			*m.cardDetail = updated
-			return m, cmd
+			m.cardDetail.handleKey(keyMsg.String())
 		}
 		return m, nil
 	}
@@ -290,19 +274,12 @@ func (m CardGameTabsModel) Update(msg tea.Msg) (CardGameTabsModel, tea.Cmd) {
 	}
 	if m.exportState.active {
 		if keyMsg, ok := msg.(tea.KeyMsg); ok {
-			cmd := m.exportState.HandleKey(keyMsg.String())
-			return m, cmd
+			return m, m.exportState.HandleKey(keyMsg.String())
 		}
 	}
 	switch msg := msg.(type) {
 	case exportDoneMsg:
 		m.exportState.HandleResult(msg)
-		return m, nil
-	case cardDetailLoadedMsg:
-		if m.cardDetail != nil {
-			updated, _ := m.cardDetail.Update(msg)
-			*m.cardDetail = updated
-		}
 		return m, nil
 	case saveCollectionMsg:
 		return m.performSaveCollection()
@@ -313,11 +290,12 @@ func (m CardGameTabsModel) Update(msg tea.Msg) (CardGameTabsModel, tea.Cmd) {
 			return m, nil
 		}
 		s := msg.String()
-		action := MatchActionOrDefault(m.configManager, s, "")
-		if action == "quit" || s == "ctrl+c" {
-			return m, tea.Quit
-		}
-		if action == "back" || action == "quit_alt" {
+		action := GetAction(m.configManager, s)
+		// The Card Search tab always has a focused search box, so printable
+		// back keys such as "q" are typed instead.
+		if m.currentTab == TabCardSearch && isBackKeyWhileTyping(action, s) ||
+			m.currentTab != TabCardSearch && isBackKey(action, s) {
+			m.shouldGoBack = true
 			return m, nil
 		}
 		if m, ok := m.handleTabSwitch(action, s); ok {
@@ -334,6 +312,10 @@ func (m CardGameTabsModel) Update(msg tea.Msg) (CardGameTabsModel, tea.Cmd) {
 }
 
 func (m CardGameTabsModel) handleTabSwitch(action, s string) (CardGameTabsModel, bool) {
+	// Tab switches panels inside the Collection and Card Search tabs.
+	if s == "tab" && m.currentTab != TabValueHistory {
+		return m, false
+	}
 	switch {
 	case action == "nav_next_tab" || action == "nav_right" || s == "right":
 		m.currentTab = (m.currentTab + 1) % tabCount
@@ -593,14 +575,15 @@ func (m CardGameTabsModel) buildHelpText() string {
 			hb.Build(KeyItem{"export", "x", "Export"}),
 			hb.Pair("page_next", "Ctrl+N", "page_prev", "Ctrl+P", "Page"),
 			hb.Pair("nav_up", "↑", "nav_down", "↓", "Navigate"),
-			hb.Build(KeyItem{"back", "Q", "Back"}),
+			RenderHelpHint("←/→", "Switch tabs"),
+			hb.Build(KeyItem{"quit_alt", "Esc", "Back"}),
 		)
 	}
 	if m.currentTab == TabCollection {
 		return JoinHelpHints(
 			RenderHelpHint("Tab", "Switch panel"),
 			hb.Pair("nav_up", "↑", "nav_down", "↓", "Navigate"),
-			hb.Pair("nav_prev_tab", "Shift+Tab", "nav_next_tab", "Tab", "Switch tabs"),
+			RenderHelpHint("←/→", "Switch tabs"),
 			hb.Build(KeyItem{"back", "Q", "Back"}),
 		)
 	}
@@ -849,19 +832,7 @@ func (m CardGameTabsModel) handleSaveCollection() (CardGameTabsModel, tea.Cmd) {
 		return m, nil
 	}
 	message := fmt.Sprintf("Save %d card quantity changes to your collection?", m.quantities.pendingCount())
-	m.modal = newModal(
-		"Confirm Save",
-		message,
-		func() tea.Cmd {
-			return func() tea.Msg {
-				return saveCollectionMsg{}
-			}
-		},
-		func() tea.Cmd {
-			return nil
-		},
-		m.styleManager, m.width, m.height,
-	)
+	m.modal = newConfirmModal("Confirm Save", message, saveCollectionMsg{}, m.styleManager, m.width, m.height)
 	return m, nil
 }
 
@@ -930,4 +901,32 @@ func (m *CardGameTabsModel) buildCollectionExportRows() []export.CardRow {
 		})
 	}
 	return rows
+}
+
+// rarityBreakdown summarizes owned quantities per rarity, abbreviating each
+// rarity to its word initials ("Rare Holo" -> "RH"), sorted by abbreviation.
+func rarityBreakdown(collections []model.UserCollection) string {
+	counts := make(map[string]int)
+	for _, uc := range collections {
+		if uc.Card == nil {
+			continue
+		}
+		label := "?"
+		if words := strings.Fields(uc.Card.Rarity); len(words) > 0 {
+			label = ""
+			for _, w := range words {
+				label += strings.ToUpper(string([]rune(w)[:1]))
+			}
+		}
+		counts[label] += uc.Quantity
+	}
+	if len(counts) == 0 {
+		return "N/A"
+	}
+	labels := slices.Sorted(maps.Keys(counts))
+	parts := make([]string, len(labels))
+	for i, label := range labels {
+		parts[i] = fmt.Sprintf("%s:%d", label, counts[label])
+	}
+	return strings.Join(parts, " ")
 }

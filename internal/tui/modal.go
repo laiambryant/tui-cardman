@@ -33,10 +33,11 @@ func NewModalModel(title, message string, onConfirm, onCancel func() tea.Cmd, st
 	}
 }
 
-// newModal is a convenience wrapper that creates a modal and immediately sets
-// its dimensions so it renders correctly centered over the current view.
-func newModal(title, message string, onConfirm, onCancel func() tea.Cmd, sm *StyleManager, width, height int) ModalModel {
-	return NewModalModel(title, message, onConfirm, onCancel, sm).SetDimensions(width, height)
+// newConfirmModal creates a sized Yes/No modal that sends confirmMsg when the
+// user answers Yes and does nothing otherwise.
+func newConfirmModal(title, message string, confirmMsg tea.Msg, sm *StyleManager, width, height int) ModalModel {
+	onConfirm := func() tea.Cmd { return func() tea.Msg { return confirmMsg } }
+	return NewModalModel(title, message, onConfirm, nil, sm).SetDimensions(width, height)
 }
 
 func (m ModalModel) Init() tea.Cmd {

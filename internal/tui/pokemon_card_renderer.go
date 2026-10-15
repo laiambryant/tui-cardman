@@ -66,12 +66,6 @@ func (r *PokemonCardRenderer) FetchExtra(cardID int64) any {
 	return pc
 }
 
-func (r *PokemonCardRenderer) ModalDimensions(termWidth, termHeight int) (int, int) {
-	w := max(80, termWidth-6)
-	h := max(30, termHeight-4)
-	return w, h
-}
-
 // RenderLeft renders the Pokemon card panel. width/height are the OUTER panel dimensions.
 func (r *PokemonCardRenderer) RenderLeft(card model.Card, extra any, width, height int, sm *StyleManager) string {
 	pc, _ := extra.(*model.PokemonCard)

@@ -154,13 +154,7 @@ func (m DeckBuilderModel) Update(msg tea.Msg) (DeckBuilderModel, tea.Cmd) {
 	}
 	if m.importState.active {
 		if keyMsg, ok := msg.(tea.KeyMsg); ok {
-			cmd := m.importState.HandleTextInput(keyMsg)
-			if cmd == nil {
-				cmd = m.importState.HandleKey(keyMsg.String())
-			} else {
-				_ = m.importState.HandleKey(keyMsg.String())
-			}
-			return m, cmd
+			return m, m.importState.Update(keyMsg)
 		}
 	}
 	switch msg := msg.(type) {
@@ -189,14 +183,13 @@ func (m DeckBuilderModel) Update(msg tea.Msg) (DeckBuilderModel, tea.Cmd) {
 			return m, nil
 		}
 		s := msg.String()
-		action := MatchActionOrDefault(m.configManager, s, "")
-		if action == "quit" || s == "ctrl+c" {
-			return m, tea.Quit
-		}
+		action := GetAction(m.configManager, s)
 		if m.mode != DeckModeNormal {
 			return m.handleFormKeys(msg)
 		}
-		if isBackKey(action, s) {
+		searchFocused := m.focus == DeckFocusCardPanel && m.cardSubFocus == cardSubFocusSearch
+		// While the search box has focus only Esc goes back, so "q" can be typed.
+		if searchFocused && isBackKeyWhileTyping(action, s) || !searchFocused && isBackKey(action, s) {
 			if m.focus == DeckFocusCardPanel {
 				if m.cardSubFocus == cardSubFocusDeck {
 					m.cardSubFocus = cardSubFocusSearch
@@ -248,7 +241,7 @@ func (m DeckBuilderModel) Update(msg tea.Msg) (DeckBuilderModel, tea.Cmd) {
 
 func (m DeckBuilderModel) handleDeckPanelKeys(msg tea.KeyMsg) (DeckBuilderModel, tea.Cmd) {
 	s := msg.String()
-	action := MatchActionOrDefault(m.configManager, s, "")
+	action := GetAction(m.configManager, s)
 	if action == "nav_up" || s == "up" || s == "k" {
 		if m.deckCursor > 0 {
 			m.deckCursor--
@@ -276,13 +269,7 @@ func (m DeckBuilderModel) handleDeckPanelKeys(msg tea.KeyMsg) (DeckBuilderModel,
 		return m, nil
 	}
 	if action == "delete" && m.selectedDeck != nil {
-		m.modal = newModal(
-			"Delete Deck",
-			fmt.Sprintf("Delete deck '%s'?", m.selectedDeck.Name),
-			func() tea.Cmd { return func() tea.Msg { return deleteDeckMsg{} } },
-			func() tea.Cmd { return nil },
-			m.styleManager, m.width, m.height,
-		)
+		m.modal = newConfirmModal("Delete Deck", fmt.Sprintf("Delete deck '%s'?", m.selectedDeck.Name), deleteDeckMsg{}, m.styleManager, m.width, m.height)
 		return m, nil
 	}
 	if isSelectKey(action, s) && len(m.decks) > 0 {
@@ -296,7 +283,7 @@ func (m DeckBuilderModel) handleDeckPanelKeys(msg tea.KeyMsg) (DeckBuilderModel,
 
 func (m DeckBuilderModel) handleCardPanelKeys(msg tea.KeyMsg) (DeckBuilderModel, tea.Cmd) {
 	s := msg.String()
-	action := MatchActionOrDefault(m.configManager, s, "")
+	action := GetAction(m.configManager, s)
 	// Arrow navigation — always safe
 	if action == "nav_up" || s == "up" {
 		if m.cardSubFocus == cardSubFocusDeck {
@@ -375,12 +362,7 @@ func (m DeckBuilderModel) handleFormKeys(msg tea.KeyMsg) (DeckBuilderModel, tea.
 			title = "Update Deck"
 			message = fmt.Sprintf("Update deck to '%s'?", m.nameInput.Value())
 		}
-		m.modal = newModal(
-			title, message,
-			func() tea.Cmd { return func() tea.Msg { return createDeckMsg{} } },
-			func() tea.Cmd { return nil },
-			m.styleManager, m.width, m.height,
-		)
+		m.modal = newConfirmModal(title, message, createDeckMsg{}, m.styleManager, m.width, m.height)
 		return m, nil
 	}
 	var cmd tea.Cmd
@@ -477,13 +459,9 @@ func (m DeckBuilderModel) handleSave() (DeckBuilderModel, tea.Cmd) {
 	if m.selectedDeck == nil || m.quantities.pendingCount() == 0 {
 		return m, nil
 	}
-	m.modal = newModal(
-		"Save Deck",
+	m.modal = newConfirmModal("Save Deck",
 		fmt.Sprintf("Save %d card changes to '%s'?", m.quantities.pendingCount(), m.selectedDeck.Name),
-		func() tea.Cmd { return func() tea.Msg { return saveDeckMsg{} } },
-		func() tea.Cmd { return nil },
-		m.styleManager, m.width, m.height,
-	)
+		saveDeckMsg{}, m.styleManager, m.width, m.height)
 	return m, nil
 }
 
@@ -723,7 +701,7 @@ func (m DeckBuilderModel) renderFooter() string {
 			),
 			hb.Build(KeyItem{"export", "x", "Export"}, KeyItem{"import", "i", "Import"}),
 			hb.Pair("page_next", "Ctrl+N", "page_prev", "Ctrl+P", "Page"),
-			hb.Build(KeyItem{"back", "Q", "Back"}),
+			hb.Build(KeyItem{"quit_alt", "Esc", "Back"}),
 		)
 	} else {
 		footer = JoinHelpHints(

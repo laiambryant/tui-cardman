@@ -30,12 +30,6 @@ func (r *YuGiOhCardRenderer) FetchExtra(cardID int64) any {
 	return yc
 }
 
-func (r *YuGiOhCardRenderer) ModalDimensions(termWidth, termHeight int) (int, int) {
-	w := max(80, termWidth-6)
-	h := max(30, termHeight-4)
-	return w, h
-}
-
 // RenderLeft renders the Yu-Gi-Oh! card panel.
 func (r *YuGiOhCardRenderer) RenderLeft(card model.Card, extra any, width, height int, sm *StyleManager) string {
 	yc, _ := extra.(*model.YuGiOhCard)

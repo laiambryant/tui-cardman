@@ -53,14 +53,12 @@ type ImportModel struct {
 	styleManager      *StyleManager
 	importer          gameimporter.GameImporter
 	isLoading         bool
-	loadingMsg        string
 	errorMsg          string
 	statusMsg         string
 	isImporting       bool
 	importProgress    importProgressMsg
 	selectedSetInDB   bool
 	selectedSetHasCol bool
-	cardGames         []model.CardGame
 	width             int
 	height            int
 	modal             ModalModel
@@ -70,9 +68,10 @@ type ImportModel struct {
 	queueProcessing   bool
 	queueCurrentIndex int
 	databaseSetCounts map[string]int
+	shouldGoBack      bool
 }
 
-func NewImportModel(importer gameimporter.GameImporter, selectedGame *model.CardGame, cfg *runtimecfg.Manager, styleManager *StyleManager, cardGames []model.CardGame) (ImportModel, error) {
+func NewImportModel(importer gameimporter.GameImporter, selectedGame *model.CardGame, cfg *runtimecfg.Manager, styleManager *StyleManager) ImportModel {
 	searchInput := textinput.New()
 	searchInput.Placeholder = "Search sets..."
 	searchInput.Width = 30
@@ -86,17 +85,14 @@ func NewImportModel(importer gameimporter.GameImporter, selectedGame *model.Card
 	return ImportModel{
 		selectedCardGame: selectedGame,
 		searchInput:      searchInput,
-		cursor:           0,
-		actionCursor:     0,
-		queueCursor:      0,
 		focus:            importFocusSets,
 		configManager:    cfg,
 		styleManager:     styleManager,
 		importer:         importer,
 		databaseSetIDs:   make(map[string]bool),
-		cardGames:        cardGames,
 		spinner:          s,
-	}, nil
+		isLoading:        true,
+	}
 }
 
 func (m ImportModel) Init() tea.Cmd {
@@ -158,17 +154,6 @@ func (m ImportModel) handleQueueItemResult(success bool, setID string, err error
 	return m, tea.Batch(m.fetchDatabaseSetsCmd(), m.fetchDatabaseSetCountsCmd(), m.checkSelectedSetInDB())
 }
 
-func (m ImportModel) handleImportAllResult(success bool, operation string, err error) (ImportModel, tea.Cmd) {
-	if success {
-		m.isImporting = false
-		m.statusMsg = fmt.Sprintf("Successfully imported %s", operation)
-		return m, tea.Batch(m.fetchDatabaseSetsCmd(), m.fetchDatabaseSetCountsCmd())
-	}
-	m.isImporting = false
-	m.errorMsg = fmt.Sprintf("Failed to import %s: %v", operation, err)
-	return m, nil
-}
-
 func (m ImportModel) Update(msg tea.Msg) (ImportModel, tea.Cmd) {
 	if sizeMsg, ok := msg.(tea.WindowSizeMsg); ok {
 		m.width = sizeMsg.Width
@@ -195,7 +180,7 @@ func (m ImportModel) Update(msg tea.Msg) (ImportModel, tea.Cmd) {
 		m.filteredSets = msg.sets
 		m.isLoading = false
 		m.statusMsg = fmt.Sprintf("Loaded %d sets from API", len(msg.sets))
-		return m, nil
+		return m, m.checkSelectedSetInDB()
 	case fetchSetsErrorMsg:
 		m.isLoading = false
 		m.errorMsg = fmt.Sprintf("Failed to fetch sets: %v", msg.err)
@@ -234,10 +219,6 @@ func (m ImportModel) Update(msg tea.Msg) (ImportModel, tea.Cmd) {
 
 func (m ImportModel) handleImportingState(msg tea.Msg) (ImportModel, tea.Cmd) {
 	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		if msg.String() == "ctrl+c" {
-			return m, tea.Quit
-		}
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
@@ -249,14 +230,9 @@ func (m ImportModel) handleImportingState(msg tea.Msg) (ImportModel, tea.Cmd) {
 		return m.handleImportSetResult(true, msg.setID, nil)
 	case importSetErrorMsg:
 		return m.handleImportSetResult(false, msg.setID, msg.err)
-	case importAllSetsSuccessMsg:
-		return m.handleImportAllResult(true, "all sets", nil)
-	case importAllSetsErrorMsg:
-		return m.handleImportAllResult(false, "all sets", msg.err)
-	case importNewSetsSuccessMsg:
-		return m.handleImportAllResult(true, "new sets", nil)
-	case importNewSetsErrorMsg:
-		return m.handleImportAllResult(false, "new sets", msg.err)
+	case deleteSetErrorMsg:
+		// Reimport deletes the set first; the import itself still runs.
+		m.errorMsg = fmt.Sprintf("Failed to delete set %s before reimporting: %v", msg.setID, msg.err)
 	}
 	return m, nil
 }
@@ -264,8 +240,11 @@ func (m ImportModel) handleImportingState(msg tea.Msg) (ImportModel, tea.Cmd) {
 func (m ImportModel) handleKeyMsg(msg tea.KeyMsg) (ImportModel, tea.Cmd) {
 	s := msg.String()
 	action := GetAction(m.configManager, s)
-	if action == "quit" || s == "ctrl+c" {
-		return m, tea.Quit
+	// The set list has a focused search box, so printable back keys are typed there.
+	if m.focus == importFocusSets && isBackKeyWhileTyping(action, s) ||
+		m.focus != importFocusSets && isBackKey(action, s) {
+		m.shouldGoBack = true
+		return m, nil
 	}
 	if s == "tab" {
 		switch m.focus {
@@ -334,12 +313,8 @@ func (m ImportModel) handleSetListNavigation(msg tea.KeyMsg) (ImportModel, tea.C
 	if !isModifierKey(s) {
 		var cmd tea.Cmd
 		m.searchInput, cmd = m.searchInput.Update(msg)
-		if m.searchInput.Value() != "" {
-			m = m.filterSets()
-		} else {
-			m.filteredSets = m.availableSets
-		}
-		return m, cmd
+		m = m.filterSets()
+		return m, tea.Batch(cmd, m.checkSelectedSetInDB())
 	}
 	return m, nil
 }
@@ -429,6 +404,11 @@ func (m ImportModel) handleQueueNavigation(msg tea.KeyMsg) (ImportModel, tea.Cmd
 
 func (m ImportModel) filterSets() ImportModel {
 	q := strings.ToLower(m.searchInput.Value())
+	if q == "" {
+		m.filteredSets = m.availableSets
+		m.cursor = min(m.cursor, max(len(m.filteredSets)-1, 0))
+		return m
+	}
 	var filtered []gameimporter.GameSet
 	for _, set := range m.availableSets {
 		if strings.Contains(strings.ToLower(set.Name), q) ||
@@ -500,15 +480,7 @@ func (m ImportModel) executeAction(action ActionItem) (ImportModel, tea.Cmd) {
 			message = fmt.Sprintf("%s\nSet: %s - %s", message, selectedSet.APIID, selectedSet.Name)
 		}
 	}
-	m.modal = newModal(
-		"Confirm "+action.label,
-		message,
-		func() tea.Cmd {
-			return func() tea.Msg { return importConfirmedMsg{} }
-		},
-		func() tea.Cmd { return nil },
-		m.styleManager, m.width, m.height,
-	)
+	m.modal = newConfirmModal("Confirm "+action.label, message, importConfirmedMsg{}, m.styleManager, m.width, m.height)
 	return m, nil
 }
 
