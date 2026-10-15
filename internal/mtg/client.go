@@ -43,21 +43,22 @@ func (c *Client) GetSets(ctx context.Context) ([]MTGSet, error) {
 	return sets, nil
 }
 
-func (c *Client) GetCardsForSet(ctx context.Context, setCode string, page int) (cards []MTGCard, hasMore bool, totalCount int, err error) {
+// GetCardsForSet fetches one page of cards for a set and reports whether more pages exist.
+func (c *Client) GetCardsForSet(ctx context.Context, setCode string, page int) ([]MTGCard, bool, error) {
 	if err := c.limiter.Wait(ctx); err != nil {
-		return nil, false, 0, err
+		return nil, false, err
 	}
 	q := query.New().SetCode(setCode).Page(page).PageSize(pageSize)
 	sdkCards, err := c.sdk.Cards.List(ctx, q)
 	if err != nil {
-		return nil, false, 0, err
+		return nil, false, err
 	}
-	cards = make([]MTGCard, 0, len(sdkCards))
+	cards := make([]MTGCard, 0, len(sdkCards))
 	for _, sc := range sdkCards {
 		cards = append(cards, mapSDKCard(sc, setCode))
 	}
-	hasMore = resolveHasMore(page, pageSize, len(cards), 0)
-	return cards, hasMore, 0, nil
+	// The SDK does not expose the Total-Count header, so a full page means "maybe more".
+	return cards, resolveHasMore(page, pageSize, len(cards), 0), nil
 }
 
 // resolveHasMore determines whether more pages exist.

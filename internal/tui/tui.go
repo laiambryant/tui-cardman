@@ -4,6 +4,7 @@ package tui
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -14,25 +15,20 @@ import (
 	"github.com/laiambryant/tui-cardman/internal/auth"
 	"github.com/laiambryant/tui-cardman/internal/config"
 	"github.com/laiambryant/tui-cardman/internal/gameimporter"
+	"github.com/laiambryant/tui-cardman/internal/importers"
 	"github.com/laiambryant/tui-cardman/internal/model"
-	"github.com/laiambryant/tui-cardman/internal/mtg"
-	"github.com/laiambryant/tui-cardman/internal/onepiece"
-	"github.com/laiambryant/tui-cardman/internal/pokemontcg"
 	"github.com/laiambryant/tui-cardman/internal/runtimecfg"
 	"github.com/laiambryant/tui-cardman/internal/services/cardgame"
 	card "github.com/laiambryant/tui-cardman/internal/services/cards"
 	"github.com/laiambryant/tui-cardman/internal/services/deck"
-	"github.com/laiambryant/tui-cardman/internal/services/importruns"
 	listservice "github.com/laiambryant/tui-cardman/internal/services/list"
 	"github.com/laiambryant/tui-cardman/internal/services/mtgcard"
 	"github.com/laiambryant/tui-cardman/internal/services/onepiececard"
 	"github.com/laiambryant/tui-cardman/internal/services/pokemoncard"
 	"github.com/laiambryant/tui-cardman/internal/services/prices"
-	"github.com/laiambryant/tui-cardman/internal/services/sets"
 	"github.com/laiambryant/tui-cardman/internal/services/user"
 	"github.com/laiambryant/tui-cardman/internal/services/usercollection"
 	"github.com/laiambryant/tui-cardman/internal/services/yugiohcard"
-	"github.com/laiambryant/tui-cardman/internal/yugioh"
 )
 
 // Screen represents different views in the application
@@ -129,7 +125,7 @@ func NewModel(db *sql.DB, isSSHMode bool) (*Model, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to load card games: %w", err)
 	}
-	importers, err := initImporters(db, cardGames, slog.Default())
+	gameImporters, err := initImporters(db, cardGames)
 	if err != nil {
 		return nil, err
 	}
@@ -149,7 +145,7 @@ func NewModel(db *sql.DB, isSSHMode bool) (*Model, error) {
 		inputs:            make([]textinput.Model, 2),
 		cardGames:         cardGames,
 		cursor:            0,
-		importers:         importers,
+		importers:         gameImporters,
 	}
 	if isSSHMode {
 		m.postSplashScreen = ScreenLogin
@@ -182,70 +178,20 @@ func NewModel(db *sql.DB, isSSHMode bool) (*Model, error) {
 }
 
 // initImporters constructs game-specific importers keyed by card game DB ID.
-func initImporters(db *sql.DB, cardGames []model.CardGame, logger *slog.Logger) (map[int64]gameimporter.GameImporter, error) {
-	importers := make(map[int64]gameimporter.GameImporter)
-
-	setService := sets.NewSetService(db)
-	cardService := card.NewCardService(db)
-	importRunService := importruns.NewImportRunService(db)
-
-	// Pokemon
-	apiKey := config.GetAPIKey()
-	ptcgClient := pokemontcg.NewClient(apiKey)
-	pokemonCardSvc := pokemoncard.NewPokemonCardService(db)
-	tcgPriceSvc := prices.NewTCGPlayerPriceService(db)
-	cmPriceSvc := prices.NewCardMarketPriceService(db)
-	ptcgService, err := pokemontcg.NewImportService(db, ptcgClient, logger,
-		importRunService, setService, cardService,
-		tcgPriceSvc, cmPriceSvc, pokemonCardSvc)
-	if err != nil {
-		return nil, fmt.Errorf("initialize Pokemon importer: %w", err)
-	}
-	ptcgImporter := pokemontcg.NewPokemonGameImporter(ptcgClient, ptcgService, setService)
-
-	// Yu-Gi-Oh!
-	ygoClient := yugioh.NewClient()
-	yugiohCardSvc := yugiohcard.NewYuGiOhCardService(db)
-	ygoService, err := yugioh.NewImportService(db, ygoClient, logger,
-		importRunService, setService, cardService, yugiohCardSvc)
-	if err != nil {
-		return nil, fmt.Errorf("initialize Yu-Gi-Oh! importer: %w", err)
-	}
-	ygoImporter := yugioh.NewYuGiOhGameImporter(ygoClient, ygoService, setService)
-
-	// Magic: The Gathering
-	mtgClient := mtg.NewClient()
-	mtgCardSvc := mtgcard.NewMTGCardService(db)
-	mtgService, err := mtg.NewImportService(db, mtgClient, logger,
-		importRunService, setService, cardService, mtgCardSvc)
-	if err != nil {
-		return nil, fmt.Errorf("initialize MTG importer: %w", err)
-	}
-	mtgImporter := mtg.NewMTGGameImporter(mtgClient, mtgService, setService)
-
-	opClient := onepiece.NewClient()
-	opCardSvc := onepiececard.NewOnePieceCardService(db)
-	opService, err := onepiece.NewImportService(db, opClient, logger,
-		importRunService, setService, cardService, opCardSvc)
-	if err != nil {
-		return nil, fmt.Errorf("initialize One Piece importer: %w", err)
-	}
-	opImporter := onepiece.NewOnePieceGameImporter(opClient, opService, setService)
-
-	for i := range cardGames {
-		g := &cardGames[i]
-		switch g.Name {
-		case "Pokemon":
-			importers[g.ID] = ptcgImporter
-		case "Yu-Gi-Oh!":
-			importers[g.ID] = ygoImporter
-		case "Magic: The Gathering":
-			importers[g.ID] = mtgImporter
-		case "One Piece":
-			importers[g.ID] = opImporter
+// Games without an importer are skipped.
+func initImporters(db *sql.DB, cardGames []model.CardGame) (map[int64]gameimporter.GameImporter, error) {
+	result := make(map[int64]gameimporter.GameImporter)
+	for _, g := range cardGames {
+		importer, err := importers.New(db, g.Name, config.GetAPIKey())
+		if errors.Is(err, importers.ErrUnsupportedGame) {
+			continue
 		}
+		if err != nil {
+			return nil, fmt.Errorf("initialize %s importer: %w", g.Name, err)
+		}
+		result[g.ID] = importer
 	}
-	return importers, nil
+	return result, nil
 }
 
 func initServices(db *sql.DB) (user.UserService, cardgame.CardGameService, card.CardService, usercollection.UserCollectionService, listservice.ListService, deck.DeckService, prices.TCGPlayerPriceService, prices.CardMarketPriceService, *auth.Service) {

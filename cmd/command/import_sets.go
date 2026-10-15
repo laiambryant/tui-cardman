@@ -2,9 +2,10 @@ package command
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/spf13/cobra"
+
+	"github.com/laiambryant/tui-cardman/internal/gameimporter"
 )
 
 const (
@@ -31,23 +32,12 @@ var importSetsCmd = &cobra.Command{
 	Long:  longMessageImportSets,
 	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		ctx := cmd.Context()
-
-		deps, err := buildImportService()
-		if err != nil {
-			return err
-		}
-		defer deps.Close()
-
-		setIDs := args
-		deps.logger.Info("Starting import of specific sets", "sets", strings.Join(setIDs, ", "))
-
-		if err := deps.importService.ImportSpecificSets(ctx, setIDs); err != nil {
-			return fmt.Errorf("import failed: %w", err)
-		}
-
-		deps.logger.Info("Import of specific sets completed successfully")
-		return nil
+		return runPokemonImport(func(importer gameimporter.GameImporter) error {
+			if err := importer.ImportSpecific(cmd.Context(), args); err != nil {
+				return fmt.Errorf("import failed: %w", err)
+			}
+			return nil
+		})
 	},
 }
 

@@ -111,16 +111,6 @@ func (c *Client) GetCardsForSet(ctx context.Context, setID string, page int) (*P
 	return paginatedResp, cards, nil
 }
 
-// GetCard fetches a single card by ID
-func (c *Client) GetCard(ctx context.Context, cardID string) (*Card, error) {
-	tcgdexCard, err := c.sdk.Card.Get(ctx, cardID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch card %s: %w", cardID, err)
-	}
-	card := mapTCGDexCardToCard(tcgdexCard)
-	return &card, nil
-}
-
 // mapTCGDexSetToSet converts tcgdex Set model to our Set model
 func mapTCGDexSetToSet(tcgdexSet tcgdexModels.SetResume) Set {
 	return Set{
