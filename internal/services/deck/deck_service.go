@@ -135,42 +135,17 @@ func (s *DeckServiceImpl) DeleteDeck(ctx context.Context, deckID int64) error {
 }
 
 func (s *DeckServiceImpl) GetAllQuantitiesForDeck(deckID int64) (map[int64]int, error) {
-	rows, err := db.Query(s.db, selectAllQuantitiesForDeckQuery, deckID)
+	quantities, err := db.QueryQuantities(s.db, selectAllQuantitiesForDeckQuery, deckID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get deck quantities: %w", err)
-	}
-	defer rows.Close()
-	quantities := make(map[int64]int)
-	for rows.Next() {
-		var cardID int64
-		var quantity int
-		if err := rows.Scan(&cardID, &quantity); err != nil {
-			slog.Error("failed to scan deck quantity", "error", err)
-			continue
-		}
-		quantities[cardID] = quantity
-	}
-	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("failed to get deck quantities: %w", err)
 	}
 	return quantities, nil
 }
 
+// UpsertDeckCardBatch sets the quantity of each card in the deck; quantities <= 0 remove the card.
 func (s *DeckServiceImpl) UpsertDeckCardBatch(ctx context.Context, deckID int64, updates map[int64]int) error {
-	return db.WithTransaction(ctx, s.db, func(tx *sql.Tx) error {
-		for cardID, quantity := range updates {
-			if quantity <= 0 {
-				_, err := db.ExecContextTx(ctx, tx, deleteDeckCardQuery, deckID, cardID)
-				if err != nil {
-					return fmt.Errorf("failed to upsert deck card: %w", err)
-				}
-				continue
-			}
-			_, err := db.ExecContextTx(ctx, tx, upsertDeckCardQuery, deckID, cardID, quantity)
-			if err != nil {
-				return fmt.Errorf("failed to upsert deck card: %w", err)
-			}
-		}
-		return nil
-	})
+	if err := db.SetQuantities(ctx, s.db, deckID, updates, upsertDeckCardQuery, deleteDeckCardQuery); err != nil {
+		return fmt.Errorf("failed to upsert deck card: %w", err)
+	}
+	return nil
 }

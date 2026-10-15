@@ -80,35 +80,16 @@ func (s *UserServiceImpl) CreateUser(req auth.RegisterRequest, passwordHash stri
 
 // GetUserByEmail retrieves a user by email
 func (s *UserServiceImpl) GetUserByEmail(email string) (*auth.User, error) {
-	var user auth.User
-	var lastLogin sql.NullTime
-
-	err := db.QueryRow(s.db, selectUserByEmailQuery, email).Scan(
-		&user.ID,
-		&user.Name,
-		&user.Surname,
-		&user.Email,
-		&user.PasswordHash,
-		&user.CreatedAt,
-		&user.UpdatedAt,
-		&lastLogin,
-		&user.Active,
-	)
+	user, err := scanUser(db.QueryRow(s.db, selectUserByEmailQuery, email))
+	if err == sql.ErrNoRows {
+		slog.Debug("user not found by email", "email", email)
+		return nil, ErrUserNotFound
+	}
 	if err != nil {
-		if err == sql.ErrNoRows {
-			slog.Debug("user not found by email", "email", email)
-			return nil, ErrUserNotFound
-		}
 		slog.Error("failed to get user by email", "email", email, "error", err)
 		return nil, fmt.Errorf("failed to get user by email: %w", err)
 	}
-
-	if lastLogin.Valid {
-		user.LastLogin = &lastLogin.Time
-	}
-
-	slog.Debug("found user by email", "email", email, "user_id", user.ID)
-	return &user, nil
+	return user, nil
 }
 
 // UpdateLastLogin updates the last_login timestamp for a user
@@ -125,46 +106,35 @@ func (s *UserServiceImpl) UpdateLastLogin(userID int64) error {
 // HasUsers checks if any users exist in the database
 func (s *UserServiceImpl) HasUsers() (bool, error) {
 	var count int
-	query := "SELECT COUNT(*) FROM users"
-	err := db.QueryRow(s.db, query).Scan(&count)
-	if err != nil {
-		slog.Error("failed to count users", "error", err)
+	if err := db.QueryRow(s.db, "SELECT COUNT(*) FROM users").Scan(&count); err != nil {
 		return false, fmt.Errorf("failed to count users: %w", err)
 	}
-	hasUsers := count > 0
-	slog.Debug("checked if users exist", "count", count, "has_users", hasUsers)
-	return hasUsers, nil
+	return count > 0, nil
 }
 
 // GetFirstUser retrieves the first user (by creation date) from the database
 func (s *UserServiceImpl) GetFirstUser() (*auth.User, error) {
-	var user auth.User
-	var lastLogin sql.NullTime
-
-	err := db.QueryRow(s.db, selectFirstUserQuery).Scan(
-		&user.ID,
-		&user.Name,
-		&user.Surname,
-		&user.Email,
-		&user.PasswordHash,
-		&user.CreatedAt,
-		&user.UpdatedAt,
-		&lastLogin,
-		&user.Active,
-	)
+	user, err := scanUser(db.QueryRow(s.db, selectFirstUserQuery))
+	if err == sql.ErrNoRows {
+		return nil, ErrNoUsersFound
+	}
 	if err != nil {
-		if err == sql.ErrNoRows {
-			slog.Debug("no users found")
-			return nil, ErrNoUsersFound
-		}
 		slog.Error("failed to get first user", "error", err)
 		return nil, fmt.Errorf("failed to get first user: %w", err)
 	}
+	return user, nil
+}
 
+func scanUser(row *sql.Row) (*auth.User, error) {
+	var user auth.User
+	var lastLogin sql.NullTime
+	err := row.Scan(&user.ID, &user.Name, &user.Surname, &user.Email, &user.PasswordHash,
+		&user.CreatedAt, &user.UpdatedAt, &lastLogin, &user.Active)
+	if err != nil {
+		return nil, err
+	}
 	if lastLogin.Valid {
 		user.LastLogin = &lastLogin.Time
 	}
-
-	slog.Debug("found first user", "user_id", user.ID, "email", user.Email)
 	return &user, nil
 }

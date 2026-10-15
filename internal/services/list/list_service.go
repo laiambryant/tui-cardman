@@ -146,48 +146,19 @@ func (s *ListServiceImpl) DeleteList(ctx context.Context, listID int64) error {
 }
 
 func (s *ListServiceImpl) GetAllQuantitiesForList(listID int64) (map[int64]int, error) {
-	rows, err := db.Query(s.db, selectAllQuantitiesForListQuery, listID)
+	quantities, err := db.QueryQuantities(s.db, selectAllQuantitiesForListQuery, listID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get list quantities: %w", err)
 	}
-	defer rows.Close()
-	quantities := make(map[int64]int)
-	for rows.Next() {
-		var cardID int64
-		var quantity int
-		if err := rows.Scan(&cardID, &quantity); err != nil {
-			slog.Error("failed to scan list quantity row", "error", err)
-			continue
-		}
-		quantities[cardID] = quantity
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("failed to get list quantities: %w", err)
-	}
-	slog.Debug("retrieved list quantities", "list_id", listID, "count", len(quantities))
 	return quantities, nil
 }
 
+// UpsertListCardBatch sets the quantity of each card in the list; quantities <= 0 remove the card.
 func (s *ListServiceImpl) UpsertListCardBatch(ctx context.Context, listID int64, updates map[int64]int) error {
-	return db.WithTransaction(ctx, s.db, func(tx *sql.Tx) error {
-		for cardID, quantity := range updates {
-			if quantity <= 0 {
-				_, err := db.ExecContextTx(ctx, tx, deleteListCardQuery, listID, cardID)
-				if err != nil {
-					slog.Error("failed to delete list card in batch", "list_id", listID, "card_id", cardID, "error", err)
-					return fmt.Errorf("failed to upsert list card: %w", err)
-				}
-				continue
-			}
-			_, err := db.ExecContextTx(ctx, tx, upsertListCardQuery, listID, cardID, quantity)
-			if err != nil {
-				slog.Error("failed to upsert list card in batch", "list_id", listID, "card_id", cardID, "error", err)
-				return fmt.Errorf("failed to upsert list card: %w", err)
-			}
-		}
-		slog.Debug("batch upserted list cards", "list_id", listID, "update_count", len(updates))
-		return nil
-	})
+	if err := db.SetQuantities(ctx, s.db, listID, updates, upsertListCardQuery, deleteListCardQuery); err != nil {
+		return fmt.Errorf("failed to upsert list card: %w", err)
+	}
+	return nil
 }
 
 func (s *ListServiceImpl) GetListsContainingCard(userID, cardID int64) ([]model.UserList, error) {

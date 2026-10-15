@@ -96,10 +96,6 @@ func (m *mockCardService) GetCardIDByAPIID(ctx context.Context, apiID string) (i
 	return 0, nil
 }
 
-func (m *mockCardService) GetCardBySetCodeAndNumber(setCode, number string) (*model.Card, error) {
-	return nil, nil
-}
-
 func (m *mockCardService) GetCardByGameAndSetCodeAndNumber(gameID int64, setCode, number string) (*model.Card, error) {
 	return nil, nil
 }

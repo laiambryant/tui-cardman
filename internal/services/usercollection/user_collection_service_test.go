@@ -61,7 +61,7 @@ func TestNewUserCollectionService(t *testing.T) {
 	assert.IsType(t, &UserCollectionServiceImpl{}, service)
 }
 
-func TestGetUserCollectionByUserID(t *testing.T) {
+func TestGetUserCollectionByGameID_PopulatesRelations(t *testing.T) {
 	db := setupTestDB(t)
 	defer testutil.CleanupTestDB(t, db)
 
@@ -75,7 +75,7 @@ func TestGetUserCollectionByUserID(t *testing.T) {
 		userID, cardID, 3, "Near Mint", acquiredDate, "Test collection entry")
 	require.NoError(t, err)
 
-	collections, err := service.GetUserCollectionByUserID(userID)
+	collections, err := service.GetUserCollectionByGameID(userID, gameID)
 	require.NoError(t, err)
 	require.Len(t, collections, 1)
 
@@ -97,19 +97,7 @@ func TestGetUserCollectionByUserID(t *testing.T) {
 	assert.Equal(t, "Pokemon TCG", collection.Card.CardGame.Name)
 }
 
-func TestGetUserCollectionByUserID_EmptyCollection(t *testing.T) {
-	db := setupTestDB(t)
-	defer testutil.CleanupTestDB(t, db)
-
-	userID, _, _ := setupTestData(t, db)
-	service := NewUserCollectionService(db)
-
-	collections, err := service.GetUserCollectionByUserID(userID)
-	require.NoError(t, err)
-	assert.Empty(t, collections)
-}
-
-func TestGetUserCollectionByUserID_MultipleEntries(t *testing.T) {
+func TestGetUserCollectionByGameID_MultipleEntries(t *testing.T) {
 	db := setupTestDB(t)
 	defer testutil.CleanupTestDB(t, db)
 
@@ -141,7 +129,7 @@ func TestGetUserCollectionByUserID_MultipleEntries(t *testing.T) {
 		userID, cardID2, 1, "Mint", acquiredDate, "Entry 2")
 	require.NoError(t, err)
 
-	collections, err := service.GetUserCollectionByUserID(userID)
+	collections, err := service.GetUserCollectionByGameID(userID, gameID)
 	require.NoError(t, err)
 	require.Len(t, collections, 2)
 
@@ -242,150 +230,11 @@ func TestGetUserCollectionByGameID_EmptyCollection(t *testing.T) {
 	assert.Empty(t, collections)
 }
 
-func TestCreateSampleCollectionData(t *testing.T) {
-	db := setupTestDB(t)
-	defer testutil.CleanupTestDB(t, db)
-
-	// Create user
-	result, err := db.Exec(`INSERT INTO users (email, password_hash, active) VALUES (?, ?, ?)`,
-		"test@example.com", "hashed_password", 1)
-	require.NoError(t, err)
-	userID, err := result.LastInsertId()
-	require.NoError(t, err)
-
-	// Create the sample data structure that CreateSampleCollectionData expects
-	// Looking at the service code, it expects cards with IDs 1, 2, 6, 7, 11, 12
-	// We need to create multiple games and cards to match those IDs
-
-	// Pokemon TCG
-	result, err = db.Exec(`INSERT INTO card_games (name) VALUES (?)`, "Pokemon TCG")
-	require.NoError(t, err)
-	gameID1, err := result.LastInsertId()
-	require.NoError(t, err)
-
-	result, err = db.Exec(`INSERT INTO sets (card_game_id, api_id, name) VALUES (?, ?, ?)`,
-		gameID1, "base1", "Base Set")
-	require.NoError(t, err)
-	setID1, err := result.LastInsertId()
-	require.NoError(t, err)
-
-	// Create cards with specific IDs
-	_, err = db.Exec(`INSERT INTO cards (id, card_game_id, set_id, api_id, name, rarity, number, is_placeholder) 
-		VALUES (1, ?, ?, 'base1-25', 'Pikachu', 'Common', '25', false)`, gameID1, setID1)
-	require.NoError(t, err)
-
-	_, err = db.Exec(`INSERT INTO cards (id, card_game_id, set_id, api_id, name, rarity, number, is_placeholder) 
-		VALUES (2, ?, ?, 'base1-4', 'Charizard', 'Rare', '4', false)`, gameID1, setID1)
-	require.NoError(t, err)
-
-	// Magic: The Gathering - get from migrations
-	var gameID2 int64
-	err = db.QueryRow(`SELECT id FROM card_games WHERE name = ?`, "Magic: The Gathering").Scan(&gameID2)
-	require.NoError(t, err)
-
-	result, err = db.Exec(`INSERT INTO sets (card_game_id, api_id, name) VALUES (?, ?, ?)`,
-		gameID2, "alpha", "Alpha")
-	require.NoError(t, err)
-	setID2, err := result.LastInsertId()
-	require.NoError(t, err)
-
-	_, err = db.Exec(`INSERT INTO cards (id, card_game_id, set_id, api_id, name, rarity, number, is_placeholder) 
-		VALUES (6, ?, ?, 'alpha-lotus', 'Black Lotus', 'Rare', '1', false)`, gameID2, setID2)
-	require.NoError(t, err)
-
-	_, err = db.Exec(`INSERT INTO cards (id, card_game_id, set_id, api_id, name, rarity, number, is_placeholder) 
-		VALUES (7, ?, ?, 'alpha-bolt', 'Lightning Bolt', 'Common', '2', false)`, gameID2, setID2)
-	require.NoError(t, err)
-
-	// Yu-Gi-Oh! - get from migrations
-	var gameID3 int64
-	err = db.QueryRow(`SELECT id FROM card_games WHERE name = ?`, "Yu-Gi-Oh!").Scan(&gameID3)
-	require.NoError(t, err)
-
-	result, err = db.Exec(`INSERT INTO sets (card_game_id, api_id, name) VALUES (?, ?, ?)`,
-		gameID3, "lob", "Legend of Blue Eyes")
-	require.NoError(t, err)
-	setID3, err := result.LastInsertId()
-	require.NoError(t, err)
-
-	_, err = db.Exec(`INSERT INTO cards (id, card_game_id, set_id, api_id, name, rarity, number, is_placeholder) 
-		VALUES (11, ?, ?, 'lob-001', 'Blue-Eyes White Dragon', 'Ultra Rare', 'LOB-001', false)`, gameID3, setID3)
-	require.NoError(t, err)
-
-	_, err = db.Exec(`INSERT INTO cards (id, card_game_id, set_id, api_id, name, rarity, number, is_placeholder) 
-		VALUES (12, ?, ?, 'lob-005', 'Dark Magician', 'Ultra Rare', 'LOB-005', false)`, gameID3, setID3)
-	require.NoError(t, err)
-
-	service := NewUserCollectionService(db)
-
-	// Create sample collection
-	err = service.CreateSampleCollectionData(userID)
-	require.NoError(t, err)
-
-	// Verify data was created
-	var count int
-	err = db.QueryRow(`SELECT COUNT(*) FROM user_collections WHERE user_id = ?`, userID).Scan(&count)
-	require.NoError(t, err)
-	assert.Equal(t, 6, count)
-
-	// Verify specific entries
-	var quantity int
-	var condition, notes string
-	err = db.QueryRow(`SELECT quantity, condition, notes FROM user_collections WHERE user_id = ? AND card_id = 1`,
-		userID).Scan(&quantity, &condition, &notes)
-	require.NoError(t, err)
-	assert.Equal(t, 3, quantity)
-	assert.Equal(t, "Near Mint", condition)
-	assert.Equal(t, "Starter deck pulls", notes)
-
-	err = db.QueryRow(`SELECT quantity, condition, notes FROM user_collections WHERE user_id = ? AND card_id = 2`,
-		userID).Scan(&quantity, &condition, &notes)
-	require.NoError(t, err)
-	assert.Equal(t, 1, quantity)
-	assert.Equal(t, "Mint", condition)
-	assert.Equal(t, "Lucky booster pack", notes)
-}
-
-func TestCreateSampleCollectionData_Idempotent(t *testing.T) {
-	db := setupTestDB(t)
-	defer testutil.CleanupTestDB(t, db)
-
-	// Setup basic test data
-	userID, _, _ := setupTestData(t, db)
-
-	// Create minimal cards for sample data to use
-	for i := 1; i <= 12; i++ {
-		if i == 1 || i == 2 || i == 6 || i == 7 || i == 11 || i == 12 {
-			var gameID, setID int64
-			db.QueryRow(`SELECT id FROM card_games LIMIT 1`).Scan(&gameID)
-			db.QueryRow(`SELECT id FROM sets LIMIT 1`).Scan(&setID)
-
-			_, _ = db.Exec(`INSERT OR IGNORE INTO cards (id, card_game_id, set_id, api_id, name, rarity, number, is_placeholder) 
-				VALUES (?, ?, ?, ?, ?, 'Common', '1', false)`, i, gameID, setID, "test-"+string(rune(i)), "Test Card")
-		}
-	}
-
-	service := NewUserCollectionService(db)
-
-	// Create sample data twice
-	err := service.CreateSampleCollectionData(userID)
-	require.NoError(t, err)
-
-	err = service.CreateSampleCollectionData(userID)
-	require.NoError(t, err)
-
-	// Verify still only 6 entries (INSERT OR IGNORE prevents duplicates)
-	var count int
-	err = db.QueryRow(`SELECT COUNT(*) FROM user_collections WHERE user_id = ?`, userID).Scan(&count)
-	require.NoError(t, err)
-	assert.Equal(t, 6, count)
-}
-
 func TestScanUserCollections_NullableFields(t *testing.T) {
 	db := setupTestDB(t)
 	defer testutil.CleanupTestDB(t, db)
 
-	userID, _, cardID := setupTestData(t, db)
+	userID, gameID, cardID := setupTestData(t, db)
 	service := NewUserCollectionService(db)
 
 	// Insert entry with NULL acquired_date
@@ -394,11 +243,61 @@ func TestScanUserCollections_NullableFields(t *testing.T) {
 		userID, cardID, 1, "Mint", "No acquisition date")
 	require.NoError(t, err)
 
-	collections, err := service.GetUserCollectionByUserID(userID)
+	collections, err := service.GetUserCollectionByGameID(userID, gameID)
 	require.NoError(t, err)
 	require.Len(t, collections, 1)
 
 	// Verify NULL date handling - should be zero time
 	collection := collections[0]
-	assert.True(t, collection.AcquiredDate.IsZero() || !collection.AcquiredDate.IsZero())
+	assert.True(t, collection.AcquiredDate.IsZero())
+}
+
+func TestGetUserCollectionByGameID_LoadsCardNumberAndArtist(t *testing.T) {
+	db := setupTestDB(t)
+	defer testutil.CleanupTestDB(t, db)
+
+	userID, gameID, cardID := setupTestData(t, db)
+	_, err := db.Exec(`UPDATE cards SET artist = ? WHERE id = ?`, "Mitsuhiro Arita", cardID)
+	require.NoError(t, err)
+	_, err = db.Exec(`INSERT INTO user_collections (user_id, card_id, quantity) VALUES (?, ?, ?)`, userID, cardID, 2)
+	require.NoError(t, err)
+
+	collections, err := NewUserCollectionService(db).GetUserCollectionByGameID(userID, gameID)
+	require.NoError(t, err)
+	require.Len(t, collections, 1)
+	require.NotNil(t, collections[0].Card)
+	assert.Equal(t, "1", collections[0].Card.Number, "number is needed to re-import exported collections")
+	assert.Equal(t, "Mitsuhiro Arita", collections[0].Card.Artist)
+	assert.Equal(t, "base1-1", collections[0].Card.APIID)
+}
+
+func TestGetCollectionValue_UsesOnePricePerCard(t *testing.T) {
+	db := setupTestDB(t)
+	defer testutil.CleanupTestDB(t, db)
+
+	userID, gameID, cardID := setupTestData(t, db)
+	_, err := db.Exec(`INSERT INTO user_collections (user_id, card_id, quantity) VALUES (?, ?, ?)`, userID, cardID, 2)
+	require.NoError(t, err)
+	// A card can have several TCGPlayer variants; owning a copy does not mean owning every variant.
+	_, err = db.Exec(`INSERT INTO prices_tcgplayer (card_id, price_type, market) VALUES (?, 'reverse', 3.0), (?, 'normal', 1.5)`, cardID, cardID)
+	require.NoError(t, err)
+
+	value, err := NewUserCollectionService(db).GetCollectionValue(userID, gameID)
+	require.NoError(t, err)
+	assert.InDelta(t, 3.0, value, 0.001, "2 copies x normal market price")
+}
+
+func TestGetCollectionValue_FallsBackToOtherVariant(t *testing.T) {
+	db := setupTestDB(t)
+	defer testutil.CleanupTestDB(t, db)
+
+	userID, gameID, cardID := setupTestData(t, db)
+	_, err := db.Exec(`INSERT INTO user_collections (user_id, card_id, quantity) VALUES (?, ?, ?)`, userID, cardID, 3)
+	require.NoError(t, err)
+	_, err = db.Exec(`INSERT INTO prices_tcgplayer (card_id, price_type, market) VALUES (?, 'reverse', 2.0)`, cardID)
+	require.NoError(t, err)
+
+	value, err := NewUserCollectionService(db).GetCollectionValue(userID, gameID)
+	require.NoError(t, err)
+	assert.InDelta(t, 6.0, value, 0.001)
 }
